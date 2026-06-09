@@ -20,13 +20,19 @@ export async function createCampaignImage({
   const primary = normalizeColor(profile.primaryColor, "#14213d");
   const action = chooseActionColor(profile.accentColor, primary);
   const softAction = tint(action, 90);
-  const headlineLines = wrapText(campaign.landingPageHero.headline, 24, 3);
-  const subheadlineLines = wrapText(campaign.landingPageHero.subheadline, 39, 2);
+  const headlineLines = wrapText(campaign.landingPageHero.headline, 16, 4);
+  const subheadlineLines = wrapText(campaign.landingPageHero.subheadline, 31, 2);
   const offerLines = wrapText(offer, 25, 1);
   const company = profile.companyName || "Local HVAC Pros";
   const phone = profile.phone || "";
   const serviceArea = profile.serviceAreas[0] || "your area";
   const service = profile.services[0] || "HVAC Service";
+  const headlineY = 286;
+  const headlineSize = headlineLines.length > 3 ? 42 : 48;
+  const headlineLineHeight = headlineLines.length > 3 ? 46 : 52;
+  const subheadlineY = Math.min(458, headlineY + headlineLines.length * headlineLineHeight + 28);
+  const ctaWidthValue = ctaWidth(campaign.landingPageHero.primaryCta);
+  const phoneX = 104 + ctaWidthValue + 24;
   const proofPoints = [
     profile.emergencyServiceMentioned ? "Emergency service" : "Fast scheduling",
     profile.financingMentioned ? "Financing options" : "Clear recommendations",
@@ -46,29 +52,29 @@ export async function createCampaignImage({
   <text x="104" y="110" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="950" fill="#ffffff">${escapeXml(serviceArea)} HVAC SPECIALISTS</text>
   ${renderLogo(logoDataUrl, company)}
 
-  <rect x="104" y="184" width="500" height="62" rx="31" fill="${escapeXml(softAction)}"/>
+  <rect x="104" y="184" width="470" height="62" rx="31" fill="${escapeXml(softAction)}"/>
   <circle cx="139" cy="215" r="18" fill="${escapeXml(action)}"/>
   <text x="139" y="223" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="950" text-anchor="middle" fill="#ffffff">$</text>
   ${renderTextLines(offerLines, 170, 218, 25, 28, darken(action, 14), 950)}
 
-  ${renderTextLines(headlineLines, 104, 316, 56, 58, action, 950)}
-  ${renderTextLines(subheadlineLines, 106, 450, 27, 33, "#435164", 800)}
+  ${renderTextLines(headlineLines, 104, headlineY, headlineSize, headlineLineHeight, action, 950)}
+  ${renderTextLines(subheadlineLines, 106, subheadlineY, 25, 31, "#435164", 800)}
 
-  <rect x="104" y="508" width="${ctaWidth(campaign.landingPageHero.primaryCta)}" height="52" rx="10" fill="${escapeXml(action)}"/>
+  <rect x="104" y="508" width="${ctaWidthValue}" height="52" rx="10" fill="${escapeXml(action)}"/>
   <text x="130" y="542" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="950" fill="#ffffff">${escapeXml(campaign.landingPageHero.primaryCta)}</text>
-  <text x="478" y="540" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="950" fill="${escapeXml(action)}">${escapeXml(phone)}</text>
+  <text x="${phoneX}" y="540" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="950" fill="${escapeXml(action)}">${escapeXml(phone)}</text>
 
+  <rect x="692" y="178" width="350" height="300" rx="26" fill="${escapeXml(action)}"/>
+  <rect x="716" y="202" width="302" height="252" rx="20" fill="#fff7f6"/>
+  <path d="M770 319 L867 248 L964 319" fill="none" stroke="${escapeXml(action)}" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M792 318 V404 H942 V318" fill="none" stroke="${escapeXml(action)}" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="846" y="350" width="48" height="52" rx="8" fill="${escapeXml(tint(action, 84))}"/>
+  <circle cx="958" cy="228" r="30" fill="${escapeXml(action)}"/>
+  <path d="M958 203 V253 M933 228 H983" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+  <path d="M770 432 C817 395 862 468 909 431 C939 407 978 412 1004 432" fill="none" stroke="${escapeXml(action)}" stroke-width="10" stroke-linecap="round"/>
   ${renderProofPoints(proofPoints, action)}
-  <rect x="702" y="178" width="370" height="320" rx="28" fill="${escapeXml(action)}"/>
-  <rect x="724" y="200" width="326" height="276" rx="22" fill="#fff7f6"/>
-  <path d="M783 326 L887 242 L991 326" fill="none" stroke="${escapeXml(action)}" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M810 324 V420 H964 V324" fill="none" stroke="${escapeXml(action)}" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="862" y="359" width="52" height="56" rx="8" fill="${escapeXml(tint(action, 84))}"/>
-  <circle cx="985" cy="228" r="31" fill="${escapeXml(action)}"/>
-  <path d="M985 202 V254 M959 228 H1011" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
-  <path d="M780 448 C830 406 881 488 932 446 C964 419 1004 424 1032 448" fill="none" stroke="${escapeXml(action)}" stroke-width="10" stroke-linecap="round"/>
-  <rect x="730" y="514" width="310" height="42" rx="21" fill="${escapeXml(softAction)}"/>
-  <text x="885" y="542" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="950" text-anchor="middle" fill="${escapeXml(action)}">${escapeXml(service)}</text>
+  <rect x="726" y="512" width="290" height="42" rx="21" fill="${escapeXml(softAction)}"/>
+  <text x="871" y="540" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="950" text-anchor="middle" fill="${escapeXml(action)}">${escapeXml(service)}</text>
 </svg>`.trim();
 
   return {
@@ -132,9 +138,9 @@ function renderProofPoints(points: string[], action: string) {
   return points
     .slice(0, 3)
     .map((point, index) => {
-      const y = 182 + index * 46;
-      const width = index === 0 ? 178 : 178;
-      const x = index === 0 ? 640 : 640;
+      const y = 184 + index * 46;
+      const width = index === 0 ? 190 : 178;
+      const x = index === 0 ? 620 : 632;
       return `
   <rect x="${x}" y="${y}" width="${width}" height="38" rx="19" fill="${escapeXml(index === 0 ? action : tint(action, 90))}"/>
   <text x="${x + width / 2}" y="${y + 25}" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="950" text-anchor="middle" fill="${index === 0 ? "#ffffff" : escapeXml(action)}">${escapeXml(point)}</text>`;
@@ -191,7 +197,7 @@ function wrapText(value: string, maxChars: number, maxLines: number) {
 }
 
 function ctaWidth(value: string) {
-  return Math.min(390, Math.max(210, value.length * 14 + 60));
+  return Math.min(360, Math.max(220, value.length * 12 + 58));
 }
 
 function normalizeColor(value: string, fallback: string) {
