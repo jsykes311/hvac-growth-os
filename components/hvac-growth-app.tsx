@@ -7,10 +7,11 @@ import {
   Loader2,
   Megaphone,
   Palette,
+  Download,
   Sparkles,
 } from "lucide-react";
 import { FormEvent, useState } from "react";
-import type { BusinessProfile, CampaignOutput } from "@/lib/types";
+import type { BusinessProfile, CampaignImage, CampaignOutput } from "@/lib/types";
 import { Button, Eyebrow, FieldLabel, Panel } from "@/components/ui";
 
 type View = "home" | "results";
@@ -29,6 +30,7 @@ export function HvacGrowthApp() {
   const [view, setView] = useState<View>("home");
   const [analysis, setAnalysis] = useState<BusinessProfile | null>(null);
   const [campaign, setCampaign] = useState<CampaignOutput | null>(null);
+  const [campaignImage, setCampaignImage] = useState<CampaignImage | null>(null);
   const [goal, setGoal] = useState(CAMPAIGN_GOALS[0]);
   const [offer, setOffer] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -44,6 +46,7 @@ export function HvacGrowthApp() {
     setIsAnalyzing(true);
     setError("");
     setCampaign(null);
+    setCampaignImage(null);
 
     try {
       const response = await fetch("/api/analyze", {
@@ -79,13 +82,17 @@ export function HvacGrowthApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile: analysis, goal, offer }),
       });
-      const payload = (await response.json()) as { campaign?: CampaignOutput } & ApiError;
+      const payload = (await response.json()) as {
+        campaign?: CampaignOutput;
+        campaignImage?: CampaignImage;
+      } & ApiError;
 
       if (!response.ok || !payload.campaign) {
         throw new Error(payload.error || "Unable to create a campaign.");
       }
 
       setCampaign(payload.campaign);
+      setCampaignImage(payload.campaignImage ?? null);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to create a campaign.");
     } finally {
@@ -112,6 +119,7 @@ export function HvacGrowthApp() {
             <ResultsView
               analysis={analysis}
               campaign={campaign}
+              campaignImage={campaignImage}
               contractorUrl={contractorUrl}
               error={error}
               goal={goal}
@@ -202,6 +210,7 @@ function HomeView({
 function ResultsView({
   analysis,
   campaign,
+  campaignImage,
   contractorUrl,
   error,
   goal,
@@ -214,6 +223,7 @@ function ResultsView({
 }: {
   analysis: BusinessProfile;
   campaign: CampaignOutput | null;
+  campaignImage: CampaignImage | null;
   contractorUrl: string;
   error: string;
   goal: string;
@@ -319,7 +329,7 @@ function ResultsView({
         setOffer={setOffer}
       />
 
-      {campaign && <CampaignPanel campaign={campaign} />}
+      {campaign && <CampaignPanel campaign={campaign} campaignImage={campaignImage} />}
     </div>
   );
 }
@@ -447,7 +457,13 @@ function BulletList({ values, emptyText }: { values: string[]; emptyText: string
   );
 }
 
-function CampaignPanel({ campaign }: { campaign: CampaignOutput }) {
+function CampaignPanel({
+  campaign,
+  campaignImage,
+}: {
+  campaign: CampaignOutput;
+  campaignImage: CampaignImage | null;
+}) {
   return (
     <Panel className="mt-5">
       <div className="mb-5 flex items-center gap-3">
@@ -474,7 +490,39 @@ function CampaignPanel({ campaign }: { campaign: CampaignOutput }) {
           ].join("\n\n")}
         />
       </div>
+
+      {campaignImage && <CampaignImagePreview campaignImage={campaignImage} />}
     </Panel>
+  );
+}
+
+function CampaignImagePreview({ campaignImage }: { campaignImage: CampaignImage }) {
+  return (
+    <div className="mt-6 border-t border-ink/10 pt-6">
+      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div>
+          <h3 className="text-lg font-black text-ink">Campaign Image</h3>
+          <p className="text-sm font-medium text-graphite/70">
+            Brand-colored creative with the logo in the top-right corner when available.
+          </p>
+        </div>
+        <a
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold text-ink shadow-sm transition hover:bg-frost"
+          download={campaignImage.fileName}
+          href={campaignImage.dataUrl}
+        >
+          <Download className="size-4" aria-hidden="true" />
+          Download Image
+        </a>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-ink/10 bg-frost">
+        <img
+          className="block aspect-[1200/628] w-full object-cover"
+          src={campaignImage.dataUrl}
+          alt="Generated campaign creative"
+        />
+      </div>
+    </div>
   );
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { BusinessProfile, CampaignOutput } from "@/lib/types";
+import { createCampaignImage } from "@/lib/server/creative/campaign-image";
 import { getStructuredJson } from "@/lib/server/openai";
 import { campaignSchema } from "@/lib/server/schemas";
 
@@ -26,7 +27,14 @@ export async function POST(request: NextRequest) {
     }
 
     const campaign = await createCampaign(body.profile, goal, offer);
-    return NextResponse.json({ campaign });
+    const campaignImage = await createCampaignImage({
+      profile: body.profile,
+      campaign,
+      goal,
+      offer,
+    });
+
+    return NextResponse.json({ campaign, campaignImage });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to create a campaign." },

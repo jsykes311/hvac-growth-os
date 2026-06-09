@@ -30,6 +30,14 @@ export type CampaignOutput = {
   };
 };
 
+export type CampaignImage = {
+  dataUrl: string;
+  fileName: string;
+  format: "svg";
+  width: number;
+  height: number;
+};
+
 export type ScrapedPage = {
   label: "Homepage" | "About" | "Services" | "Contact" | "Financing";
   url: string;
