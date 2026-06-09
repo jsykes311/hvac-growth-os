@@ -1,0 +1,39 @@
+export type BusinessProfile = {
+  companyName: string;
+  phone: string;
+  email: string;
+  services: string[];
+  serviceAreas: string[];
+  financingMentioned: boolean;
+  emergencyServiceMentioned: boolean;
+  maintenancePlanMentioned: boolean;
+  brandTone: string;
+  differentiators: string[];
+  growthScore: number;
+  topGrowthOpportunities: string[];
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  logoUrl: string;
+  brandStyle: string;
+};
+
+export type CampaignOutput = {
+  facebookAd: string;
+  googleBusinessProfilePost: string;
+  emailCampaign: string;
+  landingPageHero: {
+    headline: string;
+    subheadline: string;
+    primaryCta: string;
+    supportingBullets: string[];
+  };
+};
+
+export type ScrapedPage = {
+  label: "Homepage" | "About" | "Services" | "Contact" | "Financing";
+  url: string;
+  title: string;
+  markdown: string;
+  html: string;
+};
