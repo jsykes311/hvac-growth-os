@@ -153,20 +153,29 @@ function renderHeroBackground(palette: CreativePalette, heroImageDataUrl: string
   <g>
     <rect x="0" y="0" width="${WIDTH}" height="510" fill="url(#heroPhoto)"/>
     <rect x="0" y="0" width="${WIDTH}" height="510" fill="url(#heroShade)"/>
-    <rect x="0" y="382" width="${WIDTH}" height="128" fill="url(#lawn)" opacity="0.34"/>
-    <circle cx="1008" cy="105" r="96" fill="#fff2d5" opacity="0.28"/>
-    <path d="M642 216 L802 96 L966 216" fill="none" stroke="#fff7eb" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" opacity="0.72"/>
-    <path d="M680 218 V372 H928 V218" fill="none" stroke="#fff7eb" stroke-width="12" opacity="0.62"/>
-    <rect x="707" y="252" width="64" height="72" fill="${escapeXml(palette.dark)}" opacity="0.72"/>
-    <rect x="810" y="252" width="70" height="54" fill="${escapeXml(palette.dark)}" opacity="0.58"/>
-    <path d="M580 374 C660 334 739 387 814 350 C909 302 1016 316 1118 372" fill="none" stroke="#ffffff" stroke-width="6" opacity="0.18"/>
-    <rect x="940" y="252" width="116" height="105" rx="7" fill="${escapeXml(palette.dark)}" opacity="0.72"/>
-    <path d="M958 278 H1038 M958 304 H1038 M958 330 H1038" stroke="${escapeXml(tint(palette.primary, 52))}" stroke-width="5" opacity="0.82"/>
-    <circle cx="998" cy="307" r="28" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="7" opacity="0.92"/>
-    <path d="M1045 186 C1065 219 1075 261 1072 322 L1116 351 L1080 358 L1046 336 C1018 377 960 383 932 348 C905 313 918 256 951 232 C972 217 1000 211 1022 216 C1020 197 1028 186 1045 186 Z" fill="${escapeXml(darken(palette.secondary, 36))}" opacity="0.82" filter="url(#softShadow)"/>
-    <rect x="997" y="330" width="70" height="92" rx="16" fill="${escapeXml(darken(palette.secondary, 48))}" opacity="0.88"/>
-    <path d="M1060 278 L1114 302 L1105 324 L1051 300 Z" fill="${escapeXml(palette.accent)}" opacity="0.6"/>
-    <path d="M612 448 C718 404 802 448 912 420 C1002 397 1074 408 1160 452" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.24"/>
+    <rect x="0" y="382" width="${WIDTH}" height="128" fill="url(#lawn)" opacity="0.28"/>
+    <circle cx="1042" cy="104" r="96" fill="#fff2d5" opacity="0.24"/>
+    <rect x="740" y="110" width="338" height="268" rx="3" fill="${escapeXml(tint(palette.primary, 82))}" opacity="0.28"/>
+    <path d="M688 226 L846 110 L1008 226" fill="none" stroke="#fff7eb" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" opacity="0.56"/>
+    <path d="M727 227 V374 H970 V227" fill="none" stroke="#fff7eb" stroke-width="11" opacity="0.44"/>
+    <rect x="758" y="258" width="58" height="66" fill="${escapeXml(palette.dark)}" opacity="0.45"/>
+    <rect x="854" y="258" width="66" height="52" fill="${escapeXml(palette.dark)}" opacity="0.36"/>
+    <rect x="1000" y="260" width="106" height="92" rx="7" fill="${escapeXml(palette.dark)}" opacity="0.68"/>
+    <path d="M1016 284 H1092 M1016 309 H1092 M1016 334 H1092" stroke="${escapeXml(tint(palette.primary, 52))}" stroke-width="5" opacity="0.8"/>
+    <circle cx="1054" cy="318" r="23" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="7" opacity="0.9"/>
+    <g filter="url(#softShadow)" opacity="0.95">
+      <circle cx="910" cy="184" r="34" fill="${escapeXml(tint(palette.primary, 78))}"/>
+      <path d="M872 231 C890 210 930 209 948 231 L968 334 L849 334 Z" fill="${escapeXml(darken(palette.secondary, 22))}"/>
+      <path d="M850 255 L786 314" stroke="${escapeXml(darken(palette.secondary, 12))}" stroke-width="18" stroke-linecap="round"/>
+      <path d="M946 258 L1014 300" stroke="${escapeXml(darken(palette.secondary, 12))}" stroke-width="18" stroke-linecap="round"/>
+      <rect x="834" y="330" width="42" height="96" rx="14" fill="${escapeXml(darken(palette.secondary, 42))}"/>
+      <rect x="918" y="330" width="42" height="96" rx="14" fill="${escapeXml(darken(palette.secondary, 42))}"/>
+      <rect x="770" y="304" width="86" height="58" rx="8" fill="${escapeXml(palette.dark)}"/>
+      <rect x="782" y="316" width="62" height="8" rx="4" fill="${escapeXml(palette.accent)}" opacity="0.75"/>
+      <path d="M873 232 H948 L937 255 H884 Z" fill="${escapeXml(palette.accent)}" opacity="0.84"/>
+    </g>
+    <path d="M590 374 C666 336 740 386 820 351 C914 310 1026 319 1130 374" fill="none" stroke="#ffffff" stroke-width="6" opacity="0.17"/>
+    <path d="M610 448 C716 404 802 448 912 420 C1002 397 1074 408 1160 452" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.22"/>
     <rect x="0" y="0" width="${WIDTH}" height="510" fill="#000000" opacity="0.04"/>
   </g>`;
 }
@@ -294,16 +303,24 @@ function renderFooter(
   topService: string,
   palette: CreativePalette,
 ) {
+  const contact = phone || email || "Contact for booking";
+  const companyLines = wrapText(company, 24, 2);
+
   return `
   <g>
     <rect x="0" y="1590" width="${WIDTH}" height="250" fill="#ffffff"/>
-    ${logoDataUrl ? `<image href="${escapeXml(logoDataUrl)}" x="82" y="1670" width="176" height="64" preserveAspectRatio="xMinYMid meet"/>` : `<text x="82" y="1713" font-family="Inter, Arial, sans-serif" font-size="44" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(company.slice(0, 16))}</text>`}
-    <rect x="306" y="1638" width="4" height="122" fill="${escapeXml(palette.primary)}"/>
-    <text x="338" y="1662" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(company)}</text>
-    <text x="338" y="1695" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="800" fill="${escapeXml(palette.dark)}">${escapeXml(topService)} in ${escapeXml(serviceArea)}</text>
-    <text x="338" y="1737" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700" fill="${escapeXml(palette.dark)}">${escapeXml(phone || email || "Contact for booking")}</text>
-    <text x="338" y="1767" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="500" fill="${escapeXml(palette.muted)}">${escapeXml(email)}</text>
-    <text x="82" y="1810" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="500" fill="${escapeXml(palette.muted)}">Campaign creative generated from public website analysis. Offer terms and availability should be verified before launch.</text>
+    <line x1="58" y1="1620" x2="1142" y2="1620" stroke="${escapeXml(palette.border)}"/>
+    <rect x="58" y="1652" width="232" height="92" fill="${escapeXml(palette.surface)}"/>
+    ${logoDataUrl ? `<image href="${escapeXml(logoDataUrl)}" x="78" y="1675" width="192" height="46" preserveAspectRatio="xMidYMid meet"/>` : renderTextLines(companyLines, 78, 1688, 24, 29, palette.primary, 950)}
+    <rect x="333" y="1652" width="4" height="92" fill="${escapeXml(palette.primary)}"/>
+    <text x="366" y="1677" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="2">SERVICE AREA</text>
+    ${renderTextLines(wrapText(serviceArea, 26, 2), 366, 1711, 19, 25, palette.dark, 850)}
+    <text x="588" y="1677" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="2">FEATURED SERVICE</text>
+    ${renderTextLines(wrapText(topService, 26, 2), 588, 1711, 19, 25, palette.dark, 850)}
+    <text x="818" y="1677" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="2">CONTACT</text>
+    ${renderTextLines(wrapText(contact, 30, 2), 818, 1711, 19, 25, palette.dark, 850)}
+    ${email && phone ? `<text x="818" y="1765" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="600" fill="${escapeXml(palette.muted)}">${escapeXml(email)}</text>` : ""}
+    <text x="58" y="1810" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="500" fill="${escapeXml(palette.muted)}">Campaign creative generated from public website analysis. Offer terms and availability should be verified before launch.</text>
   </g>`;
 }
 
