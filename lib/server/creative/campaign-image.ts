@@ -278,17 +278,19 @@ function renderBlackBand(company: string, body: string, palette: CreativePalette
     <rect x="58" y="1174" width="1084" height="222" fill="${escapeXml(palette.dark)}"/>
     <text x="94" y="1237" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="950" fill="#ffffff">Busy season rewards teams</text>
     <text x="94" y="1277" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="950" fill="#ffffff">with a clear follow-up system.</text>
-    ${renderTextLines(wrapText(`${company} can use this offer to move more homeowners from interest to booked appointments. ${body}`, 104, 3), 94, 1324, 17, 28, tint(palette.primary, 88), 500)}
-    <rect x="94" y="1360" width="144" height="5" fill="${escapeXml(palette.accent)}"/>
+    ${renderTextLines(wrapText(`${company} can use this offer to move more homeowners from interest to booked appointments. ${body}`, 98, 2), 94, 1324, 16, 25, tint(palette.primary, 88), 500)}
+    <rect x="94" y="1370" width="144" height="5" fill="${escapeXml(palette.accent)}"/>
   </g>`;
 }
 
 function renderCtaBand(cta: string, offer: string, palette: CreativePalette) {
+  const offerLines = wrapText(offer || "Ready-to-book comfort campaign", 42, 2);
+
   return `
   <g>
     <rect x="0" y="1454" width="${WIDTH}" height="136" fill="${escapeXml(palette.cta)}"/>
-    <text x="58" y="1524" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="950" fill="#ffffff">${escapeXml(offer || "Ready-to-book comfort campaign")}</text>
-    <text x="58" y="1556" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="600" fill="#ffffff" opacity="0.9">Launch a local campaign using the website analysis, offer, and brand profile.</text>
+    ${renderTextLines(offerLines, 58, 1513, 28, 33, "#ffffff", 950)}
+    <text x="58" y="1563" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="600" fill="#ffffff" opacity="0.9">Launch a local campaign using the analyzed brand profile.</text>
     <rect x="872" y="1498" width="250" height="54" rx="27" fill="none" stroke="#ffffff" opacity="0.65"/>
     <text x="997" y="1532" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="950" text-anchor="middle" fill="#ffffff">${escapeXml(cta)}</text>
   </g>`;
@@ -304,22 +306,22 @@ function renderFooter(
   palette: CreativePalette,
 ) {
   const contact = phone || email || "Contact for booking";
-  const companyLines = wrapText(company, 24, 2);
+  const companyLines = wrapText(company, 17, 2);
 
   return `
   <g>
     <rect x="0" y="1590" width="${WIDTH}" height="250" fill="#ffffff"/>
     <line x1="58" y1="1620" x2="1142" y2="1620" stroke="${escapeXml(palette.border)}"/>
     <rect x="58" y="1652" width="232" height="92" fill="${escapeXml(palette.surface)}"/>
-    ${logoDataUrl ? `<image href="${escapeXml(logoDataUrl)}" x="78" y="1675" width="192" height="46" preserveAspectRatio="xMidYMid meet"/>` : renderTextLines(companyLines, 78, 1688, 24, 29, palette.primary, 950)}
-    <rect x="333" y="1652" width="4" height="92" fill="${escapeXml(palette.primary)}"/>
-    <text x="366" y="1677" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="2">SERVICE AREA</text>
-    ${renderTextLines(wrapText(serviceArea, 26, 2), 366, 1711, 19, 25, palette.dark, 850)}
-    <text x="588" y="1677" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="2">FEATURED SERVICE</text>
-    ${renderTextLines(wrapText(topService, 26, 2), 588, 1711, 19, 25, palette.dark, 850)}
-    <text x="818" y="1677" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="2">CONTACT</text>
-    ${renderTextLines(wrapText(contact, 30, 2), 818, 1711, 19, 25, palette.dark, 850)}
-    ${email && phone ? `<text x="818" y="1765" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="600" fill="${escapeXml(palette.muted)}">${escapeXml(email)}</text>` : ""}
+    ${logoDataUrl ? `<image href="${escapeXml(logoDataUrl)}" x="78" y="1675" width="192" height="46" preserveAspectRatio="xMidYMid meet"/>` : renderTextLines(companyLines, 78, 1686, 19, 24, palette.primary, 950)}
+    <rect x="318" y="1652" width="4" height="92" fill="${escapeXml(palette.primary)}"/>
+    <text x="350" y="1677" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="1.6">SERVICE AREA</text>
+    ${renderTextLines(wrapText(serviceArea, 22, 2), 350, 1711, 17, 24, palette.dark, 850)}
+    <text x="562" y="1677" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="1.6">FEATURED SERVICE</text>
+    ${renderTextLines(wrapText(topService, 22, 2), 562, 1711, 17, 24, palette.dark, 850)}
+    <text x="790" y="1677" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="1.6">CONTACT</text>
+    ${renderTextLines(wrapText(contact, 29, 2), 790, 1711, 17, 24, palette.dark, 850)}
+    ${email && phone ? renderTextLines(wrapText(email, 36, 2), 790, 1763, 13, 19, palette.muted, 600) : ""}
     <text x="58" y="1810" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="500" fill="${escapeXml(palette.muted)}">Campaign creative generated from public website analysis. Offer terms and availability should be verified before launch.</text>
   </g>`;
 }
