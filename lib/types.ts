@@ -15,6 +15,7 @@ export type BusinessProfile = {
   secondaryColor: string;
   accentColor: string;
   logoUrl: string;
+  heroImageUrl: string;
   brandStyle: string;
 };
 

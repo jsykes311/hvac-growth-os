@@ -18,6 +18,7 @@ export const businessProfileSchema = {
     "secondaryColor",
     "accentColor",
     "logoUrl",
+    "heroImageUrl",
     "brandStyle",
   ],
   properties: {
@@ -40,6 +41,7 @@ export const businessProfileSchema = {
     secondaryColor: { type: "string" },
     accentColor: { type: "string" },
     logoUrl: { type: "string" },
+    heroImageUrl: { type: "string" },
     brandStyle: { type: "string" },
   },
 } as const;

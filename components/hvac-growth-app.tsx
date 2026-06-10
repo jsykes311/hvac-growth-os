@@ -293,6 +293,15 @@ function ResultsView({
               <ColorSwatch label="Secondary" value={analysis.secondaryColor} />
               <ColorSwatch label="Accent" value={analysis.accentColor} />
             </div>
+            {analysis.heroImageUrl && (
+              <div className="mt-5 overflow-hidden rounded-lg border border-ink/10 bg-white">
+                <img
+                  className="h-40 w-full object-cover"
+                  src={analysis.heroImageUrl}
+                  alt={`${analysis.companyName} campaign hero visual`}
+                />
+              </div>
+            )}
             <p className="mt-4 text-sm leading-6 text-graphite">{analysis.brandStyle || "No brand style found."}</p>
           </div>
         </Panel>

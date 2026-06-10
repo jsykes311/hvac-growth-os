@@ -53,6 +53,7 @@ async function analyzeBusinessProfile(
       "Brand analysis instructions:",
       "- Infer primary, secondary, and accent colors from Firecrawl branding data when present, then CSS/html styles if needed.",
       "- Use full absolute URL for logoUrl when a logo is found; otherwise return an empty string.",
+      "- Use full absolute URL for heroImageUrl when a relevant website hero, Open Graph, service, or team photo is found; otherwise return an empty string.",
       "- brandStyle should summarize the visual identity, layout, imagery, and tone in one concise sentence.",
       "- topGrowthOpportunities must contain exactly five specific, actionable opportunities.",
       "",
