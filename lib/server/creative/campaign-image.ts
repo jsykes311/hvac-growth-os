@@ -242,7 +242,11 @@ function renderIntroSection(
   palette: CreativePalette,
 ) {
   const bodyLines = wrapText(opportunity, 56, 3);
-  const quoteLines = wrapText(hero.headline, 26, 4);
+  const bulletLines = nonEmpty(hero.supportingBullets, [
+    "Clear local offer",
+    "Fast booking path",
+    "Brand-matched follow-up",
+  ]).slice(0, 3);
 
   return `
   <g>
@@ -252,7 +256,8 @@ function renderIntroSection(
     ${renderTextLines(wrapText(hero.subheadline, 66, 2), 58, 858, 17, 27, palette.muted, 500)}
     <rect x="668" y="720" width="430" height="146" fill="${escapeXml(palette.soft)}"/>
     <rect x="668" y="720" width="5" height="146" fill="${escapeXml(palette.primary)}"/>
-    ${renderTextLines(quoteLines, 698, 770, 28, 35, palette.dark, 950, palette.accent)}
+    <text x="698" y="758" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="2.2">CAMPAIGN FOCUS</text>
+    ${renderTextLines(bulletLines.map((item) => `- ${item}`), 698, 798, 20, 30, palette.dark, 850)}
   </g>`;
 }
 

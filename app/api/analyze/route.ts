@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => null)) as { url?: unknown } | null;
     const websiteUrl = normalizeWebsiteUrl(body?.url);
     const scrapeResult = await scrapeSite(websiteUrl);
-    const profile = await analyzeBusinessProfile(websiteUrl, scrapeResult);
+    const profile = sanitizeBusinessProfile(await analyzeBusinessProfile(websiteUrl, scrapeResult));
 
     return NextResponse.json({ profile, scrapedPages: scrapeResult.pages.map(({ label, url, title }) => ({ label, url, title })) });
   } catch (error) {
@@ -54,6 +54,7 @@ async function analyzeBusinessProfile(
       "- Infer primary, secondary, and accent colors from Firecrawl branding data when present, then CSS/html styles if needed.",
       "- Use full absolute URL for logoUrl when a logo is found; otherwise return an empty string.",
       "- Use full absolute URL for heroImageUrl when a relevant website hero, Open Graph, service, or team photo is found; otherwise return an empty string.",
+      "- Ignore parked-domain, domain-sale, marketplace, registrar, ad-network, or unrelated third-party branding such as Afternic, Sedo, Dan.com, GoDaddy parking pages, BuyDomains, and HugeDomains.",
       "- brandStyle should summarize the visual identity, layout, imagery, and tone in one concise sentence.",
       "- topGrowthOpportunities must contain exactly five specific, actionable opportunities.",
       "",
@@ -62,4 +63,48 @@ async function analyzeBusinessProfile(
       pageBundle,
     ].join("\n"),
   });
+}
+
+const PARKED_DOMAIN_TERMS = [
+  "afternic",
+  "buydomains",
+  "dan.com",
+  "domainmarket",
+  "godaddy.com/forsale",
+  "hugedomains",
+  "sedo",
+];
+
+function sanitizeBusinessProfile(profile: BusinessProfile): BusinessProfile {
+  return {
+    ...profile,
+    companyName: cleanText(profile.companyName),
+    phone: cleanText(profile.phone),
+    email: cleanText(profile.email),
+    services: cleanList(profile.services),
+    serviceAreas: cleanList(profile.serviceAreas),
+    brandTone: cleanText(profile.brandTone),
+    differentiators: cleanList(profile.differentiators),
+    topGrowthOpportunities: cleanList(profile.topGrowthOpportunities).slice(0, 5),
+    logoUrl: cleanUrl(profile.logoUrl),
+    heroImageUrl: cleanUrl(profile.heroImageUrl),
+    brandStyle: cleanText(profile.brandStyle),
+  };
+}
+
+function cleanList(values: string[]) {
+  return values.map(cleanText).filter(Boolean);
+}
+
+function cleanText(value: string) {
+  return hasParkedDomainArtifact(value) ? "" : value;
+}
+
+function cleanUrl(value: string) {
+  return hasParkedDomainArtifact(value) ? "" : value;
+}
+
+function hasParkedDomainArtifact(value: string) {
+  const normalized = value.toLowerCase();
+  return PARKED_DOMAIN_TERMS.some((term) => normalized.includes(term));
 }
