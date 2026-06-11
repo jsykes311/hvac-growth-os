@@ -80,7 +80,9 @@ function buildHeroImagePrompt(
     `Mood and brand tone: ${profile.brandTone || "trustworthy, professional, local, helpful"}.`,
     `Use subtle wardrobe, vehicle, or tool accents inspired by these brand colors: primary ${primaryColor}, accent ${accentColor}.`,
     `The image should support this landing page message: ${campaign.landingPageHero.headline}`,
-    "Composition: wide horizontal hero image, contractor on the right side, open darker space on the left for headline text overlay, natural daylight, polished but believable, no exaggerated poses.",
+    "Composition: wide horizontal hero image with the contractor on the right side and open darker space on the left for headline text overlay.",
+    "Framing requirement: show the contractor from head through at least waist/thigh level with visible headroom above the hair; do not crop the top of the head, face, shoulders, arms, or tool bag.",
+    "Camera: medium shot, not close-up, natural daylight, polished but believable, no exaggerated poses.",
     "Do not include any readable text, logos, badges, watermarks, distorted hands, distorted tools, fake brand names, or UI elements.",
   ].join("\n");
 }

@@ -143,7 +143,10 @@ function renderHeroBackground(palette: CreativePalette, heroImageDataUrl: string
     return `
   <g>
     <rect x="0" y="0" width="${WIDTH}" height="510" fill="${escapeXml(palette.dark)}"/>
-    <image href="${escapeXml(heroImageDataUrl)}" x="0" y="0" width="${WIDTH}" height="510" preserveAspectRatio="xMidYMid slice"/>
+    <rect x="500" y="0" width="700" height="510" fill="${escapeXml(tint(palette.primary, 76))}"/>
+    <image href="${escapeXml(heroImageDataUrl)}" x="500" y="0" width="700" height="510" preserveAspectRatio="xMidYMid slice"/>
+    <rect x="500" y="0" width="700" height="510" fill="${escapeXml(darken(palette.primary, 34))}" opacity="0.12"/>
+    <rect x="0" y="0" width="650" height="510" fill="${escapeXml(palette.dark)}" opacity="0.78"/>
     <rect x="0" y="0" width="${WIDTH}" height="510" fill="url(#heroShade)"/>
     <rect x="0" y="0" width="${WIDTH}" height="510" fill="${escapeXml(darken(palette.primary, 34))}" opacity="0.12"/>
     <rect x="0" y="382" width="${WIDTH}" height="128" fill="${escapeXml(darken(palette.primary, 28))}" opacity="0.58"/>
