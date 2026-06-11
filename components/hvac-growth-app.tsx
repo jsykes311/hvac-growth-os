@@ -130,6 +130,11 @@ export function HvacGrowthApp() {
                 setError("");
               }}
               onCreateCampaign={handleCreateCampaign}
+              onUpdateAnalysis={(nextAnalysis) => {
+                setAnalysis(nextAnalysis);
+                setCampaign(null);
+                setCampaignImage(null);
+              }}
               setGoal={setGoal}
               setOffer={setOffer}
             />
@@ -218,6 +223,7 @@ function ResultsView({
   offer,
   onBack,
   onCreateCampaign,
+  onUpdateAnalysis,
   setGoal,
   setOffer,
 }: {
@@ -231,9 +237,14 @@ function ResultsView({
   offer: string;
   onBack: () => void;
   onCreateCampaign: (event: FormEvent<HTMLFormElement>) => void;
+  onUpdateAnalysis: (analysis: BusinessProfile) => void;
   setGoal: (value: string) => void;
   setOffer: (value: string) => void;
 }) {
+  function updateBrandColor(field: "primaryColor" | "secondaryColor" | "accentColor", value: string) {
+    onUpdateAnalysis({ ...analysis, [field]: value });
+  }
+
   return (
     <div className="py-9">
       <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -288,10 +299,25 @@ function ResultsView({
               <Palette className="size-5" aria-hidden="true" />
               Brand Analysis
             </h2>
+            <p className="mt-2 text-sm leading-6 text-graphite/70">
+              These came from the website scan. Adjust them if the scrape picked up the wrong colors before creating the campaign.
+            </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <ColorSwatch label="Primary" value={analysis.primaryColor} />
-              <ColorSwatch label="Secondary" value={analysis.secondaryColor} />
-              <ColorSwatch label="Accent" value={analysis.accentColor} />
+              <ColorPicker
+                label="Primary"
+                onChange={(value) => updateBrandColor("primaryColor", value)}
+                value={analysis.primaryColor}
+              />
+              <ColorPicker
+                label="Secondary"
+                onChange={(value) => updateBrandColor("secondaryColor", value)}
+                value={analysis.secondaryColor}
+              />
+              <ColorPicker
+                label="Accent"
+                onChange={(value) => updateBrandColor("accentColor", value)}
+                value={analysis.accentColor}
+              />
             </div>
             {analysis.heroImageUrl && (
               <div className="mt-5 overflow-hidden rounded-lg border border-ink/10 bg-white">
@@ -438,16 +464,49 @@ function ChipList({
   );
 }
 
-function ColorSwatch({ label, value }: { label: string; value: string }) {
-  const displayValue = value || "#000000";
+function ColorPicker({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  const displayValue = toHexColor(value) || "#111827";
 
   return (
     <div className="rounded-lg border border-ink/10 bg-frost p-3">
-      <div className="h-10 rounded-md border border-ink/10" style={{ backgroundColor: displayValue }} />
-      <p className="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-graphite/60">{label}</p>
-      <p className="mt-1 text-sm font-black text-ink">{value || "Not found"}</p>
+      <div className="flex items-center gap-3">
+        <input
+          aria-label={`${label} color`}
+          className="h-10 w-12 cursor-pointer rounded-md border border-ink/10 bg-white p-1"
+          onChange={(event) => onChange(event.target.value)}
+          type="color"
+          value={displayValue}
+        />
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-graphite/60">{label}</p>
+          <input
+            aria-label={`${label} hex value`}
+            className="mt-1 h-9 w-full rounded-md border border-ink/10 bg-white px-2 font-mono text-sm font-bold text-ink outline-none transition focus:border-flame focus:ring-4 focus:ring-flame/15"
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="#000000"
+            value={value}
+          />
+        </div>
+      </div>
     </div>
   );
+}
+
+function toHexColor(value: string) {
+  const trimmedValue = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(trimmedValue)) return trimmedValue;
+  if (/^#[0-9a-f]{3}$/i.test(trimmedValue)) {
+    return `#${trimmedValue[1]}${trimmedValue[1]}${trimmedValue[2]}${trimmedValue[2]}${trimmedValue[3]}${trimmedValue[3]}`;
+  }
+  return "";
 }
 
 function BulletList({ values, emptyText }: { values: string[]; emptyText: string }) {
