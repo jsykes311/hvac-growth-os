@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { BusinessProfile, CampaignOutput } from "@/lib/types";
 import { createCampaignImage } from "@/lib/server/creative/campaign-image";
-import { getStructuredJson } from "@/lib/server/openai";
+import { generatePngImage, getStructuredJson } from "@/lib/server/openai";
 import { campaignSchema } from "@/lib/server/schemas";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,11 +27,13 @@ export async function POST(request: NextRequest) {
     }
 
     const campaign = await createCampaign(body.profile, goal, offer);
+    const generatedHeroImageDataUrl = await createGeneratedHeroImage(body.profile, campaign, goal, offer);
     const campaignImage = await createCampaignImage({
       profile: body.profile,
       campaign,
       goal,
       offer,
+      generatedHeroImageDataUrl,
     });
 
     return NextResponse.json({ campaign, campaignImage });
@@ -41,6 +43,46 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+async function createGeneratedHeroImage(
+  profile: BusinessProfile,
+  campaign: CampaignOutput,
+  goal: string,
+  offer: string,
+) {
+  try {
+    return await generatePngImage({
+      prompt: buildHeroImagePrompt(profile, campaign, goal, offer),
+      size: "1536x1024",
+    });
+  } catch (error) {
+    console.error("Campaign hero image generation failed", error);
+    return "";
+  }
+}
+
+function buildHeroImagePrompt(
+  profile: BusinessProfile,
+  campaign: CampaignOutput,
+  goal: string,
+  offer: string,
+) {
+  const service = profile.services[0] || "HVAC service";
+  const area = profile.serviceAreas[0] || "a local neighborhood";
+  const primaryColor = profile.primaryColor || "brand primary color";
+  const accentColor = profile.accentColor || "brand accent color";
+
+  return [
+    "Create a realistic premium advertising photo for an HVAC contractor campaign.",
+    `Scene: a professional HVAC contractor standing near a residential outdoor condenser at a clean suburban home in ${area}.`,
+    `Campaign goal: ${goal}. Offer context: ${offer}. Main service: ${service}.`,
+    `Mood and brand tone: ${profile.brandTone || "trustworthy, professional, local, helpful"}.`,
+    `Use subtle wardrobe, vehicle, or tool accents inspired by these brand colors: primary ${primaryColor}, accent ${accentColor}.`,
+    `The image should support this landing page message: ${campaign.landingPageHero.headline}`,
+    "Composition: wide horizontal hero image, contractor on the right side, open darker space on the left for headline text overlay, natural daylight, polished but believable, no exaggerated poses.",
+    "Do not include any readable text, logos, badges, watermarks, distorted hands, distorted tools, fake brand names, or UI elements.",
+  ].join("\n");
 }
 
 async function createCampaign(profile: BusinessProfile, goal: string, offer: string) {

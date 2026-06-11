@@ -13,6 +13,15 @@ type OpenAIResponse = {
   };
 };
 
+type ImageGenerationResponse = {
+  data?: Array<{
+    b64_json?: string;
+  }>;
+  error?: {
+    message?: string;
+  };
+};
+
 export async function getStructuredJson<T>({
   name,
   schema,
@@ -76,6 +85,49 @@ export async function getStructuredJson<T>({
   } catch {
     throw new Error("OpenAI returned invalid JSON.");
   }
+}
+
+export async function generatePngImage({
+  prompt,
+  size = "1536x1024",
+}: {
+  prompt: string;
+  size?: "1024x1024" | "1536x1024" | "1024x1536";
+}) {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY.");
+  }
+
+  const response = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-1",
+      prompt,
+      size,
+      quality: "medium",
+      n: 1,
+    }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as ImageGenerationResponse | null;
+
+  if (!response.ok || !payload) {
+    throw new Error(payload?.error?.message || "OpenAI image generation failed.");
+  }
+
+  const base64Image = payload.data?.[0]?.b64_json;
+
+  if (!base64Image) {
+    throw new Error("OpenAI image generation returned no image.");
+  }
+
+  return `data:image/png;base64,${base64Image}`;
 }
 
 function extractText(payload: OpenAIResponse) {

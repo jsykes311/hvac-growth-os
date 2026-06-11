@@ -5,6 +5,7 @@ type CreativeInput = {
   campaign: CampaignOutput;
   goal: string;
   offer: string;
+  generatedHeroImageDataUrl?: string;
 };
 
 type CreativePalette = {
@@ -29,9 +30,9 @@ export async function createCampaignImage({
   campaign,
   goal,
   offer,
+  generatedHeroImageDataUrl = "",
 }: CreativeInput): Promise<CampaignImage> {
   const logoDataUrl = await fetchImageAsDataUrl(profile.logoUrl, 800000);
-  const heroImageDataUrl = await fetchImageAsDataUrl(profile.heroImageUrl, 2200000);
   const primary = normalizeColor(profile.primaryColor, "#0f8f45");
   const secondary = normalizeColor(profile.secondaryColor, darken(primary, 28));
   const accent = chooseActionColor(profile.accentColor, primary);
@@ -80,7 +81,7 @@ export async function createCampaignImage({
   <rect width="${WIDTH}" height="${HEIGHT}" fill="${escapeXml(palette.page)}"/>
   <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="#ffffff" filter="url(#pageShadow)"/>
 
-  ${renderHeroBackground(palette, heroImageDataUrl)}
+  ${renderHeroBackground(palette, generatedHeroImageDataUrl)}
   ${renderLogoMark(logoDataUrl, company, palette)}
   ${renderHeroText(heroLines, introLines, palette)}
 
