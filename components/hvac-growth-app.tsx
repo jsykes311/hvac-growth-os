@@ -976,9 +976,9 @@ function CampaignImagePreview({ campaignImage }: { campaignImage: CampaignImage 
     <div className="mt-6 border-t border-ink/10 pt-6">
       <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h3 className="text-lg font-black text-ink">Campaign One-Pager</h3>
+          <h3 className="text-lg font-black text-ink">Campaign Hero Ad</h3>
           <p className="text-sm font-medium text-graphite/70">
-            Microf-style campaign creative with a generated contractor hero image, proof points, CTA band, and logo when available.
+            Microf-style hero creative with a generated contractor image, brand-color overlays, proof points, and logo when available.
           </p>
         </div>
         <a

@@ -13,89 +13,75 @@ type CreativePalette = {
   secondary: string;
   accent: string;
   dark: string;
-  cta: string;
-  page: string;
-  surface: string;
   soft: string;
-  border: string;
-  body: string;
   muted: string;
 };
 
-const WIDTH = 1200;
-const HEIGHT = 1840;
+const WIDTH = 1536;
+const HEIGHT = 864;
 
 export async function createCampaignImage({
   profile,
   campaign,
-  goal,
   offer,
   generatedHeroImageDataUrl = "",
 }: CreativeInput): Promise<CampaignImage> {
   const logoDataUrl = await fetchImageAsDataUrl(profile.logoUrl, 800000);
   const primary = normalizeColor(profile.primaryColor, "#0f8f45");
-  const secondary = normalizeColor(profile.secondaryColor, darken(primary, 28));
+  const secondary = normalizeColor(profile.secondaryColor, darken(primary, 36));
   const accent = chooseActionColor(profile.accentColor, primary);
   const palette = buildPalette(primary, secondary, accent);
   const company = profile.companyName || "Local HVAC Pros";
-  const phone = profile.phone || "";
-  const email = profile.email || "";
-  const serviceArea = profile.serviceAreas[0] || "your area";
-  const topService = profile.services[0] || "HVAC service";
-  const differentiators = nonEmpty(profile.differentiators, [
-    "Fast scheduling",
-    "Clear recommendations",
-    "Local technicians",
-    "Comfort-focused service",
-  ]).slice(0, 4);
-  const opportunity = profile.topGrowthOpportunities[0] || "Turn every homeowner visit into a clear next step.";
-  const proofCards = buildProofCards(profile);
-  const heroHeadline = campaign.landingPageHero.headline || "Finish Busy Season Strong.";
-  const heroLines = wrapText(heroHeadline, 18, 3);
-  const introLines = wrapText(campaign.landingPageHero.subheadline, 58, 3);
+  const headline = campaign.landingPageHero.headline || offer || "Built for today. Ready for tomorrow.";
+  const subheadline =
+    campaign.landingPageHero.subheadline ||
+    `A practical HVAC campaign for ${profile.serviceAreas[0] || "local homeowners"}.`;
+  const proofCards = buildProofCards(profile, campaign.landingPageHero.supportingBullets);
+  const trustLine = buildTrustLine(profile, offer);
+
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
   <defs>
-    <linearGradient id="heroPhoto" x1="0" x2="1" y1="0" y2="0">
-      <stop offset="0%" stop-color="${escapeXml(palette.dark)}"/>
-      <stop offset="44%" stop-color="${escapeXml(darken(palette.secondary, 18))}"/>
-      <stop offset="100%" stop-color="${escapeXml(tint(palette.primary, 70))}"/>
+    <linearGradient id="photoFallback" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="${escapeXml(tint(palette.primary, 86))}"/>
+      <stop offset="52%" stop-color="${escapeXml(tint(palette.secondary, 64))}"/>
+      <stop offset="100%" stop-color="${escapeXml(darken(palette.secondary, 18))}"/>
     </linearGradient>
-    <linearGradient id="heroShade" x1="0" x2="1" y1="0" y2="0">
-      <stop offset="0%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.94"/>
-      <stop offset="48%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.58"/>
-      <stop offset="78%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.08"/>
+    <linearGradient id="textShade" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.92"/>
+      <stop offset="38%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.74"/>
+      <stop offset="66%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.18"/>
       <stop offset="100%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="lawn" x1="0" x2="1" y1="0" y2="0">
-      <stop offset="0%" stop-color="${escapeXml(darken(primary, 18))}"/>
-      <stop offset="100%" stop-color="${escapeXml(tint(palette.accent, 46))}"/>
+    <linearGradient id="topGlow" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.58"/>
+      <stop offset="35%" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <filter id="pageShadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="${escapeXml(palette.dark)}" flood-opacity="0.18"/>
-    </filter>
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="${escapeXml(palette.dark)}" flood-opacity="0.28"/>
+    <linearGradient id="bottomDepth" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0"/>
+      <stop offset="100%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="logoShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.18"/>
     </filter>
   </defs>
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="${escapeXml(palette.page)}"/>
-  <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="#ffffff" filter="url(#pageShadow)"/>
 
-  ${renderHeroBackground(palette, generatedHeroImageDataUrl)}
-  ${renderLogoMark(logoDataUrl, company, palette)}
-  ${renderHeroText(heroLines, introLines, palette)}
+  ${renderHeroBackground(generatedHeroImageDataUrl, palette)}
+  <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="url(#textShade)"/>
+  <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="url(#topGlow)"/>
+  <rect x="0" y="610" width="${WIDTH}" height="254" fill="url(#bottomDepth)"/>
+  <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="${escapeXml(palette.primary)}" opacity="0.07"/>
 
-  ${renderTopBenefitStrip(proofCards, palette)}
-  ${renderIntroSection(goal, opportunity, campaign.landingPageHero, palette)}
-  ${renderDifferentiatorCards(differentiators, palette)}
-  ${renderBlackBand(company, campaign.landingPageHero.subheadline, palette)}
-  ${renderCtaBand(campaign.landingPageHero.primaryCta, offer, palette)}
-  ${renderFooter(logoDataUrl, company, phone, email, serviceArea, topService, palette)}
+  ${renderLogo(logoDataUrl, company, palette)}
+  ${renderHeroCopy(headline, subheadline, palette)}
+  ${renderProofStack(proofCards, palette)}
+  ${renderTrustFooter(trustLine, palette)}
 </svg>`.trim();
 
   return {
     dataUrl: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
-    fileName: `${slugify(company)}-campaign-onepager.svg`,
+    fileName: `${slugify(company)}-campaign-hero-ad.svg`,
     format: "svg",
     width: WIDTH,
     height: HEIGHT,
@@ -138,232 +124,143 @@ async function fetchImageAsDataUrl(imageUrl: string, maxBytes: number) {
   }
 }
 
-function renderHeroBackground(palette: CreativePalette, heroImageDataUrl: string) {
+function renderHeroBackground(heroImageDataUrl: string, palette: CreativePalette) {
   if (heroImageDataUrl) {
     return `
-  <g>
-    <rect x="0" y="0" width="${WIDTH}" height="510" fill="${escapeXml(palette.dark)}"/>
-    <rect x="500" y="0" width="700" height="510" fill="${escapeXml(tint(palette.primary, 76))}"/>
-    <image href="${escapeXml(heroImageDataUrl)}" x="500" y="0" width="700" height="510" preserveAspectRatio="xMidYMid slice"/>
-    <rect x="500" y="0" width="700" height="510" fill="${escapeXml(darken(palette.primary, 34))}" opacity="0.12"/>
-    <rect x="0" y="0" width="650" height="510" fill="${escapeXml(palette.dark)}" opacity="0.78"/>
-    <rect x="0" y="0" width="${WIDTH}" height="510" fill="url(#heroShade)"/>
-    <rect x="0" y="0" width="${WIDTH}" height="510" fill="${escapeXml(darken(palette.primary, 34))}" opacity="0.12"/>
-    <rect x="0" y="382" width="${WIDTH}" height="128" fill="${escapeXml(darken(palette.primary, 28))}" opacity="0.58"/>
-  </g>`;
+  <image href="${escapeXml(heroImageDataUrl)}" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="xMidYMid slice"/>`;
   }
 
   return `
-  <g>
-    <rect x="0" y="0" width="${WIDTH}" height="510" fill="url(#heroPhoto)"/>
-    <rect x="0" y="0" width="${WIDTH}" height="510" fill="url(#heroShade)"/>
-    <rect x="0" y="382" width="${WIDTH}" height="128" fill="url(#lawn)" opacity="0.28"/>
-    <circle cx="1042" cy="104" r="96" fill="#fff2d5" opacity="0.24"/>
-    <rect x="740" y="110" width="338" height="268" rx="3" fill="${escapeXml(tint(palette.primary, 82))}" opacity="0.28"/>
-    <path d="M688 226 L846 110 L1008 226" fill="none" stroke="#fff7eb" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" opacity="0.56"/>
-    <path d="M727 227 V374 H970 V227" fill="none" stroke="#fff7eb" stroke-width="11" opacity="0.44"/>
-    <rect x="758" y="258" width="58" height="66" fill="${escapeXml(palette.dark)}" opacity="0.45"/>
-    <rect x="854" y="258" width="66" height="52" fill="${escapeXml(palette.dark)}" opacity="0.36"/>
-    <rect x="1000" y="260" width="106" height="92" rx="7" fill="${escapeXml(palette.dark)}" opacity="0.68"/>
-    <path d="M1016 284 H1092 M1016 309 H1092 M1016 334 H1092" stroke="${escapeXml(tint(palette.primary, 52))}" stroke-width="5" opacity="0.8"/>
-    <circle cx="1054" cy="318" r="23" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="7" opacity="0.9"/>
-    <g filter="url(#softShadow)" opacity="0.95">
-      <circle cx="910" cy="184" r="34" fill="${escapeXml(tint(palette.primary, 78))}"/>
-      <path d="M872 231 C890 210 930 209 948 231 L968 334 L849 334 Z" fill="${escapeXml(darken(palette.secondary, 22))}"/>
-      <path d="M850 255 L786 314" stroke="${escapeXml(darken(palette.secondary, 12))}" stroke-width="18" stroke-linecap="round"/>
-      <path d="M946 258 L1014 300" stroke="${escapeXml(darken(palette.secondary, 12))}" stroke-width="18" stroke-linecap="round"/>
-      <rect x="834" y="330" width="42" height="96" rx="14" fill="${escapeXml(darken(palette.secondary, 42))}"/>
-      <rect x="918" y="330" width="42" height="96" rx="14" fill="${escapeXml(darken(palette.secondary, 42))}"/>
-      <rect x="770" y="304" width="86" height="58" rx="8" fill="${escapeXml(palette.dark)}"/>
-      <rect x="782" y="316" width="62" height="8" rx="4" fill="${escapeXml(palette.accent)}" opacity="0.75"/>
-      <path d="M873 232 H948 L937 255 H884 Z" fill="${escapeXml(palette.accent)}" opacity="0.84"/>
-    </g>
-    <path d="M590 374 C666 336 740 386 820 351 C914 310 1026 319 1130 374" fill="none" stroke="#ffffff" stroke-width="6" opacity="0.17"/>
-    <path d="M610 448 C716 404 802 448 912 420 C1002 397 1074 408 1160 452" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.22"/>
-    <rect x="0" y="0" width="${WIDTH}" height="510" fill="#000000" opacity="0.04"/>
-  </g>`;
+  <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="url(#photoFallback)"/>
+  <circle cx="1210" cy="156" r="130" fill="#fff1d0" opacity="0.34"/>
+  <path d="M1086 384 L1256 250 L1428 384" fill="none" stroke="#fff7e5" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+  <path d="M1124 386 V584 H1392 V386" fill="none" stroke="#fff7e5" stroke-width="13" opacity="0.32"/>
+  <rect x="1260" y="424" width="124" height="92" rx="8" fill="${escapeXml(palette.dark)}" opacity="0.42"/>
+  <rect x="812" y="538" width="248" height="118" rx="12" fill="${escapeXml(palette.dark)}" opacity="0.42"/>
+  <path d="M835 584 H1036 M835 622 H1036" stroke="${escapeXml(tint(palette.primary, 58))}" stroke-width="8" opacity="0.7"/>
+  <circle cx="1510" cy="20" r="240" fill="#ffffff" opacity="0.16"/>`;
 }
 
-function renderLogoMark(logoDataUrl: string, company: string, palette: CreativePalette) {
+function renderLogo(logoDataUrl: string, company: string, palette: CreativePalette) {
   if (logoDataUrl) {
     return `
-  <rect x="58" y="58" width="300" height="86" rx="4" fill="#ffffff" opacity="0.96"/>
-  <image href="${escapeXml(logoDataUrl)}" x="82" y="78" width="252" height="46" preserveAspectRatio="xMinYMid meet"/>`;
+  <rect x="64" y="56" width="294" height="96" rx="7" fill="#ffffff" opacity="0.96" filter="url(#logoShadow)"/>
+  <image href="${escapeXml(logoDataUrl)}" x="96" y="78" width="230" height="52" preserveAspectRatio="xMidYMid meet"/>`;
   }
 
-  const short = company
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(" ");
-
-  return `
-  <text x="58" y="122" font-family="Inter, Arial, sans-serif" font-size="70" font-weight="950" fill="#ffffff">${escapeXml(short)}</text>
-  <text x="62" y="150" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="900" fill="${escapeXml(palette.accent)}" letter-spacing="1.5">HVAC GROWTH CAMPAIGN</text>`;
-}
-
-function renderHeroText(headlineLines: string[], introLines: string[], palette: CreativePalette) {
-  const accentLineIndex = Math.max(0, headlineLines.length - 1);
-  const headline = headlineLines
-    .map((line, index) => {
-      const fill = index === accentLineIndex ? palette.accent : "#ffffff";
-      return `<text x="58" y="${223 + index * 58}" font-family="Inter, Arial, sans-serif" font-size="59" font-weight="950" fill="${escapeXml(fill)}">${escapeXml(line)}</text>`;
-    })
-    .join("\n  ");
-
-  return `
-  ${headline}
-  ${renderTextLines(introLines, 58, 415, 20, 29, "#ffffff", 650)}`;
-}
-
-function renderTopBenefitStrip(cards: Array<{ title: string; body: string }>, palette: CreativePalette) {
-  const cardWidth = WIDTH / 4;
-
-  return `
-  <g>
-    <rect x="0" y="510" width="${WIDTH}" height="148" fill="${escapeXml(palette.surface)}"/>
-    ${cards
-      .slice(0, 4)
-      .map((card, index) => {
-        const x = index * cardWidth;
-        return `
-    <line x1="${x}" y1="510" x2="${x}" y2="658" stroke="${escapeXml(palette.border)}"/>
-    <text x="${x + 28}" y="559" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(card.title)}</text>
-    ${renderTextLines(wrapText(card.body, 30, 2), x + 28, 588, 14, 23, palette.muted, 500)}`;
-      })
-      .join("\n")}
-  </g>`;
-}
-
-function renderIntroSection(
-  goal: string,
-  opportunity: string,
-  hero: CampaignOutput["landingPageHero"],
-  palette: CreativePalette,
-) {
-  const bodyLines = wrapText(opportunity, 56, 3);
-  const bulletLines = nonEmpty(hero.supportingBullets, [
-    "Clear local offer",
-    "Fast booking path",
-    "Brand-matched follow-up",
-  ]).slice(0, 3);
-
-  return `
-  <g>
-    <rect x="0" y="658" width="${WIDTH}" height="258" fill="#ffffff"/>
-    <text x="58" y="728" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="3">${escapeXml(goal.toUpperCase())}</text>
-    ${renderTextLines(bodyLines, 58, 775, 22, 32, palette.body, 500)}
-    ${renderTextLines(wrapText(hero.subheadline, 66, 2), 58, 858, 17, 27, palette.muted, 500)}
-    <rect x="668" y="720" width="430" height="146" fill="${escapeXml(palette.soft)}"/>
-    <rect x="668" y="720" width="5" height="146" fill="${escapeXml(palette.primary)}"/>
-    <text x="698" y="758" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="2.2">CAMPAIGN FOCUS</text>
-    ${renderTextLines(bulletLines.map((item) => `- ${item}`), 698, 798, 20, 30, palette.dark, 850)}
-  </g>`;
-}
-
-function renderDifferentiatorCards(items: string[], palette: CreativePalette) {
-  const cards = items.slice(0, 4);
-
-  return `
-  <g>
-    <rect x="0" y="916" width="${WIDTH}" height="226" fill="#ffffff"/>
-    ${cards
-      .map((item, index) => {
-        const x = 58 + index * 268;
-        const lines = wrapText(item, 24, 4);
-        return `
-    <rect x="${x}" y="960" width="238" height="144" fill="#ffffff" stroke="${escapeXml(palette.border)}"/>
-    <text x="${x + 22}" y="1002" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="950" fill="${escapeXml(palette.dark)}">${escapeXml(lines[0] ?? "Growth lever")}</text>
-    ${renderTextLines(lines.slice(1), x + 22, 1034, 15, 23, palette.muted, 500)}
-    <rect x="${x + 22}" y="1070" width="54" height="4" fill="${escapeXml(palette.primary)}"/>`;
-      })
-      .join("\n")}
-  </g>`;
-}
-
-function renderBlackBand(company: string, body: string, palette: CreativePalette) {
-  return `
-  <g>
-    <rect x="58" y="1174" width="1084" height="222" fill="${escapeXml(palette.dark)}"/>
-    <text x="94" y="1237" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="950" fill="#ffffff">Busy season rewards teams</text>
-    <text x="94" y="1277" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="950" fill="#ffffff">with a clear follow-up system.</text>
-    ${renderTextLines(wrapText(`${company} can use this offer to move more homeowners from interest to booked appointments. ${body}`, 98, 2), 94, 1324, 16, 25, tint(palette.primary, 88), 500)}
-    <rect x="94" y="1370" width="144" height="5" fill="${escapeXml(palette.accent)}"/>
-  </g>`;
-}
-
-function renderCtaBand(cta: string, offer: string, palette: CreativePalette) {
-  const offerLines = wrapText(offer || "Ready-to-book comfort campaign", 42, 2);
-
-  return `
-  <g>
-    <rect x="0" y="1454" width="${WIDTH}" height="136" fill="${escapeXml(palette.cta)}"/>
-    ${renderTextLines(offerLines, 58, 1513, 28, 33, "#ffffff", 950)}
-    <text x="58" y="1563" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="600" fill="#ffffff" opacity="0.9">Launch a local campaign using the analyzed brand profile.</text>
-    <rect x="872" y="1498" width="250" height="54" rx="27" fill="none" stroke="#ffffff" opacity="0.65"/>
-    <text x="997" y="1532" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="950" text-anchor="middle" fill="#ffffff">${escapeXml(cta)}</text>
-  </g>`;
-}
-
-function renderFooter(
-  logoDataUrl: string,
-  company: string,
-  phone: string,
-  email: string,
-  serviceArea: string,
-  topService: string,
-  palette: CreativePalette,
-) {
-  const contact = phone || email || "Contact for booking";
   const companyLines = wrapText(company, 17, 2);
 
   return `
+  <text x="64" y="104" font-family="Impact, Inter, Arial Black, sans-serif" font-size="44" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(companyLines[0] || company)}</text>
+  ${companyLines[1] ? `<text x="64" y="148" font-family="Impact, Inter, Arial Black, sans-serif" font-size="44" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(companyLines[1])}</text>` : ""}`;
+}
+
+function renderHeroCopy(headline: string, subheadline: string, palette: CreativePalette) {
+  const lines = wrapText(headline, 19, 3);
+  const subLines = wrapText(subheadline, 38, 3);
+  const firstBlock = lines
+    .map(
+      (line, index) =>
+        `<text x="64" y="${244 + index * 72}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="68" font-weight="950" fill="${escapeXml(
+          index === lines.length - 1 ? palette.primary : "#ffffff",
+        )}" letter-spacing="1">${escapeXml(line.toUpperCase())}</text>`,
+    )
+    .join("\n  ");
+
+  return `
+  ${firstBlock}
+  ${renderTextLines(subLines, 66, 486, 27, 38, "#ffffff", 700)}
+  <rect x="66" y="575" width="116" height="5" fill="${escapeXml(palette.primary)}"/>`;
+}
+
+function renderProofStack(cards: Array<{ title: string; body: string; icon: "chart" | "shield" | "team" | "cash" }>, palette: CreativePalette) {
+  return cards
+    .slice(0, 4)
+    .map((card, index) => {
+      const y = 628 + index * 86;
+      return `
   <g>
-    <rect x="0" y="1590" width="${WIDTH}" height="250" fill="#ffffff"/>
-    <line x1="58" y1="1620" x2="1142" y2="1620" stroke="${escapeXml(palette.border)}"/>
-    <rect x="58" y="1652" width="232" height="92" fill="${escapeXml(palette.surface)}"/>
-    ${logoDataUrl ? `<image href="${escapeXml(logoDataUrl)}" x="78" y="1675" width="192" height="46" preserveAspectRatio="xMidYMid meet"/>` : renderTextLines(companyLines, 78, 1686, 19, 24, palette.primary, 950)}
-    <rect x="318" y="1652" width="4" height="92" fill="${escapeXml(palette.primary)}"/>
-    <text x="350" y="1677" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="1.6">SERVICE AREA</text>
-    ${renderTextLines(wrapText(serviceArea, 22, 2), 350, 1711, 17, 24, palette.dark, 850)}
-    <text x="562" y="1677" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="1.6">FEATURED SERVICE</text>
-    ${renderTextLines(wrapText(topService, 22, 2), 562, 1711, 17, 24, palette.dark, 850)}
-    <text x="790" y="1677" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="950" fill="${escapeXml(palette.primary)}" letter-spacing="1.6">CONTACT</text>
-    ${renderTextLines(wrapText(contact, 29, 2), 790, 1711, 17, 24, palette.dark, 850)}
-    ${email && phone ? renderTextLines(wrapText(email, 36, 2), 790, 1763, 13, 19, palette.muted, 600) : ""}
-    <text x="58" y="1810" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="500" fill="${escapeXml(palette.muted)}">Campaign creative generated from public website analysis. Offer terms and availability should be verified before launch.</text>
+    <circle cx="110" cy="${y}" r="34" fill="${escapeXml(palette.dark)}" opacity="0.34"/>
+    <circle cx="110" cy="${y}" r="32" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="3"/>
+    ${renderIcon(card.icon, 110, y, palette.primary)}
+    <text x="178" y="${y - 9}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="28" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(card.title.toUpperCase())}</text>
+    ${renderTextLines(wrapText(card.body, 35, 2), 178, y + 22, 20, 27, "#ffffff", 650)}
+  </g>`;
+    })
+    .join("\n");
+}
+
+function renderIcon(icon: "chart" | "shield" | "team" | "cash", cx: number, cy: number, color: string) {
+  if (icon === "shield") {
+    return `<path d="M${cx} ${cy - 22} L${cx + 20} ${cy - 13} V${cy + 4} C${cx + 20} ${cy + 19} ${cx + 8} ${cy + 26} ${cx} ${cy + 30} C${cx - 8} ${cy + 26} ${cx - 20} ${cy + 19} ${cx - 20} ${cy + 4} V${cy - 13} Z" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx - 10} ${cy + 2} L${cx - 2} ${cy + 10} L${cx + 14} ${cy - 8}" fill="none" stroke="${escapeXml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+
+  if (icon === "team") {
+    return `<circle cx="${cx}" cy="${cy - 11}" r="9" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/><circle cx="${cx - 18}" cy="${cy - 6}" r="7" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/><circle cx="${cx + 18}" cy="${cy - 6}" r="7" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx - 18} ${cy + 23} C${cx - 16} ${cy + 8} ${cx + 16} ${cy + 8} ${cx + 18} ${cy + 23}" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx - 34} ${cy + 20} C${cx - 31} ${cy + 8} ${cx - 12} ${cy + 8} ${cx - 10} ${cy + 17}" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx + 10} ${cy + 17} C${cx + 12} ${cy + 8} ${cx + 31} ${cy + 8} ${cx + 34} ${cy + 20}" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/>`;
+  }
+
+  if (icon === "cash") {
+    return `<path d="M${cx - 25} ${cy + 16} L${cx - 10} ${cy + 1} L${cx + 3} ${cy + 9} L${cx + 25} ${cy - 18}" fill="none" stroke="${escapeXml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M${cx + 12} ${cy - 18} H${cx + 25} V${cy - 5}" fill="none" stroke="${escapeXml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><text x="${cx + 10}" y="${cy + 25}" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="950" fill="${escapeXml(color)}">$</text>`;
+  }
+
+  return `<path d="M${cx - 24} ${cy + 18} V${cy - 2} H${cx - 10} V${cy + 18} M${cx - 2} ${cy + 18} V${cy - 19} H${cx + 12} V${cy + 18} M${cx + 20} ${cy + 18} V${cy - 9} H${cx + 34} V${cy + 18}" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx - 26} ${cy + 18} H${cx + 38}" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx - 22} ${cy - 19} L${cx - 6} ${cy - 30} L${cx + 7} ${cy - 22} L${cx + 31} ${cy - 47}" fill="none" stroke="${escapeXml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M${cx + 17} ${cy - 47} H${cx + 31} V${cy - 33}" fill="none" stroke="${escapeXml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+
+function renderTrustFooter(text: string, palette: CreativePalette) {
+  return `
+  <g>
+    <rect x="620" y="744" width="4" height="78" fill="${escapeXml(palette.primary)}"/>
+    ${renderTextLines(wrapText(text, 36, 3), 666, 773, 22, 31, "#ffffff", 600)}
+    <rect x="0" y="0" width="${WIDTH}" height="10" fill="${escapeXml(palette.primary)}" opacity="0.84"/>
   </g>`;
 }
 
-function buildProofCards(profile: BusinessProfile) {
-  return [
+function buildProofCards(profile: BusinessProfile, supportingBullets: string[]) {
+  const fallback = [
     {
-      title: profile.financingMentioned ? "Financing ready" : "Clear offers",
+      title: profile.financingMentioned ? "More options" : "Clear offers",
       body: profile.financingMentioned
-        ? "Promote payment options when homeowners are weighing replacement decisions."
-        : "Lead with a simple offer homeowners can understand quickly.",
+        ? "Promote payment options that help homeowners move forward."
+        : "Give homeowners one clear reason to book now.",
+      icon: "chart" as const,
     },
     {
-      title: profile.emergencyServiceMentioned ? "Emergency demand" : "Fast decisions",
+      title: profile.emergencyServiceMentioned ? "Urgent demand" : "Fast booking",
       body: profile.emergencyServiceMentioned
-        ? "Turn urgent repair searches into booked calls with direct messaging."
-        : "Help homeowners move from problem to appointment without friction.",
+        ? "Turn urgent comfort problems into booked calls."
+        : "Make the next step simple for local homeowners.",
+      icon: "shield" as const,
     },
     {
-      title: profile.maintenancePlanMentioned ? "Plan revenue" : "Repeat demand",
+      title: profile.maintenancePlanMentioned ? "Plan revenue" : "Local trust",
       body: profile.maintenancePlanMentioned
-        ? "Use tune-ups and plan messaging to create recurring opportunities."
-        : "Build seasonal campaigns that bring homeowners back before breakdowns.",
+        ? "Use tune-ups and memberships to create repeat demand."
+        : "Anchor the message in service area credibility.",
+      icon: "team" as const,
     },
     {
-      title: "Local trust",
-      body: "Anchor the message in service areas, proof, and technician credibility.",
+      title: "Stronger growth",
+      body: "Convert more interest into appointments and follow-up.",
+      icon: "cash" as const,
     },
   ];
+
+  return fallback.map((card, index) => ({
+    ...card,
+    body: supportingBullets[index] || card.body,
+  }));
 }
 
-function nonEmpty(values: string[], fallback: string[]) {
-  return values.filter(Boolean).length ? values.filter(Boolean) : fallback;
+function buildTrustLine(profile: BusinessProfile, offer: string) {
+  const area = profile.serviceAreas[0] || "the local market";
+  const service = profile.services[0] || "HVAC service";
+  const company = profile.companyName || "this contractor";
+
+  if (offer) {
+    return `${offer} from ${company}, built around ${service} demand in ${area}.`;
+  }
+
+  return `${company} can turn local ${service} demand in ${area} into a sharper booking path.`;
 }
 
 function renderTextLines(
@@ -374,20 +271,12 @@ function renderTextLines(
   lineHeight: number,
   fill: string,
   weight: number,
-  highlightColor?: string,
 ) {
   return lines
-    .map((line, index) => {
-      const words = line.split(" ");
-      const lastWord = words.at(-1) ?? "";
-      const rest = words.slice(0, -1).join(" ");
-
-      if (highlightColor && index === lines.length - 1 && rest) {
-        return `<text x="${x}" y="${y + index * lineHeight}" font-family="Inter, Arial, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${escapeXml(fill)}">${escapeXml(rest)} <tspan fill="${escapeXml(highlightColor)}">${escapeXml(lastWord)}</tspan></text>`;
-      }
-
-      return `<text x="${x}" y="${y + index * lineHeight}" font-family="Inter, Arial, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${escapeXml(fill)}">${escapeXml(line)}</text>`;
-    })
+    .map(
+      (line, index) =>
+        `<text x="${x}" y="${y + index * lineHeight}" font-family="Inter, Arial, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${escapeXml(fill)}">${escapeXml(line)}</text>`,
+    )
     .join("\n  ");
 }
 
@@ -432,22 +321,15 @@ function chooseActionColor(accentColor: string, primaryColor: string) {
 }
 
 function buildPalette(primary: string, secondary: string, accent: string): CreativePalette {
-  const dark = isLight(secondary) ? darken(primary, 58) : secondary;
-  const cta = isLight(accent) ? primary : accent;
-  const body = isLight(dark) ? darken(primary, 68) : dark;
+  const dark = isLight(secondary) ? darken(primary, 64) : darken(secondary, 12);
 
   return {
     primary,
     secondary,
     accent,
     dark,
-    cta,
-    page: tint(primary, 93),
-    surface: tint(primary, 96),
-    soft: tint(primary, 94),
-    border: tint(primary, 82),
-    body,
-    muted: mix(body, "#ffffff", 34),
+    soft: tint(primary, 88),
+    muted: tint(dark, 68),
   };
 }
 
@@ -463,16 +345,6 @@ function relativeLuminance(hex: string) {
   });
 
   return 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2];
-}
-
-function mix(hexA: string, hexB: string, percentB: number) {
-  const amount = Math.max(0, Math.min(100, percentB)) / 100;
-  const a = Number.parseInt(hexA.slice(1), 16);
-  const b = Number.parseInt(hexB.slice(1), 16);
-  const r = Math.round(((a >> 16) & 255) * (1 - amount) + ((b >> 16) & 255) * amount);
-  const g = Math.round(((a >> 8) & 255) * (1 - amount) + ((b >> 8) & 255) * amount);
-  const blue = Math.round((a & 255) * (1 - amount) + (b & 255) * amount);
-  return `#${[r, g, blue].map((part) => part.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function darken(hex: string, percent: number) {
@@ -506,9 +378,11 @@ function escapeXml(value: string) {
 }
 
 function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 48) || "hvac";
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 48) || "hvac"
+  );
 }

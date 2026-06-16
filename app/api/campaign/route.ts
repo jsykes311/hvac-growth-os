@@ -74,16 +74,16 @@ function buildHeroImagePrompt(
   const accentColor = profile.accentColor || "brand accent color";
 
   return [
-    "Create a realistic premium advertising photo for an HVAC contractor campaign.",
-    `Scene: a professional HVAC contractor standing near a residential outdoor condenser at a clean suburban home in ${area}.`,
+    "Create a realistic premium HVAC advertising hero photo in the same polished contractor-marketing style as a Microf campaign hero image.",
+    `Scene: a professional HVAC contractor on the right side of a residential street near a clean suburban home, outdoor condenser, and service van in ${area}.`,
     `Campaign goal: ${goal}. Offer context: ${offer}. Main service: ${service}.`,
     `Mood and brand tone: ${profile.brandTone || "trustworthy, professional, local, helpful"}.`,
-    `Use subtle wardrobe, vehicle, or tool accents inspired by these brand colors: primary ${primaryColor}, accent ${accentColor}.`,
+    `Use subtle wardrobe, van, lighting, or environmental accents inspired by these brand colors: primary ${primaryColor}, accent ${accentColor}.`,
     `The image should support this landing page message: ${campaign.landingPageHero.headline}`,
-    "Composition: wide horizontal hero image with the contractor on the right side and open darker space on the left for headline text overlay.",
-    "Framing requirement: show the contractor from head through at least waist/thigh level with visible headroom above the hair; do not crop the top of the head, face, shoulders, arms, or tool bag.",
-    "Camera: medium shot, not close-up, natural daylight, polished but believable, no exaggerated poses.",
-    "Do not include any readable text, logos, badges, watermarks, distorted hands, distorted tools, fake brand names, or UI elements.",
+    "Composition: 16:9 horizontal hero photo. Keep the contractor on the right third, full head visible with generous headroom, shown from head to at least mid-thigh, carrying a tool bag or tablet.",
+    "Leave the left half intentionally uncluttered and slightly darker for large headline text and proof-point overlays. Do not put the face or important objects under the left text area.",
+    "Lighting: premium golden-hour commercial photography, crisp realistic detail, confident but believable pose, local-homeowner trust, no exaggerated action pose.",
+    "Do not include any readable text, logos, badges, watermarks, fake brand names, signage, UI elements, distorted hands, distorted faces, or malformed tools.",
   ].join("\n");
 }
 
