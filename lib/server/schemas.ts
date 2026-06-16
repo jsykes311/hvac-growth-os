@@ -20,6 +20,8 @@ export const businessProfileSchema = {
     "logoUrl",
     "heroImageUrl",
     "brandStyle",
+    "seoAnalysis",
+    "aiSeoAnalysis",
   ],
   properties: {
     companyName: { type: "string" },
@@ -43,6 +45,62 @@ export const businessProfileSchema = {
     logoUrl: { type: "string" },
     heroImageUrl: { type: "string" },
     brandStyle: { type: "string" },
+    seoAnalysis: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "score",
+        "titleTag",
+        "metaDescription",
+        "localSeoGaps",
+        "technicalIssues",
+        "contentOpportunities",
+        "recommendedPages",
+      ],
+      properties: {
+        score: { type: "number" },
+        titleTag: { type: "string" },
+        metaDescription: { type: "string" },
+        localSeoGaps: { type: "array", items: { type: "string" } },
+        technicalIssues: { type: "array", items: { type: "string" } },
+        contentOpportunities: { type: "array", items: { type: "string" } },
+        recommendedPages: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["title", "slug", "searchIntent", "priority", "rationale"],
+            properties: {
+              title: { type: "string" },
+              slug: { type: "string" },
+              searchIntent: { type: "string" },
+              priority: { type: "string", enum: ["High", "Medium", "Low"] },
+              rationale: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    aiSeoAnalysis: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "score",
+        "answerEngineReadiness",
+        "citationOpportunities",
+        "schemaRecommendations",
+        "faqQuestions",
+        "entityGaps",
+      ],
+      properties: {
+        score: { type: "number" },
+        answerEngineReadiness: { type: "string" },
+        citationOpportunities: { type: "array", items: { type: "string" } },
+        schemaRecommendations: { type: "array", items: { type: "string" } },
+        faqQuestions: { type: "array", items: { type: "string" } },
+        entityGaps: { type: "array", items: { type: "string" } },
+      },
+    },
   },
 } as const;
 
@@ -54,6 +112,7 @@ export const campaignSchema = {
     "googleBusinessProfilePost",
     "emailCampaign",
     "seoPageRecommendation",
+    "aiSeoRecommendation",
     "landingPageHero",
   ],
   properties: {
@@ -61,6 +120,7 @@ export const campaignSchema = {
     googleBusinessProfilePost: { type: "string" },
     emailCampaign: { type: "string" },
     seoPageRecommendation: { type: "string" },
+    aiSeoRecommendation: { type: "string" },
     landingPageHero: {
       type: "object",
       additionalProperties: false,

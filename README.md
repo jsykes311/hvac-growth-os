@@ -1,6 +1,6 @@
 # HVAC Growth OS
 
-Next.js app for analyzing HVAC contractor websites with Firecrawl and OpenAI, reviewing the extracted business profile, and generating campaign copy plus branded one-page creative.
+Next.js app for analyzing HVAC contractor websites with Firecrawl and OpenAI, reviewing the extracted business profile, auditing SEO and AI SEO readiness, and generating campaign copy plus branded one-page creative.
 
 ## Local setup
 

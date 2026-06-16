@@ -17,6 +17,35 @@ export type BusinessProfile = {
   logoUrl: string;
   heroImageUrl: string;
   brandStyle: string;
+  seoAnalysis: SeoAnalysis;
+  aiSeoAnalysis: AiSeoAnalysis;
+};
+
+export type SeoPageRecommendation = {
+  title: string;
+  slug: string;
+  searchIntent: string;
+  priority: "High" | "Medium" | "Low";
+  rationale: string;
+};
+
+export type SeoAnalysis = {
+  score: number;
+  titleTag: string;
+  metaDescription: string;
+  localSeoGaps: string[];
+  technicalIssues: string[];
+  contentOpportunities: string[];
+  recommendedPages: SeoPageRecommendation[];
+};
+
+export type AiSeoAnalysis = {
+  score: number;
+  answerEngineReadiness: string;
+  citationOpportunities: string[];
+  schemaRecommendations: string[];
+  faqQuestions: string[];
+  entityGaps: string[];
 };
 
 export type CampaignOutput = {
@@ -24,6 +53,7 @@ export type CampaignOutput = {
   googleBusinessProfilePost: string;
   emailCampaign: string;
   seoPageRecommendation: string;
+  aiSeoRecommendation: string;
   landingPageHero: {
     headline: string;
     subheadline: string;

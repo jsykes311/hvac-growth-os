@@ -5,9 +5,12 @@ import {
   ChartNoAxesCombined,
   CheckCircle2,
   ClipboardList,
+  FileSearch,
   Loader2,
   Megaphone,
   Palette,
+  Search,
+  Bot,
   Download,
   Sparkles,
 } from "lucide-react";
@@ -377,6 +380,11 @@ function ResultsView({
         </Panel>
       </div>
 
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <SeoAnalysisPanel analysis={analysis} />
+        <AiSeoAnalysisPanel analysis={analysis} />
+      </div>
+
       <div className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
         <ProfileEditor
           analysis={analysis}
@@ -458,6 +466,131 @@ function CampaignForm({
       </form>
       {error && <div className="mt-4"><ErrorMessage message={error} /></div>}
     </Panel>
+  );
+}
+
+function SeoAnalysisPanel({ analysis }: { analysis: BusinessProfile }) {
+  const seo = analysis.seoAnalysis;
+
+  return (
+    <Panel>
+      <div className="flex items-start justify-between gap-5">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-black text-ink">
+            <Search className="size-5" aria-hidden="true" />
+            SEO
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            Local organic search signals, gaps, and page opportunities from the scanned site.
+          </p>
+        </div>
+        <ScoreBadge label="SEO" score={seo.score} />
+      </div>
+
+      <div className="mt-5 grid gap-3">
+        <InfoRow label="Title Tag" value={seo.titleTag || "Not found"} />
+        <InfoRow label="Meta Description" value={seo.metaDescription || "Not found"} />
+      </div>
+
+      <div className="mt-5 grid gap-5 md:grid-cols-2">
+        <CompactList title="Local SEO Gaps" values={seo.localSeoGaps} emptyText="No major local SEO gaps found." />
+        <CompactList title="Technical Issues" values={seo.technicalIssues} emptyText="No visible technical issues found." />
+        <CompactList title="Content Opportunities" values={seo.contentOpportunities} emptyText="No content opportunities found." />
+      </div>
+
+      <div className="mt-6 border-t border-ink/10 pt-5">
+        <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.12em] text-graphite/65">
+          <FileSearch className="size-4" aria-hidden="true" />
+          Recommended Pages
+        </h3>
+        <div className="mt-3 grid gap-3">
+          {seo.recommendedPages.length ? (
+            seo.recommendedPages.map((page) => (
+              <article className="rounded-md border border-ink/10 bg-frost p-3" key={`${page.title}-${page.slug}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-sm font-black text-ink">{page.title || "Untitled page"}</h4>
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">{page.priority}</span>
+                </div>
+                <p className="mt-2 font-mono text-xs font-bold text-graphite/70">{page.slug || "/recommended-page"}</p>
+                <p className="mt-2 text-sm leading-5 text-graphite">{page.searchIntent}</p>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{page.rationale}</p>
+              </article>
+            ))
+          ) : (
+            <p className="text-sm font-medium text-graphite/65">No page recommendations returned.</p>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function AiSeoAnalysisPanel({ analysis }: { analysis: BusinessProfile }) {
+  const aiSeo = analysis.aiSeoAnalysis;
+
+  return (
+    <Panel>
+      <div className="flex items-start justify-between gap-5">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-black text-ink">
+            <Bot className="size-5" aria-hidden="true" />
+            AI SEO
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            Readiness for answer engines and AI-generated local recommendations.
+          </p>
+        </div>
+        <ScoreBadge label="AI" score={aiSeo.score} />
+      </div>
+
+      <div className="mt-5 rounded-md border border-ink/10 bg-frost p-4">
+        <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Answer Engine Readiness</h3>
+        <p className="mt-3 text-sm leading-6 text-graphite">{aiSeo.answerEngineReadiness || "No AI SEO summary returned."}</p>
+      </div>
+
+      <div className="mt-5 grid gap-5 md:grid-cols-2">
+        <CompactList title="Citation Opportunities" values={aiSeo.citationOpportunities} emptyText="No citation opportunities returned." />
+        <CompactList title="Schema Recommendations" values={aiSeo.schemaRecommendations} emptyText="No schema recommendations returned." />
+        <CompactList title="FAQ Questions" values={aiSeo.faqQuestions} emptyText="No FAQ questions returned." />
+        <CompactList title="Entity Gaps" values={aiSeo.entityGaps} emptyText="No entity gaps returned." />
+      </div>
+    </Panel>
+  );
+}
+
+function ScoreBadge({ label, score }: { label: string; score: number }) {
+  return (
+    <div className="rounded-md bg-ink px-4 py-3 text-center text-white">
+      <p className="text-3xl font-black leading-none">{Math.round(score)}</p>
+      <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-white/70">{label}</p>
+    </div>
+  );
+}
+
+function CompactList({
+  emptyText,
+  title,
+  values,
+}: {
+  emptyText: string;
+  title: string;
+  values: string[];
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">{title}</h3>
+      {values.length ? (
+        <ul className="mt-3 space-y-2">
+          {values.map((value) => (
+            <li className="rounded-md bg-frost px-3 py-2 text-sm leading-5 text-graphite" key={value}>
+              {value}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm font-medium text-graphite/65">{emptyText}</p>
+      )}
+    </div>
   );
 }
 
@@ -772,6 +905,7 @@ function CampaignPanel({
         <CampaignBlock title="Google Business Profile post" value={campaign.googleBusinessProfilePost} />
         <CampaignBlock title="Email campaign" value={campaign.emailCampaign} />
         <CampaignBlock title="SEO page recommendation" value={campaign.seoPageRecommendation} />
+        <CampaignBlock title="AI SEO recommendation" value={campaign.aiSeoRecommendation} />
         <CampaignBlock
           title="Landing page hero section"
           value={[
@@ -886,6 +1020,20 @@ function buildReadinessItems(profile: BusinessProfile): ReadinessItem[] {
       detail: hasAcquisitionHook
         ? "Financing, emergency, or maintenance-plan messaging gives the campaign a sharper hook."
         : "Consider adding financing, emergency service, or maintenance-plan messaging.",
+    },
+    {
+      complete: profile.seoAnalysis.score >= 60 && profile.seoAnalysis.recommendedPages.length > 0,
+      label: "SEO roadmap",
+      detail: profile.seoAnalysis.recommendedPages.length
+        ? "Local SEO recommendations are ready to support the campaign."
+        : "Add SEO page targets before relying on organic growth.",
+    },
+    {
+      complete: profile.aiSeoAnalysis.score >= 60 && profile.aiSeoAnalysis.faqQuestions.length > 0,
+      label: "AI search readiness",
+      detail: profile.aiSeoAnalysis.faqQuestions.length
+        ? "AI SEO questions and entity gaps are ready for answer-engine content."
+        : "Add AI-search FAQs and entity details so the business is easier to cite.",
     },
   ];
 }

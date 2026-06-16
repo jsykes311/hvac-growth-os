@@ -99,6 +99,7 @@ async function createCampaign(profile: BusinessProfile, goal: string, offer: str
       "Create campaign assets for this analyzed HVAC business profile.",
       "The landing page hero section should include a headline, subheadline, primary CTA, and exactly three supporting bullets.",
       "The SEO page recommendation should be one practical local SEO page idea with service, location, search intent, and suggested page angle.",
+      "The AI SEO recommendation should be one practical answer-engine content asset, FAQ cluster, schema addition, or citation-building move that helps AI systems confidently summarize and recommend the business.",
       "",
       JSON.stringify(profile, null, 2),
     ].join("\n"),
