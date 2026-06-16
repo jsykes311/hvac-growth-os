@@ -78,11 +78,11 @@ function buildHeroImagePrompt(
     `Scene: a professional HVAC contractor on the right side of a residential street near a clean suburban home, outdoor condenser, and service van in ${area}.`,
     `Campaign goal: ${goal}. Offer context: ${offer}. Main service: ${service}.`,
     `Mood and brand tone: ${profile.brandTone || "trustworthy, professional, local, helpful"}.`,
-    `Use subtle wardrobe, van, lighting, or environmental accents inspired by these brand colors: primary ${primaryColor}, accent ${accentColor}.`,
+    `Use brand colors only as subtle vehicle, tool, or lighting accents: primary ${primaryColor}, accent ${accentColor}. Do not dress the contractor head-to-toe in the brand color.`,
     `The image should support this landing page message: ${campaign.landingPageHero.headline}`,
-    "Composition: 16:9 horizontal hero photo. Keep the contractor on the right third, full head visible with generous headroom, shown from head to at least mid-thigh, carrying a tool bag or tablet.",
+    "Composition: 16:9 horizontal hero photo. Keep the contractor on the right third, full head visible with generous headroom, shown from head to at least mid-thigh, carrying a tool bag or tablet. Use neutral professional workwear such as a dark jacket, navy or charcoal polo, tan work pants, and no baseball cap unless needed for realism.",
     "Leave the left half intentionally uncluttered and slightly darker for large headline text and proof-point overlays. Do not put the face or important objects under the left text area.",
-    "Lighting: premium golden-hour commercial photography, crisp realistic detail, confident but believable pose, local-homeowner trust, no exaggerated action pose.",
+    "Lighting: premium golden-hour commercial photography with contrast and depth, crisp realistic detail, confident serious expression, local-homeowner trust, no exaggerated action pose, not a generic smiling stock photo.",
     "Do not include any readable text, logos, badges, watermarks, fake brand names, signage, UI elements, distorted hands, distorted faces, or malformed tools.",
   ].join("\n");
 }

@@ -32,12 +32,10 @@ export async function createCampaignImage({
   const accent = chooseActionColor(profile.accentColor, primary);
   const palette = buildPalette(primary, secondary, accent);
   const company = profile.companyName || "Local HVAC Pros";
-  const headline = campaign.landingPageHero.headline || offer || "Built for today. Ready for tomorrow.";
-  const subheadline =
-    campaign.landingPageHero.subheadline ||
-    `A practical HVAC campaign for ${profile.serviceAreas[0] || "local homeowners"}.`;
-  const proofCards = buildProofCards(profile, campaign.landingPageHero.supportingBullets);
-  const trustLine = buildTrustLine(profile, offer);
+  const headline = buildHeroHeadline(profile, campaign, offer);
+  const subheadline = buildHeroSubheadline(profile, campaign, offer);
+  const proofCards = buildProofCards(profile);
+  const ctaLine = buildCtaLine(profile, campaign, offer);
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
@@ -76,7 +74,7 @@ export async function createCampaignImage({
   ${renderLogo(logoDataUrl, company, palette)}
   ${renderHeroCopy(headline, subheadline, palette)}
   ${renderProofStack(proofCards, palette)}
-  ${renderTrustFooter(trustLine, palette)}
+  ${renderCtaFooter(ctaLine, palette)}
 </svg>`.trim();
 
   return {
@@ -144,8 +142,8 @@ function renderHeroBackground(heroImageDataUrl: string, palette: CreativePalette
 function renderLogo(logoDataUrl: string, company: string, palette: CreativePalette) {
   if (logoDataUrl) {
     return `
-  <rect x="64" y="56" width="294" height="96" rx="7" fill="#ffffff" opacity="0.96" filter="url(#logoShadow)"/>
-  <image href="${escapeXml(logoDataUrl)}" x="96" y="78" width="230" height="52" preserveAspectRatio="xMidYMid meet"/>`;
+  <rect x="64" y="56" width="212" height="70" rx="7" fill="#ffffff" opacity="0.96" filter="url(#logoShadow)"/>
+  <image href="${escapeXml(logoDataUrl)}" x="90" y="73" width="160" height="36" preserveAspectRatio="xMidYMid meet"/>`;
   }
 
   const companyLines = wrapText(company, 17, 2);
@@ -156,35 +154,33 @@ function renderLogo(logoDataUrl: string, company: string, palette: CreativePalet
 }
 
 function renderHeroCopy(headline: string, subheadline: string, palette: CreativePalette) {
-  const lines = wrapText(headline, 19, 3);
-  const subLines = wrapText(subheadline, 38, 3);
+  const lines = wrapText(headline, 22, 3, false);
+  const subLines = wrapText(subheadline, 42, 2, false);
   const firstBlock = lines
     .map(
       (line, index) =>
-        `<text x="64" y="${244 + index * 72}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="68" font-weight="950" fill="${escapeXml(
-          index === lines.length - 1 ? palette.primary : "#ffffff",
-        )}" letter-spacing="1">${escapeXml(line.toUpperCase())}</text>`,
+        `<text x="64" y="${230 + index * 62}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="58" font-weight="950" fill="#ffffff" letter-spacing="0.5">${escapeXml(line.toUpperCase())}</text>`,
     )
     .join("\n  ");
 
   return `
   ${firstBlock}
-  ${renderTextLines(subLines, 66, 486, 27, 38, "#ffffff", 700)}
-  <rect x="66" y="575" width="116" height="5" fill="${escapeXml(palette.primary)}"/>`;
+  <rect x="66" y="432" width="116" height="5" fill="${escapeXml(palette.primary)}"/>
+  ${renderTextLines(subLines, 66, 486, 26, 37, "#ffffff", 700)}`;
 }
 
 function renderProofStack(cards: Array<{ title: string; body: string; icon: "chart" | "shield" | "team" | "cash" }>, palette: CreativePalette) {
   return cards
-    .slice(0, 4)
+    .slice(0, 3)
     .map((card, index) => {
-      const y = 628 + index * 86;
+      const y = 622 + index * 76;
       return `
   <g>
-    <circle cx="110" cy="${y}" r="34" fill="${escapeXml(palette.dark)}" opacity="0.34"/>
-    <circle cx="110" cy="${y}" r="32" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="3"/>
-    ${renderIcon(card.icon, 110, y, palette.primary)}
-    <text x="178" y="${y - 9}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="28" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(card.title.toUpperCase())}</text>
-    ${renderTextLines(wrapText(card.body, 35, 2), 178, y + 22, 20, 27, "#ffffff", 650)}
+    <circle cx="102" cy="${y}" r="27" fill="${escapeXml(palette.dark)}" opacity="0.36"/>
+    <circle cx="102" cy="${y}" r="25" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="3"/>
+    ${renderIcon(card.icon, 102, y, palette.primary)}
+    <text x="158" y="${y - 8}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="23" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(card.title.toUpperCase())}</text>
+    ${renderTextLines(wrapText(card.body, 38, 2, false), 158, y + 21, 18, 25, "#ffffff", 650)}
   </g>`;
     })
     .join("\n");
@@ -206,61 +202,86 @@ function renderIcon(icon: "chart" | "shield" | "team" | "cash", cx: number, cy: 
   return `<path d="M${cx - 24} ${cy + 18} V${cy - 2} H${cx - 10} V${cy + 18} M${cx - 2} ${cy + 18} V${cy - 19} H${cx + 12} V${cy + 18} M${cx + 20} ${cy + 18} V${cy - 9} H${cx + 34} V${cy + 18}" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx - 26} ${cy + 18} H${cx + 38}" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx - 22} ${cy - 19} L${cx - 6} ${cy - 30} L${cx + 7} ${cy - 22} L${cx + 31} ${cy - 47}" fill="none" stroke="${escapeXml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M${cx + 17} ${cy - 47} H${cx + 31} V${cy - 33}" fill="none" stroke="${escapeXml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
 }
 
-function renderTrustFooter(text: string, palette: CreativePalette) {
+function renderCtaFooter(text: string, palette: CreativePalette) {
   return `
   <g>
-    <rect x="620" y="744" width="4" height="78" fill="${escapeXml(palette.primary)}"/>
-    ${renderTextLines(wrapText(text, 36, 3), 666, 773, 22, 31, "#ffffff", 600)}
+    <rect x="64" y="806" width="390" height="2" fill="${escapeXml(palette.primary)}"/>
+    ${renderTextLines(wrapText(text, 44, 1, false), 66, 840, 21, 28, "#ffffff", 800)}
     <rect x="0" y="0" width="${WIDTH}" height="10" fill="${escapeXml(palette.primary)}" opacity="0.84"/>
   </g>`;
 }
 
-function buildProofCards(profile: BusinessProfile, supportingBullets: string[]) {
-  const fallback = [
+function buildProofCards(profile: BusinessProfile) {
+  return [
     {
-      title: profile.financingMentioned ? "More options" : "Clear offers",
+      title: profile.financingMentioned ? "Payment options" : "Clear pricing",
       body: profile.financingMentioned
-        ? "Promote payment options that help homeowners move forward."
-        : "Give homeowners one clear reason to book now.",
+        ? "Help homeowners say yes to bigger jobs."
+        : "Give homeowners a clear reason to call.",
       icon: "chart" as const,
     },
     {
-      title: profile.emergencyServiceMentioned ? "Urgent demand" : "Fast booking",
+      title: profile.emergencyServiceMentioned ? "Emergency calls" : "Fast booking",
       body: profile.emergencyServiceMentioned
-        ? "Turn urgent comfort problems into booked calls."
-        : "Make the next step simple for local homeowners.",
+        ? "Turn urgent no-cool calls into booked work."
+        : "Make the next step obvious and simple.",
       icon: "shield" as const,
     },
     {
-      title: profile.maintenancePlanMentioned ? "Plan revenue" : "Local trust",
+      title: "Local trust",
       body: profile.maintenancePlanMentioned
-        ? "Use tune-ups and memberships to create repeat demand."
-        : "Anchor the message in service area credibility.",
+        ? "Use tune-ups and reviews to earn repeat work."
+        : "Lead with reviews, service areas, and proof.",
       icon: "team" as const,
     },
-    {
-      title: "Stronger growth",
-      body: "Convert more interest into appointments and follow-up.",
-      icon: "cash" as const,
-    },
   ];
-
-  return fallback.map((card, index) => ({
-    ...card,
-    body: supportingBullets[index] || card.body,
-  }));
 }
 
-function buildTrustLine(profile: BusinessProfile, offer: string) {
+function buildHeroHeadline(profile: BusinessProfile, campaign: CampaignOutput, offer: string) {
+  const headline = cleanDisplayText(campaign.landingPageHero.headline);
+  const service = profile.services[0] || "HVAC Service";
+
+  if (headline && headline.length <= 58 && !headline.includes("...")) {
+    return headline;
+  }
+
+  if (offer) {
+    return `${cleanDisplayText(offer)} from Local HVAC Pros`;
+  }
+
+  return `Trusted ${service} Help`;
+}
+
+function buildHeroSubheadline(profile: BusinessProfile, campaign: CampaignOutput, offer: string) {
   const area = profile.serviceAreas[0] || "the local market";
   const service = profile.services[0] || "HVAC service";
   const company = profile.companyName || "this contractor";
+  const subheadline = cleanDisplayText(campaign.landingPageHero.subheadline);
 
-  if (offer) {
-    return `${offer} from ${company}, built around ${service} demand in ${area}.`;
+  if (subheadline && subheadline.length <= 88 && !subheadline.includes("...")) {
+    return subheadline;
   }
 
-  return `${company} can turn local ${service} demand in ${area} into a sharper booking path.`;
+  if (offer) {
+    return `${company} helps homeowners in ${area} book reliable ${service} with a clear offer.`;
+  }
+
+  return `${company} gives local homeowners a clear path from comfort problem to booked appointment.`;
+}
+
+function buildCtaLine(profile: BusinessProfile, campaign: CampaignOutput, offer: string) {
+  const cta = cleanDisplayText(campaign.landingPageHero.primaryCta);
+  const phone = profile.phone ? ` ${profile.phone}` : "";
+
+  if (cta && cta.length <= 32) {
+    return `${cta}${phone}`;
+  }
+
+  return `${offer ? cleanDisplayText(offer) : "Book Service Today"}${phone}`;
+}
+
+function cleanDisplayText(value: string) {
+  return value.replace(/\s+/g, " ").replace(/[.]{3,}/g, "").trim();
 }
 
 function renderTextLines(
@@ -280,7 +301,7 @@ function renderTextLines(
     .join("\n  ");
 }
 
-function wrapText(value: string, maxChars: number, maxLines: number) {
+function wrapText(value: string, maxChars: number, maxLines: number, useEllipsis = true) {
   const words = value.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = "";
@@ -304,7 +325,7 @@ function wrapText(value: string, maxChars: number, maxLines: number) {
     lines.push(current);
   }
 
-  if (lines.length === maxLines && words.join(" ").length > lines.join(" ").length) {
+  if (useEllipsis && lines.length === maxLines && words.join(" ").length > lines.join(" ").length) {
     lines[maxLines - 1] = `${lines[maxLines - 1].replace(/[.,;:!?]$/, "")}...`;
   }
 
