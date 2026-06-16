@@ -36,8 +36,16 @@ export type SeoAnalysis = {
   localSeoGaps: string[];
   technicalIssues: string[];
   contentOpportunities: string[];
+  keywordUpdates: KeywordUpdate[];
   recommendedPages: SeoPageRecommendation[];
   recommendedFixes: FixRecommendation[];
+};
+
+export type KeywordUpdate = {
+  currentText: string;
+  suggestedText: string;
+  page: string;
+  reason: string;
 };
 
 export type AiSeoAnalysis = {

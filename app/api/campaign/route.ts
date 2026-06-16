@@ -98,7 +98,7 @@ async function createCampaign(profile: BusinessProfile, goal: string, offer: str
       `Offer: ${offer}`,
       "Create campaign assets for this analyzed HVAC business profile.",
       "The landing page hero section should include a headline, subheadline, primary CTA, and exactly three supporting bullets.",
-      "The Google search page idea should be one practical local page idea with the service, location, homeowner need, and suggested page angle.",
+      "The Google search page idea should include one practical local page idea and one existing-page wording change, such as changing a vague heading into a homeowner search phrase like 'AC repair in [city]'.",
       "The AI search idea should be one practical content asset, homeowner FAQ set, proof section, or website clarity improvement that helps AI tools confidently understand and recommend the business. Do not mention schema or structured data.",
       "",
       JSON.stringify(profile, null, 2),

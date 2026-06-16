@@ -64,6 +64,7 @@ async function analyzeBusinessProfile(
       "- localSeoGaps should identify missing or weak location, service, GBP, review, internal-linking, NAP, and city/service-page signals.",
       "- technicalIssues should flag visible website/content issues from the scraped HTML only, such as missing headings, thin content, weak page titles, missing machine-readable business details, or unclear CTAs. Phrase these as plain website fixes.",
       "- contentOpportunities should list practical service, location, comparison, maintenance, financing, emergency, and seasonal content opportunities.",
+      "- keywordUpdates should include 3 to 6 specific wording changes for existing pages. Each item should say the current weak wording if visible, the better homeowner search phrase to use, the page/section to update, and why it helps. Focus on phrases like 'AC repair in [city]', 'furnace installation near [city]', 'emergency HVAC service', 'heat pump repair', 'HVAC financing', and service-area wording. Do not recommend keyword stuffing.",
       "- recommendedPages should include 3 to 6 local page recommendations with priority, slug, homeowner need, and rationale.",
       "- seoAnalysis.recommendedFixes should include 3 to 6 implementation-ready fixes mapped to the local search problems found. Each fix needs a problem, fix, priority, impact, and effort.",
       "AI search analysis instructions:",
@@ -119,6 +120,7 @@ function sanitizeSeoAnalysis(analysis: BusinessProfile["seoAnalysis"]): Business
     localSeoGaps: cleanList(analysis?.localSeoGaps ?? []),
     technicalIssues: cleanList(analysis?.technicalIssues ?? []),
     contentOpportunities: cleanList(analysis?.contentOpportunities ?? []),
+    keywordUpdates: sanitizeKeywordUpdates(analysis?.keywordUpdates ?? []),
     recommendedFixes: sanitizeFixes(analysis?.recommendedFixes ?? []),
     recommendedPages: (analysis?.recommendedPages ?? [])
       .map((page) => ({
@@ -131,6 +133,18 @@ function sanitizeSeoAnalysis(analysis: BusinessProfile["seoAnalysis"]): Business
       .filter((page) => page.title || page.slug || page.rationale)
       .slice(0, 6),
   };
+}
+
+function sanitizeKeywordUpdates(updates: BusinessProfile["seoAnalysis"]["keywordUpdates"]) {
+  return updates
+    .map((update) => ({
+      currentText: cleanText(update.currentText),
+      suggestedText: cleanText(update.suggestedText),
+      page: cleanText(update.page),
+      reason: cleanText(update.reason),
+    }))
+    .filter((update) => update.suggestedText || update.reason)
+    .slice(0, 6);
 }
 
 function sanitizeAiSeoAnalysis(analysis: BusinessProfile["aiSeoAnalysis"]): BusinessProfile["aiSeoAnalysis"] {

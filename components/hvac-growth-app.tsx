@@ -498,6 +498,8 @@ function SeoAnalysisPanel({ analysis }: { analysis: BusinessProfile }) {
         <CompactList title="Pages and Content to Add" values={seo.contentOpportunities} emptyText="No content opportunities found." />
       </div>
 
+      <KeywordUpdateList className="mt-6" values={seo.keywordUpdates} />
+
       <FixList
         className="mt-6"
         emptyText="No search fixes returned."
@@ -569,6 +571,51 @@ function AiSeoAnalysisPanel({ analysis }: { analysis: BusinessProfile }) {
         values={aiSeo.recommendedFixes}
       />
     </Panel>
+  );
+}
+
+function KeywordUpdateList({
+  className = "",
+  values,
+}: {
+  className?: string;
+  values: BusinessProfile["seoAnalysis"]["keywordUpdates"];
+}) {
+  return (
+    <div className={`border-t border-ink/10 pt-5 ${className}`}>
+      <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">
+        Search Terms to Use on Existing Pages
+      </h3>
+      {values.length ? (
+        <div className="mt-3 grid gap-3">
+          {values.map((item) => (
+            <article
+              className="rounded-md border border-ink/10 bg-white p-3"
+              key={`${item.page}-${item.currentText}-${item.suggestedText}`}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md bg-frost px-2 py-1 text-xs font-black text-copper">
+                  {item.page || "Existing page"}
+                </span>
+              </div>
+              {item.currentText && (
+                <p className="mt-3 text-sm leading-5 text-graphite/70">
+                  Current wording: <span className="font-bold text-graphite">{item.currentText}</span>
+                </p>
+              )}
+              <p className="mt-2 text-sm leading-5 text-graphite">
+                Use this wording: <span className="font-black text-ink">{item.suggestedText}</span>
+              </p>
+              <p className="mt-2 text-sm leading-5 text-graphite/70">{item.reason}</p>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm font-medium text-graphite/65">
+          No existing-page search term changes returned.
+        </p>
+      )}
+    </div>
   );
 }
 

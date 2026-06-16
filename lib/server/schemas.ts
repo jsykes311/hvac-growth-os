@@ -55,6 +55,7 @@ export const businessProfileSchema = {
         "localSeoGaps",
         "technicalIssues",
         "contentOpportunities",
+        "keywordUpdates",
         "recommendedPages",
         "recommendedFixes",
       ],
@@ -65,6 +66,20 @@ export const businessProfileSchema = {
         localSeoGaps: { type: "array", items: { type: "string" } },
         technicalIssues: { type: "array", items: { type: "string" } },
         contentOpportunities: { type: "array", items: { type: "string" } },
+        keywordUpdates: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["currentText", "suggestedText", "page", "reason"],
+            properties: {
+              currentText: { type: "string" },
+              suggestedText: { type: "string" },
+              page: { type: "string" },
+              reason: { type: "string" },
+            },
+          },
+        },
         recommendedPages: {
           type: "array",
           items: {
