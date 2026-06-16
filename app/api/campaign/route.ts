@@ -92,14 +92,14 @@ async function createCampaign(profile: BusinessProfile, goal: string, offer: str
     name: "hvac_campaign_output",
     schema: campaignSchema,
     system:
-      "You are an HVAC direct-response marketer. Create concise, practical campaign copy using only the provided business profile, goal, and offer. Preserve the brand tone and differentiators. Do not invent phone numbers, emails, services, areas, awards, financing, or emergency service claims.",
+      "You are an HVAC direct-response marketer writing for contractors and owners. Create concise, practical campaign copy using only the provided business profile, goal, and offer. Preserve the brand tone and differentiators. Do not invent phone numbers, emails, services, areas, awards, financing, or emergency service claims. Avoid technical marketing jargon such as schema, entity, citation, SERP, metadata, or structured data.",
     user: [
       `Goal: ${goal}`,
       `Offer: ${offer}`,
       "Create campaign assets for this analyzed HVAC business profile.",
       "The landing page hero section should include a headline, subheadline, primary CTA, and exactly three supporting bullets.",
-      "The SEO page recommendation should be one practical local SEO page idea with service, location, search intent, and suggested page angle.",
-      "The AI SEO recommendation should be one practical answer-engine content asset, FAQ cluster, schema addition, or citation-building move that helps AI systems confidently summarize and recommend the business.",
+      "The Google search page idea should be one practical local page idea with the service, location, homeowner need, and suggested page angle.",
+      "The AI search idea should be one practical content asset, homeowner FAQ set, proof section, or website clarity improvement that helps AI tools confidently understand and recommend the business. Do not mention schema or structured data.",
       "",
       JSON.stringify(profile, null, 2),
     ].join("\n"),

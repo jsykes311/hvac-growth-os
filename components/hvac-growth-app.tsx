@@ -478,37 +478,37 @@ function SeoAnalysisPanel({ analysis }: { analysis: BusinessProfile }) {
         <div>
           <h2 className="flex items-center gap-2 text-lg font-black text-ink">
             <Search className="size-5" aria-hidden="true" />
-            SEO
+            Google Search
           </h2>
           <p className="mt-2 text-sm leading-6 text-graphite/70">
-            Local organic search signals, gaps, and page opportunities from the scanned site.
+            What is helping or hurting this contractor when homeowners search locally.
           </p>
         </div>
-        <ScoreBadge label="SEO" score={seo.score} />
+        <ScoreBadge label="Search" score={seo.score} />
       </div>
 
       <div className="mt-5 grid gap-3">
-        <InfoRow label="Title Tag" value={seo.titleTag || "Not found"} />
-        <InfoRow label="Meta Description" value={seo.metaDescription || "Not found"} />
+        <InfoRow label="Google Page Title" value={seo.titleTag || "Not found"} />
+        <InfoRow label="Google Preview Text" value={seo.metaDescription || "Not found"} />
       </div>
 
       <div className="mt-5 grid gap-5 md:grid-cols-2">
-        <CompactList title="Local SEO Gaps" values={seo.localSeoGaps} emptyText="No major local SEO gaps found." />
-        <CompactList title="Technical Issues" values={seo.technicalIssues} emptyText="No visible technical issues found." />
-        <CompactList title="Content Opportunities" values={seo.contentOpportunities} emptyText="No content opportunities found." />
+        <CompactList title="Local Search Gaps" values={seo.localSeoGaps} emptyText="No major local search gaps found." />
+        <CompactList title="Website Issues" values={seo.technicalIssues} emptyText="No visible website issues found." />
+        <CompactList title="Pages and Content to Add" values={seo.contentOpportunities} emptyText="No content opportunities found." />
       </div>
 
       <FixList
         className="mt-6"
-        emptyText="No SEO fixes returned."
-        title="SEO Fixes"
+        emptyText="No search fixes returned."
+        title="Recommended Search Fixes"
         values={seo.recommendedFixes}
       />
 
       <div className="mt-6 border-t border-ink/10 pt-5">
         <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.12em] text-graphite/65">
           <FileSearch className="size-4" aria-hidden="true" />
-          Recommended Pages
+          Pages to Build
         </h3>
         <div className="mt-3 grid gap-3">
           {seo.recommendedPages.length ? (
@@ -541,31 +541,31 @@ function AiSeoAnalysisPanel({ analysis }: { analysis: BusinessProfile }) {
         <div>
           <h2 className="flex items-center gap-2 text-lg font-black text-ink">
             <Bot className="size-5" aria-hidden="true" />
-            AI SEO
+            Get Found in AI
           </h2>
           <p className="mt-2 text-sm leading-6 text-graphite/70">
-            Readiness for answer engines and AI-generated local recommendations.
+            How easy it is for tools like ChatGPT, Google AI, and voice assistants to understand the company and recommend it to homeowners.
           </p>
         </div>
         <ScoreBadge label="AI" score={aiSeo.score} />
       </div>
 
       <div className="mt-5 rounded-md border border-ink/10 bg-frost p-4">
-        <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Answer Engine Readiness</h3>
-        <p className="mt-3 text-sm leading-6 text-graphite">{aiSeo.answerEngineReadiness || "No AI SEO summary returned."}</p>
+        <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Can AI Understand This Business?</h3>
+        <p className="mt-3 text-sm leading-6 text-graphite">{aiSeo.answerEngineReadiness || "No AI search summary returned."}</p>
       </div>
 
       <div className="mt-5 grid gap-5 md:grid-cols-2">
-        <CompactList title="Citation Opportunities" values={aiSeo.citationOpportunities} emptyText="No citation opportunities returned." />
-        <CompactList title="Schema Recommendations" values={aiSeo.schemaRecommendations} emptyText="No schema recommendations returned." />
-        <CompactList title="FAQ Questions" values={aiSeo.faqQuestions} emptyText="No FAQ questions returned." />
-        <CompactList title="Entity Gaps" values={aiSeo.entityGaps} emptyText="No entity gaps returned." />
+        <CompactList title="Proof AI Can Use" values={aiSeo.citationOpportunities} emptyText="No proof opportunities returned." />
+        <CompactList title="Website Info to Make Clearer" values={aiSeo.schemaRecommendations} emptyText="No website clarity recommendations returned." />
+        <CompactList title="Homeowner Questions to Answer" values={aiSeo.faqQuestions} emptyText="No homeowner questions returned." />
+        <CompactList title="Missing Trust Details" values={aiSeo.entityGaps} emptyText="No missing trust details returned." />
       </div>
 
       <FixList
         className="mt-6"
-        emptyText="No AI SEO fixes returned."
-        title="AI SEO Fixes"
+        emptyText="No AI search fixes returned."
+        title="Recommended AI Search Fixes"
         values={aiSeo.recommendedFixes}
       />
     </Panel>
@@ -953,8 +953,8 @@ function CampaignPanel({
         <CampaignBlock title="Facebook ad" value={campaign.facebookAd} />
         <CampaignBlock title="Google Business Profile post" value={campaign.googleBusinessProfilePost} />
         <CampaignBlock title="Email campaign" value={campaign.emailCampaign} />
-        <CampaignBlock title="SEO page recommendation" value={campaign.seoPageRecommendation} />
-        <CampaignBlock title="AI SEO recommendation" value={campaign.aiSeoRecommendation} />
+        <CampaignBlock title="Google search page idea" value={campaign.seoPageRecommendation} />
+        <CampaignBlock title="AI search idea" value={campaign.aiSeoRecommendation} />
         <CampaignBlock
           title="Landing page hero section"
           value={[
@@ -1046,8 +1046,8 @@ function buildReadinessItems(profile: BusinessProfile): ReadinessItem[] {
       complete: profile.serviceAreas.length > 0,
       label: "Local targeting",
       detail: profile.serviceAreas.length
-        ? `${profile.serviceAreas.slice(0, 3).join(", ")} can anchor local copy and SEO.`
-        : "Add service areas for local ad and SEO recommendations.",
+        ? `${profile.serviceAreas.slice(0, 3).join(", ")} can anchor local ads and search pages.`
+        : "Add service areas for local ad and search recommendations.",
     },
     {
       complete: Boolean(profile.logoUrl && toHexColor(profile.primaryColor)),
@@ -1075,20 +1075,20 @@ function buildReadinessItems(profile: BusinessProfile): ReadinessItem[] {
         profile.seoAnalysis.score >= 60 &&
         profile.seoAnalysis.recommendedPages.length > 0 &&
         profile.seoAnalysis.recommendedFixes.length > 0,
-      label: "SEO roadmap",
+      label: "Google search plan",
       detail: profile.seoAnalysis.recommendedPages.length
-        ? "Local SEO recommendations and fixes are ready to support the campaign."
-        : "Add SEO page targets before relying on organic growth.",
+        ? "Local search page ideas and fixes are ready to support the campaign."
+        : "Add local search page targets before relying on Google traffic.",
     },
     {
       complete:
         profile.aiSeoAnalysis.score >= 60 &&
         profile.aiSeoAnalysis.faqQuestions.length > 0 &&
         profile.aiSeoAnalysis.recommendedFixes.length > 0,
-      label: "AI search readiness",
+      label: "AI search plan",
       detail: profile.aiSeoAnalysis.faqQuestions.length
-        ? "AI SEO questions, entity gaps, and fixes are ready for answer-engine content."
-        : "Add AI-search FAQs and entity details so the business is easier to cite.",
+        ? "Homeowner questions, missing trust details, and fixes are ready for AI search content."
+        : "Add homeowner FAQs and trust details so AI tools can understand the business.",
     },
   ];
 }
