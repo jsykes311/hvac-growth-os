@@ -1,6 +1,6 @@
 # HVAC Growth OS
 
-Next.js prototype for analyzing HVAC contractor websites with Firecrawl and OpenAI, then generating campaign assets from the analyzed business profile.
+Next.js app for analyzing HVAC contractor websites with Firecrawl and OpenAI, reviewing the extracted business profile, and generating campaign copy plus branded one-page creative.
 
 ## Local setup
 
@@ -16,6 +16,7 @@ Required environment variables:
 OPENAI_API_KEY=...
 FIRECRAWL_API_KEY=...
 OPENAI_MODEL=gpt-4.1-mini
+OPENAI_IMAGE_MODEL=gpt-image-1
 ```
 
 ## Render deployment
@@ -28,7 +29,7 @@ Render settings:
 - Build command: `npm install && npm run build`
 - Start command: `npm start`
 - Required secret env vars: `OPENAI_API_KEY`, `FIRECRAWL_API_KEY`
-- Optional env var: `OPENAI_MODEL`
+- Optional env vars: `OPENAI_MODEL`, `OPENAI_IMAGE_MODEL`
 
 Deploy flow:
 

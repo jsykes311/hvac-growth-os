@@ -23,6 +23,7 @@ export type CampaignOutput = {
   facebookAd: string;
   googleBusinessProfilePost: string;
   emailCampaign: string;
+  seoPageRecommendation: string;
   landingPageHero: {
     headline: string;
     subheadline: string;
@@ -46,3 +47,5 @@ export type ScrapedPage = {
   markdown: string;
   html: string;
 };
+
+export type AnalyzedPage = Pick<ScrapedPage, "label" | "title" | "url">;

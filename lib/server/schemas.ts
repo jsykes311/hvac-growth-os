@@ -53,12 +53,14 @@ export const campaignSchema = {
     "facebookAd",
     "googleBusinessProfilePost",
     "emailCampaign",
+    "seoPageRecommendation",
     "landingPageHero",
   ],
   properties: {
     facebookAd: { type: "string" },
     googleBusinessProfilePost: { type: "string" },
     emailCampaign: { type: "string" },
+    seoPageRecommendation: { type: "string" },
     landingPageHero: {
       type: "object",
       additionalProperties: false,

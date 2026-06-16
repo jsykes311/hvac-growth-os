@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   ChartNoAxesCombined,
+  CheckCircle2,
   ClipboardList,
   Loader2,
   Megaphone,
@@ -11,11 +12,16 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormEvent, useState } from "react";
-import type { BusinessProfile, CampaignImage, CampaignOutput } from "@/lib/types";
+import type { AnalyzedPage, BusinessProfile, CampaignImage, CampaignOutput } from "@/lib/types";
 import { Button, Eyebrow, FieldLabel, Panel } from "@/components/ui";
 
 type View = "home" | "results";
 type ApiError = { error?: string };
+type ReadinessItem = {
+  complete: boolean;
+  detail: string;
+  label: string;
+};
 
 const CAMPAIGN_GOALS = [
   "Book more service calls",
@@ -29,6 +35,7 @@ export function HvacGrowthApp() {
   const [contractorUrl, setContractorUrl] = useState("");
   const [view, setView] = useState<View>("home");
   const [analysis, setAnalysis] = useState<BusinessProfile | null>(null);
+  const [scrapedPages, setScrapedPages] = useState<AnalyzedPage[]>([]);
   const [campaign, setCampaign] = useState<CampaignOutput | null>(null);
   const [campaignImage, setCampaignImage] = useState<CampaignImage | null>(null);
   const [goal, setGoal] = useState(CAMPAIGN_GOALS[0]);
@@ -45,6 +52,7 @@ export function HvacGrowthApp() {
 
     setIsAnalyzing(true);
     setError("");
+    setScrapedPages([]);
     setCampaign(null);
     setCampaignImage(null);
 
@@ -54,13 +62,14 @@ export function HvacGrowthApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: contractorUrl }),
       });
-      const payload = (await response.json()) as { profile?: BusinessProfile } & ApiError;
+      const payload = (await response.json()) as { profile?: BusinessProfile; scrapedPages?: AnalyzedPage[] } & ApiError;
 
       if (!response.ok || !payload.profile) {
         throw new Error(payload.error || "Unable to analyze this website.");
       }
 
       setAnalysis(payload.profile);
+      setScrapedPages(payload.scrapedPages ?? []);
       setView("results");
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to analyze this website.");
@@ -125,6 +134,7 @@ export function HvacGrowthApp() {
               goal={goal}
               isCreatingCampaign={isCreatingCampaign}
               offer={offer}
+              scrapedPages={scrapedPages}
               onBack={() => {
                 setView("home");
                 setError("");
@@ -221,6 +231,7 @@ function ResultsView({
   goal,
   isCreatingCampaign,
   offer,
+  scrapedPages,
   onBack,
   onCreateCampaign,
   onUpdateAnalysis,
@@ -235,6 +246,7 @@ function ResultsView({
   goal: string;
   isCreatingCampaign: boolean;
   offer: string;
+  scrapedPages: AnalyzedPage[];
   onBack: () => void;
   onCreateCampaign: (event: FormEvent<HTMLFormElement>) => void;
   onUpdateAnalysis: (analysis: BusinessProfile) => void;
@@ -244,6 +256,17 @@ function ResultsView({
   function updateBrandColor(field: "primaryColor" | "secondaryColor" | "accentColor", value: string) {
     onUpdateAnalysis({ ...analysis, [field]: value });
   }
+
+  function updateProfileField<K extends keyof BusinessProfile>(field: K, value: BusinessProfile[K]) {
+    onUpdateAnalysis({ ...analysis, [field]: value });
+  }
+
+  function updateProfileList(field: "services" | "serviceAreas" | "differentiators" | "topGrowthOpportunities", value: string) {
+    updateProfileField(field, linesToList(value));
+  }
+
+  const readinessItems = buildReadinessItems(analysis);
+  const readinessScore = Math.round((readinessItems.filter((item) => item.complete).length / readinessItems.length) * 100);
 
   return (
     <div className="py-9">
@@ -354,6 +377,19 @@ function ResultsView({
         </Panel>
       </div>
 
+      <div className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <ProfileEditor
+          analysis={analysis}
+          onListChange={updateProfileList}
+          onUpdate={updateProfileField}
+        />
+        <AnalysisQualityPanel
+          readinessItems={readinessItems}
+          readinessScore={readinessScore}
+          scrapedPages={scrapedPages}
+        />
+      </div>
+
       <CampaignForm
         error={error}
         goal={goal}
@@ -422,6 +458,193 @@ function CampaignForm({
       </form>
       {error && <div className="mt-4"><ErrorMessage message={error} /></div>}
     </Panel>
+  );
+}
+
+function ProfileEditor({
+  analysis,
+  onListChange,
+  onUpdate,
+}: {
+  analysis: BusinessProfile;
+  onListChange: (
+    field: "services" | "serviceAreas" | "differentiators" | "topGrowthOpportunities",
+    value: string,
+  ) => void;
+  onUpdate: <K extends keyof BusinessProfile>(field: K, value: BusinessProfile[K]) => void;
+}) {
+  return (
+    <Panel>
+      <div className="mb-5">
+        <h2 className="text-lg font-black text-ink">Review Business Profile</h2>
+        <p className="mt-2 text-sm leading-6 text-graphite/70">
+          Correct anything the scan missed. Campaign copy and creative use this profile.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <TextField label="Company Name" value={analysis.companyName} onChange={(value) => onUpdate("companyName", value)} />
+        <TextField label="Phone" value={analysis.phone} onChange={(value) => onUpdate("phone", value)} />
+        <TextField label="Email" value={analysis.email} onChange={(value) => onUpdate("email", value)} />
+        <TextField label="Brand Tone" value={analysis.brandTone} onChange={(value) => onUpdate("brandTone", value)} />
+        <TextField className="md:col-span-2" label="Logo URL" value={analysis.logoUrl} onChange={(value) => onUpdate("logoUrl", value)} />
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <ToggleField
+          checked={analysis.financingMentioned}
+          label="Financing"
+          onChange={(value) => onUpdate("financingMentioned", value)}
+        />
+        <ToggleField
+          checked={analysis.emergencyServiceMentioned}
+          label="Emergency Service"
+          onChange={(value) => onUpdate("emergencyServiceMentioned", value)}
+        />
+        <ToggleField
+          checked={analysis.maintenancePlanMentioned}
+          label="Maintenance Plans"
+          onChange={(value) => onUpdate("maintenancePlanMentioned", value)}
+        />
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <ListField label="Services" values={analysis.services} onChange={(value) => onListChange("services", value)} />
+        <ListField label="Service Areas" values={analysis.serviceAreas} onChange={(value) => onListChange("serviceAreas", value)} />
+        <ListField label="Differentiators" values={analysis.differentiators} onChange={(value) => onListChange("differentiators", value)} />
+        <ListField label="Growth Opportunities" values={analysis.topGrowthOpportunities} onChange={(value) => onListChange("topGrowthOpportunities", value)} />
+      </div>
+    </Panel>
+  );
+}
+
+function AnalysisQualityPanel({
+  readinessItems,
+  readinessScore,
+  scrapedPages,
+}: {
+  readinessItems: ReadinessItem[];
+  readinessScore: number;
+  scrapedPages: AnalyzedPage[];
+}) {
+  return (
+    <Panel>
+      <div className="flex items-start justify-between gap-5">
+        <div>
+          <h2 className="text-lg font-black text-ink">Launch Readiness</h2>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            A quick check of whether the profile has enough signal for a useful campaign.
+          </p>
+        </div>
+        <div className="rounded-md bg-ink px-4 py-3 text-center text-white">
+          <p className="text-3xl font-black leading-none">{readinessScore}</p>
+          <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-white/70">ready</p>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-3">
+        {readinessItems.map((item) => (
+          <div className="flex gap-3 rounded-md border border-ink/10 bg-frost p-3" key={item.label}>
+            <CheckCircle2
+              className={`mt-0.5 size-4 shrink-0 ${item.complete ? "text-green-600" : "text-graphite/35"}`}
+              aria-hidden="true"
+            />
+            <div>
+              <p className="text-sm font-black text-ink">{item.label}</p>
+              <p className="mt-1 text-sm leading-5 text-graphite/70">{item.detail}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 border-t border-ink/10 pt-5">
+        <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Pages Analyzed</h3>
+        <div className="mt-3 space-y-2">
+          {scrapedPages.length ? (
+            scrapedPages.map((page) => (
+              <a
+                className="block rounded-md border border-ink/10 bg-white px-3 py-2 text-sm transition hover:border-flame/40 hover:bg-flame/5"
+                href={page.url}
+                key={`${page.label}-${page.url}`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span className="font-black text-ink">{page.label}</span>
+                <span className="ml-2 text-graphite/70">{page.title || page.url}</span>
+              </a>
+            ))
+          ) : (
+            <p className="text-sm font-medium text-graphite/65">No page details returned.</p>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function TextField({
+  className = "",
+  label,
+  onChange,
+  value,
+}: {
+  className?: string;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className={`space-y-2 ${className}`}>
+      <FieldLabel>{label}</FieldLabel>
+      <input
+        className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
+    </label>
+  );
+}
+
+function ListField({
+  label,
+  onChange,
+  values,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  values: string[];
+}) {
+  return (
+    <label className="space-y-2">
+      <FieldLabel>{label}</FieldLabel>
+      <textarea
+        className="min-h-28 w-full resize-y rounded-md border border-ink/15 bg-white px-3 py-3 text-sm leading-5 text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+        onChange={(event) => onChange(event.target.value)}
+        value={values.join("\n")}
+      />
+    </label>
+  );
+}
+
+function ToggleField({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="flex h-12 items-center gap-3 rounded-md border border-ink/10 bg-frost px-3">
+      <input
+        checked={checked}
+        className="size-4 accent-flame"
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      <span className="text-sm font-bold text-ink">{label}</span>
+    </label>
   );
 }
 
@@ -548,6 +771,7 @@ function CampaignPanel({
         <CampaignBlock title="Facebook ad" value={campaign.facebookAd} />
         <CampaignBlock title="Google Business Profile post" value={campaign.googleBusinessProfilePost} />
         <CampaignBlock title="Email campaign" value={campaign.emailCampaign} />
+        <CampaignBlock title="SEO page recommendation" value={campaign.seoPageRecommendation} />
         <CampaignBlock
           title="Landing page hero section"
           value={[
@@ -616,6 +840,61 @@ function ErrorMessage({ message }: { message: string }) {
       {message}
     </p>
   );
+}
+
+function buildReadinessItems(profile: BusinessProfile): ReadinessItem[] {
+  const hasAcquisitionHook =
+    profile.financingMentioned || profile.emergencyServiceMentioned || profile.maintenancePlanMentioned;
+
+  return [
+    {
+      complete: Boolean(profile.companyName && profile.phone),
+      label: "Contact path",
+      detail: profile.phone ? "Phone number is ready for campaign CTAs." : "Add a phone number before launch.",
+    },
+    {
+      complete: profile.services.length > 0,
+      label: "Service focus",
+      detail: profile.services.length
+        ? `${profile.services.slice(0, 3).join(", ")} will shape the campaign offer.`
+        : "Add at least one service so the campaign has a clear target.",
+    },
+    {
+      complete: profile.serviceAreas.length > 0,
+      label: "Local targeting",
+      detail: profile.serviceAreas.length
+        ? `${profile.serviceAreas.slice(0, 3).join(", ")} can anchor local copy and SEO.`
+        : "Add service areas for local ad and SEO recommendations.",
+    },
+    {
+      complete: Boolean(profile.logoUrl && toHexColor(profile.primaryColor)),
+      label: "Brand assets",
+      detail: profile.logoUrl
+        ? "Logo and brand colors are available for creative."
+        : "Add a logo URL if one was missed by the scan.",
+    },
+    {
+      complete: profile.differentiators.length > 0,
+      label: "Trust proof",
+      detail: profile.differentiators.length
+        ? "Differentiators are ready to support the ad message."
+        : "Add proof points such as years in business, guarantees, reviews, or certifications.",
+    },
+    {
+      complete: hasAcquisitionHook,
+      label: "Conversion hook",
+      detail: hasAcquisitionHook
+        ? "Financing, emergency, or maintenance-plan messaging gives the campaign a sharper hook."
+        : "Consider adding financing, emergency service, or maintenance-plan messaging.",
+    },
+  ];
+}
+
+function linesToList(value: string) {
+  return value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function yesNo(value: boolean) {

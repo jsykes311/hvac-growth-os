@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "HVAC Growth OS",
-  description: "Mock HVAC growth analysis and campaign generation prototype.",
+  description: "HVAC website analysis, business profile review, and campaign generation.",
 };
 
 export default function RootLayout({
