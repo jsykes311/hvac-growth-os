@@ -64,6 +64,7 @@ async function analyzeBusinessProfile(
       "- technicalIssues should flag visible crawl/content issues from the scraped HTML only, such as missing headings, thin content, weak titles, missing schema evidence, or unclear CTAs.",
       "- contentOpportunities should list practical service, location, comparison, maintenance, financing, emergency, and seasonal content opportunities.",
       "- recommendedPages should include 3 to 6 local SEO page recommendations with priority, slug, search intent, and rationale.",
+      "- seoAnalysis.recommendedFixes should include 3 to 6 implementation-ready fixes mapped to the SEO/local SEO problems found. Each fix needs a problem, fix, priority, impact, and effort.",
       "AI SEO analysis instructions:",
       "- aiSeoAnalysis.score should rate readiness to be cited or summarized by AI answer engines from 0 to 100.",
       "- answerEngineReadiness should summarize whether the site gives direct, structured answers about services, locations, pricing/financing, proof, and process.",
@@ -71,6 +72,7 @@ async function analyzeBusinessProfile(
       "- schemaRecommendations should recommend relevant structured data such as LocalBusiness/HVACBusiness, Service, FAQPage, Review, BreadcrumbList, and Offer where appropriate.",
       "- faqQuestions should contain practical homeowner questions the business should answer directly on service/location pages.",
       "- entityGaps should identify missing trust/entity details like owner/team, license numbers, review proof, service-area specificity, brands served, warranties, and payment options.",
+      "- aiSeoAnalysis.recommendedFixes should include 3 to 6 implementation-ready fixes mapped to AI SEO problems found. Each fix needs a problem, fix, priority, impact, and effort.",
       "",
       `Firecrawl branding JSON:\n${JSON.stringify(scrapeResult.branding ?? {}, null, 2)}`,
       "",
@@ -116,6 +118,7 @@ function sanitizeSeoAnalysis(analysis: BusinessProfile["seoAnalysis"]): Business
     localSeoGaps: cleanList(analysis?.localSeoGaps ?? []),
     technicalIssues: cleanList(analysis?.technicalIssues ?? []),
     contentOpportunities: cleanList(analysis?.contentOpportunities ?? []),
+    recommendedFixes: sanitizeFixes(analysis?.recommendedFixes ?? []),
     recommendedPages: (analysis?.recommendedPages ?? [])
       .map((page) => ({
         title: cleanText(page.title),
@@ -137,7 +140,21 @@ function sanitizeAiSeoAnalysis(analysis: BusinessProfile["aiSeoAnalysis"]): Busi
     schemaRecommendations: cleanList(analysis?.schemaRecommendations ?? []),
     faqQuestions: cleanList(analysis?.faqQuestions ?? []),
     entityGaps: cleanList(analysis?.entityGaps ?? []),
+    recommendedFixes: sanitizeFixes(analysis?.recommendedFixes ?? []),
   };
+}
+
+function sanitizeFixes(fixes: BusinessProfile["seoAnalysis"]["recommendedFixes"]) {
+  return fixes
+    .map((fix) => ({
+      problem: cleanText(fix.problem),
+      fix: cleanText(fix.fix),
+      priority: ["High", "Medium", "Low"].includes(fix.priority) ? fix.priority : "Medium",
+      impact: cleanText(fix.impact),
+      effort: ["Quick", "Moderate", "Heavy"].includes(fix.effort) ? fix.effort : "Moderate",
+    }))
+    .filter((fix) => fix.problem || fix.fix)
+    .slice(0, 6);
 }
 
 function clampScore(value: number | undefined) {

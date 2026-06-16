@@ -37,6 +37,7 @@ export type SeoAnalysis = {
   technicalIssues: string[];
   contentOpportunities: string[];
   recommendedPages: SeoPageRecommendation[];
+  recommendedFixes: FixRecommendation[];
 };
 
 export type AiSeoAnalysis = {
@@ -46,6 +47,15 @@ export type AiSeoAnalysis = {
   schemaRecommendations: string[];
   faqQuestions: string[];
   entityGaps: string[];
+  recommendedFixes: FixRecommendation[];
+};
+
+export type FixRecommendation = {
+  problem: string;
+  fix: string;
+  priority: "High" | "Medium" | "Low";
+  impact: string;
+  effort: "Quick" | "Moderate" | "Heavy";
 };
 
 export type CampaignOutput = {

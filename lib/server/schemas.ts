@@ -56,6 +56,7 @@ export const businessProfileSchema = {
         "technicalIssues",
         "contentOpportunities",
         "recommendedPages",
+        "recommendedFixes",
       ],
       properties: {
         score: { type: "number" },
@@ -79,6 +80,21 @@ export const businessProfileSchema = {
             },
           },
         },
+        recommendedFixes: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["problem", "fix", "priority", "impact", "effort"],
+            properties: {
+              problem: { type: "string" },
+              fix: { type: "string" },
+              priority: { type: "string", enum: ["High", "Medium", "Low"] },
+              impact: { type: "string" },
+              effort: { type: "string", enum: ["Quick", "Moderate", "Heavy"] },
+            },
+          },
+        },
       },
     },
     aiSeoAnalysis: {
@@ -91,6 +107,7 @@ export const businessProfileSchema = {
         "schemaRecommendations",
         "faqQuestions",
         "entityGaps",
+        "recommendedFixes",
       ],
       properties: {
         score: { type: "number" },
@@ -99,6 +116,21 @@ export const businessProfileSchema = {
         schemaRecommendations: { type: "array", items: { type: "string" } },
         faqQuestions: { type: "array", items: { type: "string" } },
         entityGaps: { type: "array", items: { type: "string" } },
+        recommendedFixes: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["problem", "fix", "priority", "impact", "effort"],
+            properties: {
+              problem: { type: "string" },
+              fix: { type: "string" },
+              priority: { type: "string", enum: ["High", "Medium", "Low"] },
+              impact: { type: "string" },
+              effort: { type: "string", enum: ["Quick", "Moderate", "Heavy"] },
+            },
+          },
+        },
       },
     },
   },

@@ -498,6 +498,13 @@ function SeoAnalysisPanel({ analysis }: { analysis: BusinessProfile }) {
         <CompactList title="Content Opportunities" values={seo.contentOpportunities} emptyText="No content opportunities found." />
       </div>
 
+      <FixList
+        className="mt-6"
+        emptyText="No SEO fixes returned."
+        title="SEO Fixes"
+        values={seo.recommendedFixes}
+      />
+
       <div className="mt-6 border-t border-ink/10 pt-5">
         <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.12em] text-graphite/65">
           <FileSearch className="size-4" aria-hidden="true" />
@@ -554,6 +561,13 @@ function AiSeoAnalysisPanel({ analysis }: { analysis: BusinessProfile }) {
         <CompactList title="FAQ Questions" values={aiSeo.faqQuestions} emptyText="No FAQ questions returned." />
         <CompactList title="Entity Gaps" values={aiSeo.entityGaps} emptyText="No entity gaps returned." />
       </div>
+
+      <FixList
+        className="mt-6"
+        emptyText="No AI SEO fixes returned."
+        title="AI SEO Fixes"
+        values={aiSeo.recommendedFixes}
+      />
     </Panel>
   );
 }
@@ -587,6 +601,41 @@ function CompactList({
             </li>
           ))}
         </ul>
+      ) : (
+        <p className="mt-3 text-sm font-medium text-graphite/65">{emptyText}</p>
+      )}
+    </div>
+  );
+}
+
+function FixList({
+  className = "",
+  emptyText,
+  title,
+  values,
+}: {
+  className?: string;
+  emptyText: string;
+  title: string;
+  values: BusinessProfile["seoAnalysis"]["recommendedFixes"];
+}) {
+  return (
+    <div className={`border-t border-ink/10 pt-5 ${className}`}>
+      <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">{title}</h3>
+      {values.length ? (
+        <div className="mt-3 grid gap-3">
+          {values.map((item) => (
+            <article className="rounded-md border border-ink/10 bg-white p-3" key={`${item.problem}-${item.fix}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md bg-frost px-2 py-1 text-xs font-black text-copper">{item.priority}</span>
+                <span className="rounded-md bg-frost px-2 py-1 text-xs font-black text-graphite">{item.effort}</span>
+              </div>
+              <p className="mt-3 text-sm font-black text-ink">{item.problem}</p>
+              <p className="mt-2 text-sm leading-5 text-graphite">{item.fix}</p>
+              <p className="mt-2 text-sm leading-5 text-graphite/70">{item.impact}</p>
+            </article>
+          ))}
+        </div>
       ) : (
         <p className="mt-3 text-sm font-medium text-graphite/65">{emptyText}</p>
       )}
@@ -1022,17 +1071,23 @@ function buildReadinessItems(profile: BusinessProfile): ReadinessItem[] {
         : "Consider adding financing, emergency service, or maintenance-plan messaging.",
     },
     {
-      complete: profile.seoAnalysis.score >= 60 && profile.seoAnalysis.recommendedPages.length > 0,
+      complete:
+        profile.seoAnalysis.score >= 60 &&
+        profile.seoAnalysis.recommendedPages.length > 0 &&
+        profile.seoAnalysis.recommendedFixes.length > 0,
       label: "SEO roadmap",
       detail: profile.seoAnalysis.recommendedPages.length
-        ? "Local SEO recommendations are ready to support the campaign."
+        ? "Local SEO recommendations and fixes are ready to support the campaign."
         : "Add SEO page targets before relying on organic growth.",
     },
     {
-      complete: profile.aiSeoAnalysis.score >= 60 && profile.aiSeoAnalysis.faqQuestions.length > 0,
+      complete:
+        profile.aiSeoAnalysis.score >= 60 &&
+        profile.aiSeoAnalysis.faqQuestions.length > 0 &&
+        profile.aiSeoAnalysis.recommendedFixes.length > 0,
       label: "AI search readiness",
       detail: profile.aiSeoAnalysis.faqQuestions.length
-        ? "AI SEO questions and entity gaps are ready for answer-engine content."
+        ? "AI SEO questions, entity gaps, and fixes are ready for answer-engine content."
         : "Add AI-search FAQs and entity details so the business is easier to cite.",
     },
   ];
