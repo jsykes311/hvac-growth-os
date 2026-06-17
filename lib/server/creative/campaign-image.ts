@@ -35,7 +35,6 @@ export async function createCampaignImage({
   const headline = buildHeroHeadline(profile, campaign, offer);
   const subheadline = buildHeroSubheadline(profile, campaign, offer);
   const proofCards = buildProofCards(profile);
-  const ctaLine = buildCtaLine(profile, campaign, offer);
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
@@ -63,12 +62,15 @@ export async function createCampaignImage({
     <filter id="logoShadow" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.18"/>
     </filter>
+    <clipPath id="logoClip">
+      <rect x="64" y="56" width="212" height="70" rx="7"/>
+    </clipPath>
   </defs>
 
   ${renderHeroBackground(generatedHeroImageDataUrl, palette)}
   <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="url(#textShade)"/>
   <rect x="0" y="0" width="640" height="${HEIGHT}" fill="${escapeXml(palette.dark)}" opacity="0.82"/>
-  <rect x="0" y="566" width="1040" height="298" fill="${escapeXml(palette.dark)}" opacity="0.72"/>
+  <rect x="0" y="566" width="690" height="298" fill="${escapeXml(palette.dark)}" opacity="0.74"/>
   <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="url(#topGlow)"/>
   <rect x="0" y="610" width="${WIDTH}" height="254" fill="url(#bottomDepth)"/>
   <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="${escapeXml(palette.primary)}" opacity="0.07"/>
@@ -76,7 +78,7 @@ export async function createCampaignImage({
   ${renderLogo(logoDataUrl, company, palette)}
   ${renderHeroCopy(headline, subheadline, palette)}
   ${renderProofStack(proofCards, palette)}
-  ${renderCtaFooter(ctaLine, palette)}
+  <rect x="0" y="0" width="${WIDTH}" height="10" fill="${escapeXml(palette.primary)}" opacity="0.84"/>
 </svg>`.trim();
 
   return {
@@ -145,7 +147,7 @@ function renderLogo(logoDataUrl: string, company: string, palette: CreativePalet
   if (logoDataUrl) {
     return `
   <rect x="64" y="56" width="212" height="70" rx="7" fill="#ffffff" opacity="0.96" filter="url(#logoShadow)"/>
-  <image href="${escapeXml(logoDataUrl)}" x="90" y="73" width="160" height="36" preserveAspectRatio="xMidYMid meet"/>`;
+  <image href="${escapeXml(logoDataUrl)}" x="76" y="62" width="188" height="58" preserveAspectRatio="xMidYMid slice" clip-path="url(#logoClip)"/>`;
   }
 
   const companyLines = wrapText(company, 17, 2);
@@ -175,14 +177,14 @@ function renderProofStack(cards: Array<{ title: string; body: string; icon: "cha
   return cards
     .slice(0, 3)
     .map((card, index) => {
-      const y = 616 + index * 88;
+      const y = 614 + index * 82;
       return `
   <g>
     <circle cx="102" cy="${y}" r="27" fill="${escapeXml(palette.dark)}" opacity="0.36"/>
     <circle cx="102" cy="${y}" r="25" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="3"/>
     ${renderIcon(card.icon, 102, y, palette.primary)}
     <text x="158" y="${y - 8}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="23" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(card.title.toUpperCase())}</text>
-    ${renderTextLines(wrapText(card.body, 42, 2, false), 158, y + 21, 17, 24, "#ffffff", 650)}
+    ${renderTextLines(wrapText(card.body, 44, 1, false), 158, y + 21, 17, 24, "#ffffff", 650)}
   </g>`;
     })
     .join("\n");
@@ -202,15 +204,6 @@ function renderIcon(icon: "chart" | "shield" | "team" | "cash", cx: number, cy: 
   }
 
   return `<path d="M${cx - 24} ${cy + 18} V${cy - 2} H${cx - 10} V${cy + 18} M${cx - 2} ${cy + 18} V${cy - 19} H${cx + 12} V${cy + 18} M${cx + 20} ${cy + 18} V${cy - 9} H${cx + 34} V${cy + 18}" fill="none" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx - 26} ${cy + 18} H${cx + 38}" stroke="${escapeXml(color)}" stroke-width="3"/><path d="M${cx - 22} ${cy - 19} L${cx - 6} ${cy - 30} L${cx + 7} ${cy - 22} L${cx + 31} ${cy - 47}" fill="none" stroke="${escapeXml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M${cx + 17} ${cy - 47} H${cx + 31} V${cy - 33}" fill="none" stroke="${escapeXml(color)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
-}
-
-function renderCtaFooter(text: string, palette: CreativePalette) {
-  return `
-  <g>
-    <rect x="64" y="830" width="390" height="2" fill="${escapeXml(palette.primary)}"/>
-    ${renderTextLines(wrapText(text, 44, 1, false), 66, 856, 18, 24, "#ffffff", 800)}
-    <rect x="0" y="0" width="${WIDTH}" height="10" fill="${escapeXml(palette.primary)}" opacity="0.84"/>
-  </g>`;
 }
 
 function buildProofCards(profile: BusinessProfile) {
@@ -269,17 +262,6 @@ function buildHeroSubheadline(profile: BusinessProfile, campaign: CampaignOutput
   }
 
   return `${company} gives local homeowners a clear path from comfort problem to booked appointment.`;
-}
-
-function buildCtaLine(profile: BusinessProfile, campaign: CampaignOutput, offer: string) {
-  const cta = cleanDisplayText(campaign.landingPageHero.primaryCta);
-  const phone = profile.phone ? ` ${profile.phone}` : "";
-
-  if (cta && cta.length <= 32) {
-    return `${cta}${phone}`;
-  }
-
-  return `${offer ? cleanDisplayText(offer) : "Book Service Today"}${phone}`;
 }
 
 function cleanDisplayText(value: string) {
