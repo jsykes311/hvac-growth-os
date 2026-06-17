@@ -149,7 +149,7 @@ function renderLogo(logoDataUrl: string, company: string) {
   if (logoDataUrl) {
     return `
   <rect x="64" y="56" width="124" height="70" rx="7" fill="#ffffff" opacity="0.96" filter="url(#logoShadow)"/>
-  <image href="${escapeXml(logoDataUrl)}" x="74" y="64" width="104" height="54" preserveAspectRatio="xMidYMid slice" clip-path="url(#logoClip)"/>
+  <image href="${escapeXml(logoDataUrl)}" x="74" y="64" width="104" height="54" preserveAspectRatio="xMidYMid meet" clip-path="url(#logoClip)"/>
   <text x="212" y="86" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="950" fill="#ffffff">${escapeXml(companyLines[0] || company)}</text>
   ${companyLines[1] ? `<text x="212" y="113" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="950" fill="#ffffff">${escapeXml(companyLines[1])}</text>` : ""}`;
   }
