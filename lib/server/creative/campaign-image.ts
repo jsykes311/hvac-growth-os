@@ -63,7 +63,7 @@ export async function createCampaignImage({
       <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.18"/>
     </filter>
     <clipPath id="logoClip">
-      <rect x="64" y="56" width="212" height="70" rx="7"/>
+      <rect x="64" y="56" width="124" height="70" rx="7"/>
     </clipPath>
   </defs>
 
@@ -75,7 +75,7 @@ export async function createCampaignImage({
   <rect x="0" y="610" width="${WIDTH}" height="254" fill="url(#bottomDepth)"/>
   <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="${escapeXml(palette.primary)}" opacity="0.07"/>
 
-  ${renderLogo(logoDataUrl, company, palette)}
+  ${renderLogo(logoDataUrl, company)}
   ${renderHeroCopy(headline, subheadline, palette)}
   ${renderProofStack(proofCards, palette)}
   <rect x="0" y="0" width="${WIDTH}" height="10" fill="${escapeXml(palette.primary)}" opacity="0.84"/>
@@ -143,18 +143,20 @@ function renderHeroBackground(heroImageDataUrl: string, palette: CreativePalette
   <circle cx="1510" cy="20" r="240" fill="#ffffff" opacity="0.16"/>`;
 }
 
-function renderLogo(logoDataUrl: string, company: string, palette: CreativePalette) {
+function renderLogo(logoDataUrl: string, company: string) {
+  const companyLines = wrapText(company, 24, 2, false);
+
   if (logoDataUrl) {
     return `
-  <rect x="64" y="56" width="212" height="70" rx="7" fill="#ffffff" opacity="0.96" filter="url(#logoShadow)"/>
-  <image href="${escapeXml(logoDataUrl)}" x="76" y="62" width="188" height="58" preserveAspectRatio="xMidYMid slice" clip-path="url(#logoClip)"/>`;
+  <rect x="64" y="56" width="124" height="70" rx="7" fill="#ffffff" opacity="0.96" filter="url(#logoShadow)"/>
+  <image href="${escapeXml(logoDataUrl)}" x="74" y="64" width="104" height="54" preserveAspectRatio="xMidYMid slice" clip-path="url(#logoClip)"/>
+  <text x="212" y="86" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="950" fill="#ffffff">${escapeXml(companyLines[0] || company)}</text>
+  ${companyLines[1] ? `<text x="212" y="113" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="950" fill="#ffffff">${escapeXml(companyLines[1])}</text>` : ""}`;
   }
 
-  const companyLines = wrapText(company, 17, 2);
-
   return `
-  <text x="64" y="104" font-family="Impact, Inter, Arial Black, sans-serif" font-size="44" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(companyLines[0] || company)}</text>
-  ${companyLines[1] ? `<text x="64" y="148" font-family="Impact, Inter, Arial Black, sans-serif" font-size="44" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(companyLines[1])}</text>` : ""}`;
+  <text x="64" y="94" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="950" fill="#ffffff">${escapeXml(companyLines[0] || company)}</text>
+  ${companyLines[1] ? `<text x="64" y="126" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="950" fill="#ffffff">${escapeXml(companyLines[1])}</text>` : ""}`;
 }
 
 function renderHeroCopy(headline: string, subheadline: string, palette: CreativePalette) {
@@ -169,7 +171,7 @@ function renderHeroCopy(headline: string, subheadline: string, palette: Creative
 
   return `
   ${firstBlock}
-  <rect x="66" y="432" width="116" height="5" fill="${escapeXml(palette.primary)}"/>
+  <rect x="66" y="432" width="116" height="5" fill="#ffffff" opacity="0.92"/>
   ${renderTextLines(subLines, 66, 486, 26, 37, "#ffffff", 700)}`;
 }
 
@@ -181,9 +183,9 @@ function renderProofStack(cards: Array<{ title: string; body: string; icon: "cha
       return `
   <g>
     <circle cx="102" cy="${y}" r="27" fill="${escapeXml(palette.dark)}" opacity="0.36"/>
-    <circle cx="102" cy="${y}" r="25" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="3"/>
-    ${renderIcon(card.icon, 102, y, palette.primary)}
-    <text x="158" y="${y - 8}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="23" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(card.title.toUpperCase())}</text>
+    <circle cx="102" cy="${y}" r="25" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.94"/>
+    ${renderIcon(card.icon, 102, y, "#ffffff")}
+    <text x="158" y="${y - 8}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="23" font-weight="950" fill="#ffffff">${escapeXml(card.title.toUpperCase())}</text>
     ${renderTextLines(wrapText(card.body, 44, 1, false), 158, y + 21, 17, 24, "#ffffff", 650)}
   </g>`;
     })
