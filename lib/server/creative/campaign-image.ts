@@ -46,9 +46,9 @@ export async function createCampaignImage({
       <stop offset="100%" stop-color="${escapeXml(darken(palette.secondary, 18))}"/>
     </linearGradient>
     <linearGradient id="textShade" x1="0" x2="1" y1="0" y2="0">
-      <stop offset="0%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.92"/>
-      <stop offset="38%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.74"/>
-      <stop offset="66%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.18"/>
+      <stop offset="0%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.98"/>
+      <stop offset="42%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.92"/>
+      <stop offset="70%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0.28"/>
       <stop offset="100%" stop-color="${escapeXml(palette.dark)}" stop-opacity="0"/>
     </linearGradient>
     <linearGradient id="topGlow" x1="0" x2="1" y1="0" y2="1">
@@ -67,6 +67,8 @@ export async function createCampaignImage({
 
   ${renderHeroBackground(generatedHeroImageDataUrl, palette)}
   <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="url(#textShade)"/>
+  <rect x="0" y="0" width="640" height="${HEIGHT}" fill="${escapeXml(palette.dark)}" opacity="0.82"/>
+  <rect x="0" y="566" width="1040" height="298" fill="${escapeXml(palette.dark)}" opacity="0.72"/>
   <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="url(#topGlow)"/>
   <rect x="0" y="610" width="${WIDTH}" height="254" fill="url(#bottomDepth)"/>
   <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="${escapeXml(palette.primary)}" opacity="0.07"/>
@@ -173,14 +175,14 @@ function renderProofStack(cards: Array<{ title: string; body: string; icon: "cha
   return cards
     .slice(0, 3)
     .map((card, index) => {
-      const y = 622 + index * 76;
+      const y = 616 + index * 88;
       return `
   <g>
     <circle cx="102" cy="${y}" r="27" fill="${escapeXml(palette.dark)}" opacity="0.36"/>
     <circle cx="102" cy="${y}" r="25" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="3"/>
     ${renderIcon(card.icon, 102, y, palette.primary)}
     <text x="158" y="${y - 8}" font-family="Impact, Inter, Arial Black, sans-serif" font-size="23" font-weight="950" fill="${escapeXml(palette.primary)}">${escapeXml(card.title.toUpperCase())}</text>
-    ${renderTextLines(wrapText(card.body, 38, 2, false), 158, y + 21, 18, 25, "#ffffff", 650)}
+    ${renderTextLines(wrapText(card.body, 42, 2, false), 158, y + 21, 17, 24, "#ffffff", 650)}
   </g>`;
     })
     .join("\n");
@@ -205,8 +207,8 @@ function renderIcon(icon: "chart" | "shield" | "team" | "cash", cx: number, cy: 
 function renderCtaFooter(text: string, palette: CreativePalette) {
   return `
   <g>
-    <rect x="64" y="806" width="390" height="2" fill="${escapeXml(palette.primary)}"/>
-    ${renderTextLines(wrapText(text, 44, 1, false), 66, 840, 21, 28, "#ffffff", 800)}
+    <rect x="64" y="830" width="390" height="2" fill="${escapeXml(palette.primary)}"/>
+    ${renderTextLines(wrapText(text, 44, 1, false), 66, 856, 18, 24, "#ffffff", 800)}
     <rect x="0" y="0" width="${WIDTH}" height="10" fill="${escapeXml(palette.primary)}" opacity="0.84"/>
   </g>`;
 }
