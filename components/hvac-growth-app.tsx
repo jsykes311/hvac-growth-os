@@ -2,16 +2,24 @@
 
 import {
   ArrowLeft,
+  Bot,
+  BriefcaseBusiness,
   ChartNoAxesCombined,
   CheckCircle2,
   ClipboardList,
+  Download,
+  FileText,
   FileSearch,
+  Gauge,
+  Globe2,
+  LayoutDashboard,
+  ListChecks,
   Loader2,
   Megaphone,
   Palette,
+  Rocket,
   Search,
-  Bot,
-  Download,
+  Settings,
   Sparkles,
 } from "lucide-react";
 import { FormEvent, useState } from "react";
@@ -26,6 +34,16 @@ import type {
 import { Button, Eyebrow, FieldLabel, Panel } from "@/components/ui";
 
 type View = "home" | "results";
+type PlatformSection =
+  | "dashboard"
+  | "website-audit"
+  | "seo"
+  | "ai-visibility"
+  | "revenue-engine"
+  | "deploy-center"
+  | "client-workspace"
+  | "reports"
+  | "settings";
 type ApiError = { error?: string };
 type ReadinessItem = {
   complete: boolean;
@@ -41,9 +59,22 @@ const CAMPAIGN_GOALS = [
   "Launch financing offer",
 ];
 
+const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "website-audit", label: "Website Audit" },
+  { id: "seo", label: "SEO" },
+  { id: "ai-visibility", label: "AI Visibility" },
+  { id: "revenue-engine", label: "Revenue Engine" },
+  { id: "deploy-center", label: "Deploy Center" },
+  { id: "client-workspace", label: "Client Workspace" },
+  { id: "reports", label: "Reports" },
+  { id: "settings", label: "Settings" },
+];
+
 export function HvacGrowthApp() {
   const [contractorUrl, setContractorUrl] = useState("");
   const [view, setView] = useState<View>("home");
+  const [activeSection, setActiveSection] = useState<PlatformSection>("dashboard");
   const [analysis, setAnalysis] = useState<BusinessProfile | null>(null);
   const [scrapedPages, setScrapedPages] = useState<AnalyzedPage[]>([]);
   const [campaign, setCampaign] = useState<CampaignOutput | null>(null);
@@ -105,6 +136,7 @@ export function HvacGrowthApp() {
         emergencyService: payload.profile.emergencyServiceMentioned,
         financing: payload.profile.financingMentioned,
       });
+      setActiveSection("dashboard");
       setView("results");
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to analyze this website.");
@@ -205,12 +237,14 @@ export function HvacGrowthApp() {
               ppcOverrides={ppcOverrides}
               ppcPlan={ppcPlan}
               scrapedPages={scrapedPages}
+              activeSection={activeSection}
               onBack={() => {
                 setView("home");
                 setError("");
               }}
               onCreateCampaign={handleCreateCampaign}
               onCreatePpcPlan={handleCreatePpcPlan}
+              setActiveSection={setActiveSection}
               onUpdateAnalysis={(nextAnalysis) => {
                 setAnalysis(nextAnalysis);
                 setCampaign(null);
@@ -263,13 +297,14 @@ function HomeView({
   return (
     <div className="grid flex-1 items-center gap-10 py-12 lg:grid-cols-[1.05fr_0.95fr]">
       <section>
-        <Eyebrow>Lead engine scanner</Eyebrow>
+        <Eyebrow>Implementation platform</Eyebrow>
         <h1 className="max-w-3xl text-5xl font-black leading-[1.02] text-ink sm:text-6xl">
-          Turn an HVAC website into a growth plan.
+          Turn an HVAC website into a deployed growth system.
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-8 text-graphite">
-          Enter a contractor URL. HVAC Growth OS scrapes the core pages, analyzes the brand, and returns a business profile ready for campaign creation.
+          Enter a contractor URL. HVAC Growth OS builds the workspace, audits the site, creates the Revenue Engine, and organizes the assets needed to launch.
         </p>
+        <OnboardingPreview />
       </section>
 
       <Panel className="w-full">
@@ -308,10 +343,12 @@ function ResultsView({
   ppcOverrides,
   ppcPlan,
   scrapedPages,
+  activeSection,
   onBack,
   onCreateCampaign,
   onCreatePpcPlan,
   onUpdateAnalysis,
+  setActiveSection,
   setGoal,
   setOffer,
   setPpcOverrides,
@@ -328,10 +365,12 @@ function ResultsView({
   ppcOverrides: PpcManualOverrides;
   ppcPlan: PpcPlan | null;
   scrapedPages: AnalyzedPage[];
+  activeSection: PlatformSection;
   onBack: () => void;
   onCreateCampaign: (event: FormEvent<HTMLFormElement>) => void;
   onCreatePpcPlan: (event: FormEvent<HTMLFormElement>) => void;
   onUpdateAnalysis: (analysis: BusinessProfile) => void;
+  setActiveSection: (section: PlatformSection) => void;
   setGoal: (value: string) => void;
   setOffer: (value: string) => void;
   setPpcOverrides: (value: PpcManualOverrides) => void;
@@ -350,6 +389,7 @@ function ResultsView({
 
   const readinessItems = buildReadinessItems(analysis);
   const readinessScore = Math.round((readinessItems.filter((item) => item.complete).length / readinessItems.length) * 100);
+  const clientHealth = buildClientHealth(analysis, ppcPlan);
 
   return (
     <div className="py-9">
@@ -369,135 +409,80 @@ function ResultsView({
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-        <Panel>
-          <div className="flex items-start justify-between gap-5">
-            <div>
-              <p className="text-sm font-semibold text-graphite/70">Growth Score</p>
-              <p className="mt-2 text-6xl font-black text-ink">{Math.round(analysis.growthScore)}</p>
-              <p className="text-sm font-semibold text-graphite/70">out of 100</p>
-            </div>
-            {analysis.logoUrl && (
-              <div className="flex size-24 items-center justify-center rounded-lg border border-ink/10 bg-white p-3">
-                <img className="max-h-full max-w-full object-contain" src={analysis.logoUrl} alt={`${analysis.companyName} logo`} />
-              </div>
-            )}
-          </div>
+      <PlatformNav activeSection={activeSection} onChange={setActiveSection} />
 
-          <dl className="mt-7 grid gap-4 text-sm">
-            <InfoRow label="Phone" value={analysis.phone || "Not found"} />
-            <InfoRow label="Email" value={analysis.email || "Not found"} />
-            <InfoRow label="Financing Mentioned" value={yesNo(analysis.financingMentioned)} />
-            <InfoRow label="Emergency Service Mentioned" value={yesNo(analysis.emergencyServiceMentioned)} />
-            <InfoRow label="Maintenance Plan Mentioned" value={yesNo(analysis.maintenancePlanMentioned)} />
-            <InfoRow label="Brand Tone" value={analysis.brandTone || "Not found"} />
-          </dl>
-        </Panel>
+      {activeSection === "dashboard" && (
+        <DashboardSection
+          analysis={analysis}
+          clientHealth={clientHealth}
+          contractorUrl={contractorUrl}
+          ppcPlan={ppcPlan}
+          setActiveSection={setActiveSection}
+        />
+      )}
 
-        <Panel>
-          <div className="grid gap-6 md:grid-cols-2">
-            <ChipList icon={<ClipboardList className="size-4" />} label="Services Found" values={analysis.services} />
-            <ChipList label="Service Areas Found" values={analysis.serviceAreas} />
-          </div>
+      {activeSection === "website-audit" && (
+        <WebsiteAuditSection
+          analysis={analysis}
+          readinessItems={readinessItems}
+          readinessScore={readinessScore}
+          scrapedPages={scrapedPages}
+          updateBrandColor={updateBrandColor}
+        />
+      )}
 
-          <div className="mt-7 border-t border-ink/10 pt-6">
-            <h2 className="flex items-center gap-2 text-lg font-black text-ink">
-              <Palette className="size-5" aria-hidden="true" />
-              Brand Analysis
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-graphite/70">
-              These came from the website scan. Adjust them if the scrape picked up the wrong colors before creating the campaign.
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <ColorPicker
-                label="Primary"
-                onChange={(value) => updateBrandColor("primaryColor", value)}
-                value={analysis.primaryColor}
-              />
-              <ColorPicker
-                label="Secondary"
-                onChange={(value) => updateBrandColor("secondaryColor", value)}
-                value={analysis.secondaryColor}
-              />
-              <ColorPicker
-                label="Accent"
-                onChange={(value) => updateBrandColor("accentColor", value)}
-                value={analysis.accentColor}
-              />
-            </div>
-            {analysis.heroImageUrl && (
-              <div className="mt-5 overflow-hidden rounded-lg border border-ink/10 bg-white">
-                <img
-                  className="h-40 w-full object-cover"
-                  src={analysis.heroImageUrl}
-                  alt={`${analysis.companyName} campaign hero visual`}
-                />
-              </div>
-            )}
-            <p className="mt-4 text-sm leading-6 text-graphite">{analysis.brandStyle || "No brand style found."}</p>
-          </div>
-        </Panel>
-      </div>
+      {activeSection === "seo" && <SeoAnalysisPanel analysis={analysis} />}
+      {activeSection === "ai-visibility" && <AiSeoAnalysisPanel analysis={analysis} />}
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <Panel>
-          <h2 className="text-lg font-black text-ink">Differentiators</h2>
-          <BulletList values={analysis.differentiators} emptyText="No differentiators found." />
-        </Panel>
+      {activeSection === "revenue-engine" && (
+        <PpcPlannerPanel
+          analysis={analysis}
+          isCreatingPpcPlan={isCreatingPpcPlan}
+          onCreatePpcPlan={onCreatePpcPlan}
+          overrides={ppcOverrides}
+          ppcPlan={ppcPlan}
+          setOverrides={setPpcOverrides}
+        />
+      )}
 
-        <Panel>
-          <h2 className="text-lg font-black text-ink">Top 5 Growth Opportunities</h2>
-          <ol className="mt-4 space-y-3">
-            {analysis.topGrowthOpportunities.map((item, index) => (
-              <li className="flex gap-3 text-sm leading-6 text-graphite" key={item}>
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-ink text-xs font-black text-white">
-                  {index + 1}
-                </span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ol>
-        </Panel>
-      </div>
+      {activeSection === "deploy-center" && (
+        <DeployCenter analysis={analysis} ppcPlan={ppcPlan} campaign={campaign} setActiveSection={setActiveSection} />
+      )}
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <SeoAnalysisPanel analysis={analysis} />
-        <AiSeoAnalysisPanel analysis={analysis} />
-      </div>
+      {activeSection === "client-workspace" && (
+        <ClientWorkspace
+          analysis={analysis}
+          clientHealth={clientHealth}
+          contractorUrl={contractorUrl}
+          ppcOverrides={ppcOverrides}
+          ppcPlan={ppcPlan}
+          scrapedPages={scrapedPages}
+        />
+      )}
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-        <ProfileEditor
+      {activeSection === "reports" && (
+        <ReportsSection
+          analysis={analysis}
+          campaign={campaign}
+          campaignImage={campaignImage}
+          error={error}
+          goal={goal}
+          isCreatingCampaign={isCreatingCampaign}
+          offer={offer}
+          onCreateCampaign={onCreateCampaign}
+          ppcPlan={ppcPlan}
+          setGoal={setGoal}
+          setOffer={setOffer}
+        />
+      )}
+
+      {activeSection === "settings" && (
+        <SettingsSection
           analysis={analysis}
           onListChange={updateProfileList}
           onUpdate={updateProfileField}
         />
-        <AnalysisQualityPanel
-          readinessItems={readinessItems}
-          readinessScore={readinessScore}
-          scrapedPages={scrapedPages}
-        />
-      </div>
-
-      <PpcPlannerPanel
-        analysis={analysis}
-        isCreatingPpcPlan={isCreatingPpcPlan}
-        onCreatePpcPlan={onCreatePpcPlan}
-        overrides={ppcOverrides}
-        ppcPlan={ppcPlan}
-        setOverrides={setPpcOverrides}
-      />
-
-      <CampaignForm
-        error={error}
-        goal={goal}
-        isCreatingCampaign={isCreatingCampaign}
-        offer={offer}
-        onCreateCampaign={onCreateCampaign}
-        setGoal={setGoal}
-        setOffer={setOffer}
-      />
-
-      {campaign && <CampaignPanel campaign={campaign} campaignImage={campaignImage} />}
+      )}
     </div>
   );
 }
@@ -554,6 +539,523 @@ function CampaignForm({
         </div>
       </form>
       {error && <div className="mt-4"><ErrorMessage message={error} /></div>}
+    </Panel>
+  );
+}
+
+function PlatformNav({
+  activeSection,
+  onChange,
+}: {
+  activeSection: PlatformSection;
+  onChange: (section: PlatformSection) => void;
+}) {
+  return (
+    <nav className="mb-5 overflow-x-auto rounded-lg border border-ink/10 bg-white/88 p-2 shadow-soft">
+      <div className="flex min-w-max gap-2">
+        {PLATFORM_NAV.map((item) => (
+          <button
+            className={`h-10 rounded-md px-3 text-sm font-bold transition ${
+              activeSection === item.id ? "bg-ink text-white" : "text-graphite hover:bg-frost"
+            }`}
+            key={item.id}
+            onClick={() => onChange(item.id)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function DashboardSection({
+  analysis,
+  clientHealth,
+  contractorUrl,
+  ppcPlan,
+  setActiveSection,
+}: {
+  analysis: BusinessProfile;
+  clientHealth: ReturnType<typeof buildClientHealth>;
+  contractorUrl: string;
+  ppcPlan: PpcPlan | null;
+  setActiveSection: (section: PlatformSection) => void;
+}) {
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+        <Panel>
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+            <div>
+              <Eyebrow>Client Workspace</Eyebrow>
+              <h2 className="text-3xl font-black text-ink">{analysis.companyName || "New HVAC Client"}</h2>
+              <p className="mt-2 break-all text-sm font-semibold text-graphite/70">{contractorUrl}</p>
+            </div>
+            <HealthBadge color={clientHealth.color} score={clientHealth.score} />
+          </div>
+          <ScoreGrid analysis={analysis} ppcPlan={ppcPlan} />
+          <div className="mt-6 rounded-md border border-ink/10 bg-frost p-4">
+            <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Next Recommended Action</h3>
+            <p className="mt-2 text-sm leading-6 text-graphite">{nextRecommendedAction(analysis, ppcPlan)}</p>
+          </div>
+        </Panel>
+        <TaskCenter analysis={analysis} ppcPlan={ppcPlan} />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <ClientTimeline ppcPlan={ppcPlan} />
+        <Panel>
+          <h2 className="flex items-center gap-2 text-lg font-black text-ink">
+            <Rocket className="size-5" aria-hidden="true" />
+            Implementation Path
+          </h2>
+          <div className="mt-4 grid gap-3">
+            <ActionRow label="Review Website Audit" onClick={() => setActiveSection("website-audit")} />
+            <ActionRow label="Build Revenue Engine" onClick={() => setActiveSection("revenue-engine")} />
+            <ActionRow label="Deploy Campaign Assets" onClick={() => setActiveSection("deploy-center")} />
+            <ActionRow label="Generate Launch Report" onClick={() => setActiveSection("reports")} />
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function WebsiteAuditSection({
+  analysis,
+  readinessItems,
+  readinessScore,
+  scrapedPages,
+  updateBrandColor,
+}: {
+  analysis: BusinessProfile;
+  readinessItems: ReadinessItem[];
+  readinessScore: number;
+  scrapedPages: AnalyzedPage[];
+  updateBrandColor: (field: "primaryColor" | "secondaryColor" | "accentColor", value: string) => void;
+}) {
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <Panel>
+          <div className="flex items-start justify-between gap-5">
+            <div>
+              <p className="text-sm font-semibold text-graphite/70">Growth Score</p>
+              <p className="mt-2 text-6xl font-black text-ink">{Math.round(analysis.growthScore)}</p>
+              <p className="text-sm font-semibold text-graphite/70">out of 100</p>
+            </div>
+            {analysis.logoUrl && (
+              <div className="flex size-24 items-center justify-center rounded-lg border border-ink/10 bg-white p-3">
+                <img className="max-h-full max-w-full object-contain" src={analysis.logoUrl} alt={`${analysis.companyName} logo`} />
+              </div>
+            )}
+          </div>
+          <dl className="mt-7 grid gap-4 text-sm">
+            <InfoRow label="Phone" value={analysis.phone || "Not found"} />
+            <InfoRow label="Email" value={analysis.email || "Not found"} />
+            <InfoRow label="Financing Mentioned" value={yesNo(analysis.financingMentioned)} />
+            <InfoRow label="Emergency Service Mentioned" value={yesNo(analysis.emergencyServiceMentioned)} />
+            <InfoRow label="Maintenance Plan Mentioned" value={yesNo(analysis.maintenancePlanMentioned)} />
+            <InfoRow label="Brand Tone" value={analysis.brandTone || "Not found"} />
+          </dl>
+        </Panel>
+
+        <Panel>
+          <div className="grid gap-6 md:grid-cols-2">
+            <ChipList icon={<ClipboardList className="size-4" />} label="Services Found" values={analysis.services} />
+            <ChipList label="Service Areas Found" values={analysis.serviceAreas} />
+          </div>
+          <div className="mt-7 border-t border-ink/10 pt-6">
+            <h2 className="flex items-center gap-2 text-lg font-black text-ink">
+              <Palette className="size-5" aria-hidden="true" />
+              Brand Analysis
+            </h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <ColorPicker label="Primary" onChange={(value) => updateBrandColor("primaryColor", value)} value={analysis.primaryColor} />
+              <ColorPicker label="Secondary" onChange={(value) => updateBrandColor("secondaryColor", value)} value={analysis.secondaryColor} />
+              <ColorPicker label="Accent" onChange={(value) => updateBrandColor("accentColor", value)} value={analysis.accentColor} />
+            </div>
+            <p className="mt-4 text-sm leading-6 text-graphite">{analysis.brandStyle || "No brand style found."}</p>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Panel>
+          <h2 className="text-lg font-black text-ink">Differentiators</h2>
+          <BulletList values={analysis.differentiators} emptyText="No differentiators found." />
+        </Panel>
+        <Panel>
+          <h2 className="text-lg font-black text-ink">Top 5 Growth Opportunities</h2>
+          <ol className="mt-4 space-y-3">
+            {analysis.topGrowthOpportunities.map((item, index) => (
+              <li className="flex gap-3 text-sm leading-6 text-graphite" key={item}>
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-ink text-xs font-black text-white">{index + 1}</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ol>
+        </Panel>
+      </div>
+
+      <AnalysisQualityPanel readinessItems={readinessItems} readinessScore={readinessScore} scrapedPages={scrapedPages} />
+    </div>
+  );
+}
+
+function ClientWorkspace({
+  analysis,
+  clientHealth,
+  contractorUrl,
+  ppcOverrides,
+  ppcPlan,
+  scrapedPages,
+}: {
+  analysis: BusinessProfile;
+  clientHealth: ReturnType<typeof buildClientHealth>;
+  contractorUrl: string;
+  ppcOverrides: PpcManualOverrides;
+  ppcPlan: PpcPlan | null;
+  scrapedPages: AnalyzedPage[];
+}) {
+  const workspaceRows = [
+    ["Business Name", analysis.companyName || "Not found"],
+    ["Website", contractorUrl],
+    ["Overall Growth Score", String(Math.round(analysis.growthScore))],
+    ["Revenue Score", String(ppcPlan ? Math.round(avg(ppcPlan.campaignReadiness.map((item) => item.priorityScore))) : 0)],
+    ["AI Visibility Score", String(analysis.aiSeoAnalysis.score)],
+    ["SEO Score", String(analysis.seoAnalysis.score)],
+    ["Google Ads Score", String(ppcPlan ? Math.round(avg(ppcPlan.recommendedLaunchPlan.map((item) => item.priorityScore))) : 0)],
+    ["Google Business Profile Score", analysis.aiSeoAnalysis.citationOpportunities.length ? "70" : "45"],
+    ["HighLevel Score", "Needs connection"],
+    ["Current Monthly Budget", `$${(ppcOverrides.monthlyBudget ?? 0).toLocaleString()}`],
+    ["Current Campaign Status", ppcPlan ? "Revenue Engine complete" : "Not generated"],
+    ["Last Audit Date", new Date().toLocaleDateString()],
+    ["Next Recommended Action", nextRecommendedAction(analysis, ppcPlan)],
+  ];
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+      <Panel>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="flex items-center gap-2 text-xl font-black text-ink">
+            <BriefcaseBusiness className="size-5" aria-hidden="true" />
+            Client Workspace
+          </h2>
+          <HealthBadge color={clientHealth.color} score={clientHealth.score} />
+        </div>
+        <dl className="mt-5 grid gap-4 text-sm md:grid-cols-2">
+          {workspaceRows.map(([label, value]) => (
+            <InfoRow key={label} label={label} value={value} />
+          ))}
+        </dl>
+      </Panel>
+      <div className="grid gap-5">
+        <ClientTimeline ppcPlan={ppcPlan} />
+        <Panel>
+          <h2 className="text-lg font-black text-ink">Workspace Architecture</h2>
+          <BulletList
+            emptyText=""
+            values={[
+              "Client workspace object is separated from audit, Revenue Engine, deployment, task, and report data.",
+              "Current UI supports one active client; the structure can expand into persisted multi-client workspaces.",
+              `${scrapedPages.length} scraped pages are attached to this client session.`,
+            ]}
+          />
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function DeployCenter({
+  analysis,
+  campaign,
+  ppcPlan,
+  setActiveSection,
+}: {
+  analysis: BusinessProfile;
+  campaign: CampaignOutput | null;
+  ppcPlan: PpcPlan | null;
+  setActiveSection: (section: PlatformSection) => void;
+}) {
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-black text-ink">
+              <Rocket className="size-5" aria-hidden="true" />
+              Deploy Center
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-graphite/70">
+              Everything generated by HVAC Growth OS is organized here for implementation.
+            </p>
+          </div>
+          <Button onClick={() => setActiveSection("revenue-engine")} variant="secondary">Open Revenue Engine</Button>
+        </div>
+      </Panel>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <DeployCard title="Google Ads" items={googleAdsDeployItems(ppcPlan)} />
+        <DeployCard title="Landing Pages" items={landingPageDeployItems(ppcPlan)} />
+        <DeployCard title="SEO" items={seoDeployItems(analysis)} />
+        <DeployCard title="Google Business Profile" items={gbpDeployItems(analysis)} />
+        <DeployCard title="HighLevel" items={highLevelDeployItems()} />
+        <DeployCard title="Reporting" items={reportDeployItems(campaign)} />
+      </div>
+    </div>
+  );
+}
+
+function ReportsSection({
+  analysis,
+  campaign,
+  campaignImage,
+  error,
+  goal,
+  isCreatingCampaign,
+  offer,
+  onCreateCampaign,
+  ppcPlan,
+  setGoal,
+  setOffer,
+}: {
+  analysis: BusinessProfile;
+  campaign: CampaignOutput | null;
+  campaignImage: CampaignImage | null;
+  error: string;
+  goal: string;
+  isCreatingCampaign: boolean;
+  offer: string;
+  onCreateCampaign: (event: FormEvent<HTMLFormElement>) => void;
+  ppcPlan: PpcPlan | null;
+  setGoal: (value: string) => void;
+  setOffer: (value: string) => void;
+}) {
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <h2 className="flex items-center gap-2 text-xl font-black text-ink">
+          <FileText className="size-5" aria-hidden="true" />
+          Report Center
+        </h2>
+        <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+          {["Launch Report", "Weekly Marketing Report", "Monthly Executive Report", "Quarterly Growth Review", "Annual Marketing Review"].map((report) => (
+            <article className="rounded-md border border-ink/10 bg-frost p-4" key={report}>
+              <p className="text-sm font-black text-ink">{report}</p>
+              <p className="mt-2 text-sm leading-5 text-graphite/70">
+                {ppcPlan ? "Ready to generate from current workspace data." : "Run Revenue Engine to complete this report."}
+              </p>
+            </article>
+          ))}
+        </div>
+      </Panel>
+      <CampaignForm
+        error={error}
+        goal={goal}
+        isCreatingCampaign={isCreatingCampaign}
+        offer={offer}
+        onCreateCampaign={onCreateCampaign}
+        setGoal={setGoal}
+        setOffer={setOffer}
+      />
+      {campaign && <CampaignPanel campaign={campaign} campaignImage={campaignImage} />}
+      <Panel>
+        <h2 className="text-lg font-black text-ink">Report Inputs</h2>
+        <BulletList
+          emptyText=""
+          values={[
+            `${analysis.companyName || "Client"} business profile`,
+            `${analysis.seoAnalysis.recommendedFixes.length} SEO fixes`,
+            `${analysis.aiSeoAnalysis.recommendedFixes.length} AI visibility fixes`,
+            ppcPlan ? `${ppcPlan.recommendedLaunchPlan.length} Revenue Engine launch campaigns` : "Revenue Engine not generated yet",
+          ]}
+        />
+      </Panel>
+    </div>
+  );
+}
+
+function SettingsSection({
+  analysis,
+  onListChange,
+  onUpdate,
+}: {
+  analysis: BusinessProfile;
+  onListChange: (
+    field: "services" | "serviceAreas" | "differentiators" | "topGrowthOpportunities",
+    value: string,
+  ) => void;
+  onUpdate: <K extends keyof BusinessProfile>(field: K, value: BusinessProfile[K]) => void;
+}) {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+      <ProfileEditor analysis={analysis} onListChange={onListChange} onUpdate={onUpdate} />
+      <Panel>
+        <h2 className="flex items-center gap-2 text-lg font-black text-ink">
+          <Settings className="size-5" aria-hidden="true" />
+          Platform Settings
+        </h2>
+        <BulletList
+          emptyText=""
+          values={[
+            "CRM: HighLevel-ready workspace",
+            "Website platform: detected during onboarding or entered manually",
+            "Future-ready: multiple industries, historical reports, versioned audits, recurring scans",
+          ]}
+        />
+      </Panel>
+    </div>
+  );
+}
+
+function OnboardingPreview() {
+  const steps = [
+    "Business Information",
+    "Access Checklist",
+    "Run Firecrawl",
+    "Generate Business Profile",
+    "Run Revenue Engine",
+    "Review Recommendations",
+    "Deploy Assets",
+  ];
+
+  return (
+    <div className="mt-7 grid gap-2">
+      {steps.map((step, index) => (
+        <div className="flex items-center gap-3 text-sm font-semibold text-graphite" key={step}>
+          <span className="flex size-7 items-center justify-center rounded-md bg-white text-xs font-black text-copper shadow-sm">
+            {index + 1}
+          </span>
+          {step}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ScoreGrid({ analysis, ppcPlan }: { analysis: BusinessProfile; ppcPlan: PpcPlan | null }) {
+  const scores = [
+    ["Overall Growth", Math.round(analysis.growthScore)],
+    ["Revenue", ppcPlan ? Math.round(avg(ppcPlan.campaignReadiness.map((item) => item.priorityScore))) : 0],
+    ["AI Visibility", analysis.aiSeoAnalysis.score],
+    ["SEO", analysis.seoAnalysis.score],
+    ["Google Ads", ppcPlan ? Math.round(avg(ppcPlan.recommendedLaunchPlan.map((item) => item.priorityScore))) : 0],
+    ["GBP", analysis.aiSeoAnalysis.citationOpportunities.length ? 70 : 45],
+    ["HighLevel", 25],
+  ];
+
+  return (
+    <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {scores.map(([label, score]) => (
+        <div className="rounded-md border border-ink/10 bg-frost p-3" key={label}>
+          <p className="text-2xl font-black text-ink">{score}</p>
+          <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-graphite/60">{label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HealthBadge({ color, score }: { color: "Green" | "Yellow" | "Red"; score: number }) {
+  const className =
+    color === "Green"
+      ? "border-green-200 bg-green-50 text-green-700"
+      : color === "Yellow"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-red-200 bg-red-50 text-red-700";
+
+  return (
+    <div className={`rounded-md border px-4 py-3 text-center ${className}`}>
+      <p className="text-2xl font-black leading-none">{score}</p>
+      <p className="mt-1 text-xs font-black uppercase tracking-[0.12em]">{color}</p>
+    </div>
+  );
+}
+
+function TaskCenter({ analysis, ppcPlan }: { analysis: BusinessProfile; ppcPlan: PpcPlan | null }) {
+  const tasks = buildTasks(analysis, ppcPlan);
+
+  return (
+    <Panel>
+      <h2 className="flex items-center gap-2 text-lg font-black text-ink">
+        <ListChecks className="size-5" aria-hidden="true" />
+        Task Center
+      </h2>
+      <div className="mt-4 grid gap-3">
+        {tasks.map((task) => (
+          <article className="rounded-md border border-ink/10 bg-frost p-3" key={task.title}>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-black text-ink">{task.title}</p>
+              <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">{task.priority}</span>
+            </div>
+            <p className="mt-2 text-sm leading-5 text-graphite/70">{task.detail}</p>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function ClientTimeline({ ppcPlan }: { ppcPlan: PpcPlan | null }) {
+  const steps = [
+    ["Website Imported", true],
+    ["SEO Audit Complete", true],
+    ["Revenue Engine Complete", Boolean(ppcPlan)],
+    ["Google Ads Generated", Boolean(ppcPlan?.recommendedLaunchPlan.length)],
+    ["HighLevel Connected", false],
+    ["Campaign Launched", false],
+    ["Month 1 Report", false],
+  ] as const;
+
+  return (
+    <Panel>
+      <h2 className="text-lg font-black text-ink">Client Timeline</h2>
+      <div className="mt-5 space-y-3">
+        {steps.map(([label, complete]) => (
+          <div className="flex items-start gap-3" key={label}>
+            <CheckCircle2 className={`mt-0.5 size-5 ${complete ? "text-green-600" : "text-graphite/25"}`} aria-hidden="true" />
+            <div>
+              <p className="text-sm font-black text-ink">{label}</p>
+              <p className="text-sm text-graphite/65">{complete ? "Complete" : "Pending"}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function ActionRow({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      className="flex items-center justify-between rounded-md border border-ink/10 bg-frost px-4 py-3 text-left text-sm font-black text-ink transition hover:border-flame/40 hover:bg-flame/5"
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+      <Rocket className="size-4 text-copper" aria-hidden="true" />
+    </button>
+  );
+}
+
+function DeployCard({ title, items }: { title: string; items: Array<{ label: string; status: "Ready" | "Needs Work"; detail: string }> }) {
+  return (
+    <Panel>
+      <h3 className="text-lg font-black text-ink">{title}</h3>
+      <div className="mt-4 grid gap-3">
+        {items.map((item) => (
+          <div className="rounded-md border border-ink/10 bg-frost p-3" key={item.label}>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-black text-ink">{item.label}</p>
+              <StatusBadge status={item.status} />
+            </div>
+            <p className="mt-2 text-sm leading-5 text-graphite/70">{item.detail}</p>
+          </div>
+        ))}
+      </div>
     </Panel>
   );
 }
@@ -1662,6 +2164,97 @@ function buildReadinessItems(profile: BusinessProfile): ReadinessItem[] {
         : "Add homeowner FAQs and trust details so AI tools can understand the business.",
     },
   ];
+}
+
+function buildClientHealth(analysis: BusinessProfile, ppcPlan: PpcPlan | null) {
+  const tracking = analysis.phone ? 70 : 25;
+  const seo = analysis.seoAnalysis.score;
+  const ppc = ppcPlan ? avg(ppcPlan.recommendedLaunchPlan.map((item) => item.priorityScore)) : 25;
+  const gbp = analysis.aiSeoAnalysis.citationOpportunities.length ? 70 : 45;
+  const crm = 25;
+  const website = analysis.growthScore;
+  const ai = analysis.aiSeoAnalysis.score;
+  const score = Math.round(avg([tracking, seo, ppc, gbp, crm, website, ai]));
+  const color = score >= 75 ? "Green" : score >= 50 ? "Yellow" : "Red";
+  return { score, color: color as "Green" | "Yellow" | "Red" };
+}
+
+function buildTasks(analysis: BusinessProfile, ppcPlan: PpcPlan | null) {
+  return [
+    { title: "Install GTM", priority: "High", detail: "Confirm Google Tag Manager is installed before launch." },
+    { title: "Connect HighLevel", priority: "High", detail: "Connect forms, call tracking, pipeline stages, and automations." },
+    { title: "Verify Google Ads", priority: "High", detail: ppcPlan ? "Use Revenue Engine exports for campaign setup." : "Run Revenue Engine first." },
+    { title: "Create Landing Page", priority: "Medium", detail: ppcPlan?.report.missingLandingPages[0] || "Create pages for missing revenue campaigns." },
+    { title: "Improve Meta Titles", priority: "Medium", detail: analysis.seoAnalysis.keywordUpdates[0]?.suggestedText || "Use service + city phrasing on priority pages." },
+    { title: "Review Search Terms", priority: "Medium", detail: "Review search terms twice weekly after launch." },
+    { title: "Publish GBP Post", priority: "Low", detail: "Use weekly service, financing, maintenance, or seasonal content." },
+  ];
+}
+
+function googleAdsDeployItems(ppcPlan: PpcPlan | null) {
+  return [
+    { label: "Generate Campaign", status: ppcPlan ? "Ready" as const : "Needs Work" as const, detail: ppcPlan ? `${ppcPlan.recommendedLaunchPlan.length} launch campaigns ready.` : "Run Revenue Engine first." },
+    { label: "Download Google Ads Editor CSV", status: ppcPlan ? "Ready" as const : "Needs Work" as const, detail: "Campaign structure export." },
+    { label: "Download Keyword CSV", status: ppcPlan ? "Ready" as const : "Needs Work" as const, detail: "Exact and phrase match keywords." },
+    { label: "Download Negative Keywords", status: ppcPlan ? "Ready" as const : "Needs Work" as const, detail: "Starter HVAC negative list." },
+    { label: "Download Assets", status: ppcPlan ? "Ready" as const : "Needs Work" as const, detail: "RSAs, callouts, sitelinks, and snippets." },
+  ];
+}
+
+function landingPageDeployItems(ppcPlan: PpcPlan | null) {
+  return [
+    { label: "Generate Landing Pages", status: ppcPlan ? "Ready" as const : "Needs Work" as const, detail: "Use missing page recommendations." },
+    { label: "Export HTML", status: "Needs Work" as const, detail: "Next phase: render page files from recommendations." },
+    { label: "Export React Components", status: "Needs Work" as const, detail: "Next phase: componentized landing-page output." },
+  ];
+}
+
+function seoDeployItems(analysis: BusinessProfile) {
+  return [
+    { label: "Generate Meta Titles", status: analysis.seoAnalysis.keywordUpdates.length ? "Ready" as const : "Needs Work" as const, detail: `${analysis.seoAnalysis.keywordUpdates.length} keyword updates found.` },
+    { label: "Generate Meta Descriptions", status: analysis.seoAnalysis.metaDescription ? "Ready" as const : "Needs Work" as const, detail: "Use audit preview and page recommendations." },
+    { label: "Generate Schema", status: "Ready" as const, detail: "Business, service, FAQ, review, and local details." },
+    { label: "Generate City Pages", status: analysis.serviceAreas.length ? "Ready" as const : "Needs Work" as const, detail: `${analysis.serviceAreas.length} service areas detected.` },
+  ];
+}
+
+function gbpDeployItems(analysis: BusinessProfile) {
+  return [
+    { label: "Generate Service List", status: analysis.services.length ? "Ready" as const : "Needs Work" as const, detail: `${analysis.services.length} services detected.` },
+    { label: "Generate Description", status: analysis.brandTone ? "Ready" as const : "Needs Work" as const, detail: "Use brand tone and differentiators." },
+    { label: "Generate Q&A", status: analysis.aiSeoAnalysis.faqQuestions.length ? "Ready" as const : "Needs Work" as const, detail: `${analysis.aiSeoAnalysis.faqQuestions.length} homeowner questions.` },
+    { label: "Generate Weekly Posts", status: "Ready" as const, detail: "Use service, financing, maintenance, and seasonal content." },
+  ];
+}
+
+function highLevelDeployItems() {
+  return [
+    { label: "Generate Snapshot Checklist", status: "Ready" as const, detail: "Tracking, forms, pipeline, automations, and reporting." },
+    { label: "Pipeline Recommendations", status: "Ready" as const, detail: "New lead, estimate set, sold, lost, maintenance nurture." },
+    { label: "Automation Recommendations", status: "Ready" as const, detail: "Speed-to-lead, missed-call text back, and estimate follow-up." },
+  ];
+}
+
+function reportDeployItems(campaign: CampaignOutput | null) {
+  return [
+    { label: "Launch Report", status: "Ready" as const, detail: "Workspace summary, priorities, and implementation checklist." },
+    { label: "Weekly Report", status: campaign ? "Ready" as const : "Needs Work" as const, detail: "Use generated campaign and Revenue Engine data." },
+    { label: "Monthly Report", status: "Ready" as const, detail: "Executive summary with SEO, AI, PPC, and task status." },
+    { label: "Quarterly Review", status: "Ready" as const, detail: "Growth review, budget shifts, and next campaign bets." },
+  ];
+}
+
+function nextRecommendedAction(analysis: BusinessProfile, ppcPlan: PpcPlan | null) {
+  if (!ppcPlan) return "Run the Revenue Engine to score campaign readiness and generate launch assets.";
+  const missingPage = ppcPlan.report.missingLandingPages.find((item) => !item.startsWith("No major"));
+  if (missingPage) return `Create or improve the landing page for ${missingPage}.`;
+  if (!analysis.phone) return "Add a verified phone number before launching paid campaigns.";
+  return "Move to Deploy Center and export Google Ads, SEO, GBP, HighLevel, and reporting assets.";
+}
+
+function avg(values: number[]) {
+  const cleanValues = values.filter((value) => Number.isFinite(value));
+  return cleanValues.length ? cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length : 0;
 }
 
 function linesToList(value: string) {
