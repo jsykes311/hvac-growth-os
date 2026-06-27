@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   Bot,
+  Brain,
   BriefcaseBusiness,
   ChartNoAxesCombined,
   CheckCircle2,
@@ -26,7 +27,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import type {
   AnalyzedPage,
   BusinessProfile,
@@ -43,6 +44,7 @@ type PlatformSection =
   | "website-audit"
   | "seo"
   | "ai-visibility"
+  | "ai-cmo"
   | "revenue-engine"
   | "marketing-intelligence"
   | "competitor-intelligence"
@@ -55,6 +57,25 @@ type ReadinessItem = {
   complete: boolean;
   detail: string;
   label: string;
+};
+type IntelligenceSnapshot = {
+  id: string;
+  date: string;
+  seoScore: number;
+  aiVisibilityScore: number;
+  growthScore: number;
+  revenueScore: number;
+  googleAdsScore: number;
+  gbpScore: number;
+  highLevelScore: number;
+  demandIndex: number;
+  topService: string;
+  topCity: string;
+  weather: string;
+  forecast: string;
+  recommendations: string[];
+  actionsTaken: string[];
+  notes: string;
 };
 
 const CAMPAIGN_GOALS = [
@@ -70,6 +91,7 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "website-audit", label: "Website Audit" },
   { id: "seo", label: "SEO" },
   { id: "ai-visibility", label: "AI Visibility" },
+  { id: "ai-cmo", label: "AI CMO" },
   { id: "revenue-engine", label: "Revenue Engine" },
   { id: "marketing-intelligence", label: "Marketing Intelligence" },
   { id: "competitor-intelligence", label: "Competitor Intelligence" },
@@ -442,6 +464,10 @@ function ResultsView({
       {activeSection === "seo" && <SeoAnalysisPanel analysis={analysis} />}
       {activeSection === "ai-visibility" && <AiSeoAnalysisPanel analysis={analysis} />}
 
+      {activeSection === "ai-cmo" && (
+        <AiCmoSection analysis={analysis} contractorUrl={contractorUrl} ppcPlan={ppcPlan} />
+      )}
+
       {activeSection === "revenue-engine" && (
         <PpcPlannerPanel
           analysis={analysis}
@@ -629,6 +655,7 @@ function DashboardSection({
           </h2>
           <div className="mt-4 grid gap-3">
             <ActionRow label="Review Website Audit" onClick={() => setActiveSection("website-audit")} />
+            <ActionRow label="Read AI CMO Daily Brief" onClick={() => setActiveSection("ai-cmo")} />
             <ActionRow label="Build Revenue Engine" onClick={() => setActiveSection("revenue-engine")} />
             <ActionRow label="Check Today's Marketing Signals" onClick={() => setActiveSection("marketing-intelligence")} />
             <ActionRow label="Review Competitor Gaps" onClick={() => setActiveSection("competitor-intelligence")} />
@@ -823,6 +850,199 @@ function DeployCenter({
         <DeployCard title="HighLevel" items={highLevelDeployItems()} />
         <DeployCard title="Reporting" items={reportDeployItems(campaign)} />
       </div>
+    </div>
+  );
+}
+
+function AiCmoSection({
+  analysis,
+  contractorUrl,
+  ppcPlan,
+}: {
+  analysis: BusinessProfile;
+  contractorUrl: string;
+  ppcPlan: PpcPlan | null;
+}) {
+  const memoryKey = intelligenceMemoryKey(analysis, contractorUrl);
+  const [memory, setMemory] = useState<IntelligenceSnapshot[]>([]);
+  const [clientNotes, setClientNotes] = useState("");
+  const brief = buildAiCmoBrief(analysis, contractorUrl, ppcPlan, memory);
+  const currentSnapshot = createIntelligenceSnapshot(analysis, ppcPlan, brief, clientNotes);
+  const htmlReport = buildAiCmoHtmlReport(analysis, contractorUrl, brief, memory);
+  const summary = buildAiCmoClientSummary(analysis, brief);
+
+  useEffect(() => {
+    const storedMemory = loadIntelligenceMemory(memoryKey);
+    if (storedMemory.length) {
+      setMemory(storedMemory);
+      return;
+    }
+    const baselineBrief = buildAiCmoBrief(analysis, contractorUrl, ppcPlan, []);
+    const baselineSnapshot = createIntelligenceSnapshot(analysis, ppcPlan, baselineBrief, "Initial intelligence baseline saved from current audit.");
+    saveIntelligenceMemory(memoryKey, [baselineSnapshot]);
+    setMemory([baselineSnapshot]);
+  }, [analysis, contractorUrl, memoryKey, ppcPlan]);
+
+  function saveSnapshot() {
+    const withoutToday = memory.filter((snapshot) => snapshot.date !== currentSnapshot.date);
+    const nextMemory = [currentSnapshot, ...withoutToday].slice(0, 24);
+    saveIntelligenceMemory(memoryKey, nextMemory);
+    setMemory(nextMemory);
+  }
+
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+          <div>
+            <Eyebrow>Daily Marketing Brief</Eyebrow>
+            <h2 className="mt-2 flex items-center gap-2 text-3xl font-black text-ink">
+              <Brain className="size-7" aria-hidden="true" />
+              AI CMO
+            </h2>
+            <p className="mt-3 max-w-4xl text-base leading-7 text-graphite">
+              {brief.headline}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <ScoreBadge label="Today" score={brief.todayScore} />
+            <ScoreBadge label="Memory" score={brief.memoryScore} />
+          </div>
+        </div>
+      </Panel>
+
+      <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+        <Panel>
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+              <Target className="size-5" aria-hidden="true" />
+              Top 5 Actions Today
+            </h3>
+            <Button onClick={saveSnapshot} variant="secondary">Save Today&apos;s Snapshot</Button>
+          </div>
+          <div className="mt-4 grid gap-3">
+            {brief.actions.map((action) => (
+              <article className="rounded-md border border-ink/10 bg-frost p-4" key={action.action}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <span className={`rounded-md px-2 py-1 text-xs font-black ${priorityClass(action.priority)}`}>{action.priority}</span>
+                    <h4 className="mt-3 text-sm font-black text-ink">{action.action}</h4>
+                  </div>
+                  <ConfidenceBadge score={action.confidence} />
+                </div>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{action.reason}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">{action.impact}</span>
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-graphite">{action.relatedModule}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </Panel>
+
+        <div className="grid gap-5">
+          <Panel>
+            <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+              <CloudSun className="size-5" aria-hidden="true" />
+              Demand Signals
+            </h3>
+            <dl className="mt-4 grid gap-4 text-sm">
+              {brief.demandSignals.map((item) => (
+                <InfoRow key={item.label} label={item.label} value={item.value} />
+              ))}
+            </dl>
+          </Panel>
+
+          <Panel>
+            <h3 className="text-lg font-black text-ink">Tracking & Operations Alerts</h3>
+            <div className="mt-4 grid gap-3">
+              {brief.operationsAlerts.map((alert) => (
+                <article className="rounded-md border border-ink/10 bg-frost p-3" key={alert.label}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-black text-ink">{alert.label}</p>
+                    <StatusBadge status={alert.status} />
+                  </div>
+                  <p className="mt-2 text-sm leading-5 text-graphite/70">{alert.detail}</p>
+                </article>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <RecommendationPanel title="Campaign Recommendations" values={brief.campaignRecommendations} />
+        <RecommendationPanel title="Content Recommendations" values={brief.contentRecommendations} />
+        <RecommendationPanel title="Competitive Alerts" values={brief.competitiveAlerts} />
+        <RecommendationPanel title="Predictions" values={brief.predictions} />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Intelligence Memory</h3>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            This client has {memory.length} saved observation{memory.length === 1 ? "" : "s"}. Future versions can move this same history into persistent client workspaces.
+          </p>
+          <div className="mt-4 grid gap-3">
+            <TextField label="Client Notes / Actions Taken" value={clientNotes} onChange={setClientNotes} />
+            {memory.slice(0, 4).map((snapshot) => (
+              <article className="rounded-md border border-ink/10 bg-frost p-3" key={snapshot.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-ink">{new Date(snapshot.date).toLocaleDateString()}</p>
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">{snapshot.demandIndex} demand</span>
+                </div>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">
+                  {snapshot.topService} in {snapshot.topCity}. SEO {snapshot.seoScore}, AI {snapshot.aiVisibilityScore}, Revenue {snapshot.revenueScore}.
+                </p>
+              </article>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Lessons Learned</h3>
+          <div className="mt-4 grid gap-3">
+            {brief.lessonsLearned.map((lesson) => (
+              <article className="rounded-md border border-ink/10 bg-frost p-4" key={lesson.label}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-black text-ink">{lesson.label}</p>
+                  <ConfidenceBadge score={lesson.confidence} />
+                </div>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{lesson.detail}</p>
+              </article>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+              <Download className="size-5" aria-hidden="true" />
+              Daily Brief Export
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-graphite/70">
+              Recommendations only. AI CMO does not change budgets or campaigns automatically.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-ink/15 bg-white px-3 text-sm font-semibold text-ink shadow-sm transition hover:bg-frost" download="ai-cmo-daily-brief.html" href={textDataUrl(htmlReport, "text/html")}>
+              <Download className="size-4" aria-hidden="true" />
+              HTML Report
+            </a>
+            <a className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-ink/15 bg-white px-3 text-sm font-semibold text-ink shadow-sm transition hover:bg-frost" download="ai-cmo-pdf-ready-report.html" href={textDataUrl(htmlReport, "text/html")}>
+              <Download className="size-4" aria-hidden="true" />
+              PDF-Ready Report
+            </a>
+          </div>
+        </div>
+        <textarea
+          className="mt-4 min-h-32 w-full rounded-md border border-ink/15 bg-frost px-3 py-3 text-sm leading-6 text-ink outline-none"
+          readOnly
+          value={summary}
+        />
+      </Panel>
     </div>
   );
 }
@@ -2530,6 +2750,322 @@ function reportDeployItems(campaign: CampaignOutput | null) {
     { label: "Monthly Report", status: "Ready" as const, detail: "Executive summary with SEO, AI, PPC, and task status." },
     { label: "Quarterly Review", status: "Ready" as const, detail: "Growth review, budget shifts, and next campaign bets." },
   ];
+}
+
+function buildAiCmoBrief(
+  analysis: BusinessProfile,
+  contractorUrl: string,
+  ppcPlan: PpcPlan | null,
+  memory: IntelligenceSnapshot[],
+) {
+  const marketing = buildMarketingIntelligence(analysis, ppcPlan, defaultMarketingSignals(analysis, ppcPlan));
+  const competitor = buildCompetitorIntelligence(analysis, contractorUrl, ppcPlan, {
+    competitorUrls: [],
+    searchTerms: [`AC repair ${analysis.serviceAreas[0] || "Lawrenceville"} GA`],
+    limit: 4,
+  });
+  const revenueScore = ppcPlan ? Math.round(avg(ppcPlan.campaignReadiness.map((item) => item.priorityScore))) : 35;
+  const trackingScore = Math.round(avg([
+    analysis.phone ? 80 : 25,
+    ppcPlan ? 72 : 30,
+    analysis.aiSeoAnalysis.citationOpportunities.length ? 68 : 42,
+    25,
+  ]));
+  const todayScore = clampScore(Math.round(avg([
+    marketing.hvacDemandIndex,
+    analysis.seoAnalysis.score,
+    analysis.aiSeoAnalysis.score,
+    revenueScore,
+    trackingScore,
+  ])));
+  const memoryScore = clampScore(35 + Math.min(memory.length * 12, 45) + (memory.length >= 2 ? 12 : 0));
+  const topService = marketing.servicesToPromote[0]?.label || "AC Repair";
+  const topCity = marketing.citiesToPrioritize[0]?.label || analysis.serviceAreas[0] || "Lawrenceville";
+  const previous = memory[0];
+  const older = memory[1];
+  const historicalConfidence = memory.length >= 3 ? 16 : memory.length >= 2 ? 10 : 4;
+  const baseConfidence = clampScore(62 + historicalConfidence + (ppcPlan ? 8 : 0) + (analysis.serviceAreas.length ? 5 : 0));
+  const headline = `Today's best opportunity is ${topService} in ${topCity} due to ${marketing.hvacDemandIndex >= 78 ? "high" : "moderate"} HVAC demand, seasonal urgency, and ${ppcPlan ? "active campaign readiness" : "a clear need to finish campaign setup"}.`;
+
+  const missingPage = ppcPlan?.report.missingLandingPages.find((item) => !item.startsWith("No major"));
+  const campaignToPromote = ppcPlan?.recommendedLaunchPlan[0]?.campaign || `Search | ${topService} | ${topCity}`;
+  const actionConfidence = (offset = 0) => clampScore(baseConfidence + offset);
+  const actions = [
+    {
+      priority: "High",
+      action: `Increase ${topService} budget by 15% for ${topCity}`,
+      reason: "Demand signals and seasonal intent favor urgent repair traffic today. Treat this as a recommendation for review, not an automatic budget change.",
+      impact: "More high-intent calls",
+      confidence: actionConfidence(8),
+      relatedModule: "Revenue Engine",
+    },
+    {
+      priority: "High",
+      action: ppcPlan ? "Review search terms and add one negative keyword" : "Build the Revenue Engine before scaling paid search",
+      reason: ppcPlan ? "Cleaning search terms protects spend when demand rises." : "Campaign readiness needs to be scored before budget decisions are useful.",
+      impact: ppcPlan ? "Lower wasted spend" : "Launch readiness",
+      confidence: actionConfidence(4),
+      relatedModule: "Google Ads",
+    },
+    {
+      priority: "Medium",
+      action: `Publish a cooling tip for ${topCity}`,
+      reason: "Weather and seasonality support practical homeowner content that can feed Facebook and GBP engagement.",
+      impact: "Local engagement lift",
+      confidence: actionConfidence(0),
+      relatedModule: "Marketing Intelligence",
+    },
+    {
+      priority: "Medium",
+      action: analysis.maintenancePlanMentioned ? "Send maintenance email to existing customers" : "Draft maintenance offer before emailing customers",
+      reason: "Maintenance messaging works best when the offer is clear and the CRM list is segmented.",
+      impact: "Repeat lead volume",
+      confidence: actionConfidence(-3),
+      relatedModule: "HighLevel / CRM",
+    },
+    {
+      priority: missingPage ? "High" : "Medium",
+      action: missingPage ? `Create landing page for ${missingPage}` : "Request reviews from recent completed jobs",
+      reason: missingPage ? "Paid clicks convert better when service-specific landing pages match intent." : "Fresh reviews strengthen paid, organic, and GBP trust.",
+      impact: missingPage ? "Conversion rate lift" : "Trust signal lift",
+      confidence: actionConfidence(2),
+      relatedModule: missingPage ? "Deploy Center" : "Google Business Profile",
+    },
+  ];
+
+  return {
+    headline,
+    todayScore,
+    memoryScore,
+    actions,
+    demandSignals: [
+      { label: "Temperature", value: "Planning input: 94°F" },
+      { label: "Forecast", value: defaultMarketingSignals(analysis, ppcPlan).forecast },
+      { label: "Heat Index / Cold Snap", value: marketing.hvacDemandIndex >= 78 ? "Elevated cooling stress" : "Moderate weather-driven demand" },
+      { label: "Seasonality", value: currentHvacSeason() },
+      { label: "HVAC Demand Level", value: `${marketing.hvacDemandIndex}/100` },
+      { label: "Most Likely To Convert", value: `${topService} in ${topCity}` },
+    ],
+    campaignRecommendations: [
+      { label: "Promote", detail: `${campaignToPromote}. Use exact and phrase match terms tied to ${topCity}.`, confidence: actionConfidence(7) },
+      { label: "Pause", detail: "Pause low-intent or unsupported campaigns until tracking and landing pages are ready.", confidence: actionConfidence(-2) },
+      { label: "Budget", detail: "Review a 15% shift toward the highest-readiness repair campaign. Do not apply automatically.", confidence: actionConfidence(3) },
+      { label: "Cities", detail: marketing.citiesToPrioritize.slice(0, 3).map((city) => city.label).join(", "), confidence: actionConfidence(1) },
+    ],
+    contentRecommendations: [
+      { label: "Social Post", detail: `Cooling tip for ${topCity}: signs an AC system needs service before the hottest part of the day.`, confidence: actionConfidence(0) },
+      { label: "GBP Post", detail: `Post a service-area update for ${topService} with a call CTA and verified trust signals.`, confidence: actionConfidence(1) },
+      { label: "Email Subject", detail: `${topCity}: Is your AC ready for this week?`, confidence: actionConfidence(-1) },
+      { label: "Short Video / Reel", detail: "Technician explains three AC warning signs homeowners should not ignore.", confidence: actionConfidence(-4) },
+    ],
+    competitiveAlerts: [
+      competitor.offerComparison[0],
+      competitor.messagingGaps[0],
+      competitor.promotionsToTest[0],
+    ],
+    operationsAlerts: [
+      { label: "Google Ads Tag", status: ppcPlan ? "Needs Work" as const : "Not Recommended" as const, detail: ppcPlan ? "Verify conversion tag before approving budget increases." : "Generate campaigns first, then verify tags." },
+      { label: "HighLevel Connected", status: "Needs Work" as const, detail: "CRM and pipeline metrics are not connected in this workspace yet." },
+      { label: "Call Tracking", status: analysis.phone ? "Needs Work" as const : "Not Recommended" as const, detail: analysis.phone ? "Phone is detected; confirm tracked numbers and source attribution." : "Add a phone number before campaign launch." },
+      { label: "Form Tracking", status: "Needs Work" as const, detail: "Confirm form submissions pass source, campaign, and service intent into CRM." },
+      { label: "GBP Linked", status: analysis.aiSeoAnalysis.citationOpportunities.length ? "Needs Work" as const : "Not Recommended" as const, detail: "Link GBP data to validate post, call, direction, and review trends." },
+    ],
+    lessonsLearned: buildLessonsLearned(memory, analysis, marketing.hvacDemandIndex, previous, older),
+    predictions: buildPredictions(memory, topService, topCity, marketing.hvacDemandIndex, baseConfidence),
+  };
+}
+
+function buildLessonsLearned(
+  memory: IntelligenceSnapshot[],
+  analysis: BusinessProfile,
+  demandIndex: number,
+  previous?: IntelligenceSnapshot,
+  older?: IntelligenceSnapshot,
+) {
+  if (!previous || !older) {
+    return [
+      {
+        label: "Baseline memory started",
+        detail: "AI CMO saved the first client snapshot. Future briefs will compare SEO, AI visibility, demand, campaign readiness, notes, and actions taken against this baseline.",
+        confidence: 48,
+      },
+      {
+        label: "Repair demand is the first learning focus",
+        detail: `${demandIndex >= 75 ? "Current demand is high" : "Current demand is moderate"}, so the system will watch whether repair-focused actions produce stronger future scores.`,
+        confidence: 54,
+      },
+      {
+        label: "Tracking gaps limit certainty",
+        detail: "Historical CTR, CPC, conversion rate, and HighLevel pipeline metrics are not connected yet, so recommendation confidence is intentionally conservative.",
+        confidence: 52,
+      },
+    ];
+  }
+
+  return [
+    {
+      label: "What changed",
+      detail: `SEO moved ${formatDelta(older.seoScore, previous.seoScore)}, AI visibility moved ${formatDelta(older.aiVisibilityScore, previous.aiVisibilityScore)}, and demand moved ${formatDelta(older.demandIndex, previous.demandIndex)} since the prior saved snapshot.`,
+      confidence: 72,
+    },
+    {
+      label: "What worked",
+      detail: previous.recommendations.length ? `The last brief emphasized ${previous.recommendations[0]}. Repeat if lead quality improved.` : "No completed actions were saved yet. Add notes after each client review.",
+      confidence: 66,
+    },
+    {
+      label: "What to stop",
+      detail: analysis.phone ? "Stop scaling campaigns without verified call/form attribution; budget decisions need source-level lead quality." : "Stop campaign launch work until a verified phone path is added.",
+      confidence: 70,
+    },
+    {
+      label: "What to repeat",
+      detail: "Repeat service + city messaging when demand rises; local phrasing is one of the clearest reusable patterns for HVAC search and social.",
+      confidence: 68,
+    },
+  ];
+}
+
+function buildPredictions(
+  memory: IntelligenceSnapshot[],
+  topService: string,
+  topCity: string,
+  demandIndex: number,
+  baseConfidence: number,
+) {
+  const hasHistory = memory.length >= 2;
+  return [
+    {
+      label: "Weekend heat opportunity",
+      detail: `${demandIndex >= 78 ? "Forecast demand is high" : "Forecast demand is building"}. Based on current conditions${hasHistory ? " and saved client history" : ""}, review a 15-20% ${topService} budget increase for ${topCity}.`,
+      confidence: clampScore(baseConfidence + (hasHistory ? 6 : -4)),
+    },
+    {
+      label: "Monday repair call pattern",
+      detail: hasHistory ? "Watch Monday call volume after weekend heat; saved demand snapshots suggest repair intent should be reviewed early in the week." : "Start tracking weekday lead volume so AI CMO can learn whether Mondays outperform after hot weekends.",
+      confidence: clampScore(baseConfidence - 8),
+    },
+    {
+      label: "Two-week replacement window",
+      detail: "If repair volume rises and financing is verified, the next two weeks are a good period to test replacement consultation content.",
+      confidence: clampScore(baseConfidence - 5),
+    },
+  ];
+}
+
+function createIntelligenceSnapshot(
+  analysis: BusinessProfile,
+  ppcPlan: PpcPlan | null,
+  brief: ReturnType<typeof buildAiCmoBrief>,
+  notes: string,
+): IntelligenceSnapshot {
+  const revenueScore = ppcPlan ? Math.round(avg(ppcPlan.campaignReadiness.map((item) => item.priorityScore))) : 35;
+  return {
+    id: `${Date.now()}`,
+    date: new Date().toISOString(),
+    seoScore: analysis.seoAnalysis.score,
+    aiVisibilityScore: analysis.aiSeoAnalysis.score,
+    growthScore: Math.round(analysis.growthScore),
+    revenueScore,
+    googleAdsScore: ppcPlan ? Math.round(avg(ppcPlan.recommendedLaunchPlan.map((item) => item.priorityScore))) : 30,
+    gbpScore: analysis.aiSeoAnalysis.citationOpportunities.length ? 68 : 42,
+    highLevelScore: 25,
+    demandIndex: Number(brief.demandSignals.find((item) => item.label === "HVAC Demand Level")?.value.split("/")[0] ?? 50),
+    topService: brief.demandSignals.find((item) => item.label === "Most Likely To Convert")?.value.split(" in ")[0] ?? "AC Repair",
+    topCity: brief.demandSignals.find((item) => item.label === "Most Likely To Convert")?.value.split(" in ")[1] ?? "Primary market",
+    weather: brief.demandSignals.find((item) => item.label === "Temperature")?.value ?? "Not connected",
+    forecast: brief.demandSignals.find((item) => item.label === "Forecast")?.value ?? "Not connected",
+    recommendations: brief.actions.map((action) => action.action),
+    actionsTaken: notes ? linesToList(notes) : [],
+    notes,
+  };
+}
+
+function loadIntelligenceMemory(key: string): IntelligenceSnapshot[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as IntelligenceSnapshot[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveIntelligenceMemory(key: string, memory: IntelligenceSnapshot[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(memory));
+}
+
+function intelligenceMemoryKey(analysis: BusinessProfile, contractorUrl: string) {
+  return `hvac-growth-os:intelligence-memory:${domainLabel(contractorUrl || analysis.companyName || "client")}`;
+}
+
+function defaultMarketingSignals(analysis: BusinessProfile, ppcPlan: PpcPlan | null) {
+  const city = analysis.serviceAreas[0] || "primary market";
+  return {
+    currentWeather: "Warm, humid, and uncomfortable during peak afternoon hours",
+    forecast: "7-day forecast favors higher cooling demand with scattered storms",
+    seasonality: currentHvacSeason(),
+    googleTrends: `AC repair and HVAC repair interest rising around ${city}`,
+    adsPerformance: ppcPlan ? "Revenue Engine campaigns are ready for launch review" : "Google Ads data not connected yet",
+    searchVolume: "High cooling-season search demand",
+    competitorObservations: "Nearby contractors are pushing repair speed, financing, and maintenance offers",
+    websiteAnalytics: "Service pages and contact paths should be watched for conversion lift",
+    crmLeadVolume: 12,
+    campaignPerformance: "Repair and emergency-intent campaigns should get the first budget tests",
+  };
+}
+
+function buildAiCmoHtmlReport(
+  analysis: BusinessProfile,
+  contractorUrl: string,
+  brief: ReturnType<typeof buildAiCmoBrief>,
+  memory: IntelligenceSnapshot[],
+) {
+  const actionItems = brief.actions.map((action) => `<li><strong>${escapeHtml(action.action)}</strong><br>${escapeHtml(action.reason)} Confidence: ${action.confidence}%.</li>`).join("");
+  const lessons = brief.lessonsLearned.map((lesson) => `<li><strong>${escapeHtml(lesson.label)}</strong><br>${escapeHtml(lesson.detail)}</li>`).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>AI CMO Daily Brief</title><style>body{font-family:Arial,sans-serif;color:#17202a;line-height:1.5;margin:40px;max-width:900px}h1,h2{margin-bottom:8px}.score{display:inline-block;background:#17202a;color:white;padding:12px 16px;border-radius:8px;margin-right:8px}li{margin:12px 0}.muted{color:#667085}</style></head><body><h1>AI CMO Daily Brief: ${escapeHtml(analysis.companyName || "HVAC Client")}</h1><p class="muted">${escapeHtml(contractorUrl)}</p><p>${escapeHtml(brief.headline)}</p><p><span class="score">Today: ${brief.todayScore}/100</span><span class="score">Memory: ${brief.memoryScore}/100</span></p><h2>Top Actions</h2><ol>${actionItems}</ol><h2>Lessons Learned</h2><ul>${lessons}</ul><h2>Memory</h2><p>${memory.length} saved observation${memory.length === 1 ? "" : "s"}.</p><p class="muted">Planning recommendations only. No budget or campaign changes were applied automatically.</p></body></html>`;
+}
+
+function buildAiCmoClientSummary(analysis: BusinessProfile, brief: ReturnType<typeof buildAiCmoBrief>) {
+  return [
+    `AI CMO Daily Brief for ${analysis.companyName || "the client"}`,
+    brief.headline,
+    `Today's Marketing Score: ${brief.todayScore}/100`,
+    "",
+    "Top actions:",
+    ...brief.actions.map((action, index) => `${index + 1}. ${action.action} (${action.confidence}% confidence) - ${action.reason}`),
+    "",
+    "Important: these are recommendations only. No budget or campaign changes were made automatically.",
+  ].join("\n");
+}
+
+function priorityClass(priority: string) {
+  if (priority === "High") return "bg-red-50 text-red-700 border border-red-200";
+  if (priority === "Medium") return "bg-amber-50 text-amber-700 border border-amber-200";
+  return "bg-green-50 text-green-700 border border-green-200";
+}
+
+function textDataUrl(value: string, mimeType: string) {
+  return `data:${mimeType};charset=utf-8,${encodeURIComponent(value)}`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatDelta(before: number, after: number) {
+  const delta = Math.round(after - before);
+  if (delta > 0) return `up ${delta} points`;
+  if (delta < 0) return `down ${Math.abs(delta)} points`;
+  return "flat";
 }
 
 function currentHvacSeason() {
