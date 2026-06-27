@@ -77,6 +77,20 @@ type IntelligenceSnapshot = {
   actionsTaken: string[];
   notes: string;
 };
+type DecisionStatus = "Pending" | "Approved" | "In Progress" | "Completed" | "Ignored" | "Archived";
+type DecisionRecommendation = {
+  id: string;
+  category: "Revenue" | "SEO" | "Google Ads" | "Google Business Profile" | "Website" | "CRM" | "Social Media" | "Email" | "Brand" | "Competitor";
+  recommendedAction: string;
+  priority: "High" | "Medium" | "Low";
+  expectedImpact: string;
+  estimatedRevenueOpportunity: string;
+  confidenceScore: number;
+  difficulty: "Easy" | "Moderate" | "Hard";
+  estimatedTime: string;
+  dependencies: string[];
+  reasoning: string;
+};
 
 const CAMPAIGN_GOALS = [
   "Book more service calls",
@@ -525,6 +539,13 @@ function ResultsView({
           onUpdate={updateProfileField}
         />
       )}
+
+      <DecisionEngine
+        activeSection={activeSection}
+        analysis={analysis}
+        contractorUrl={contractorUrl}
+        ppcPlan={ppcPlan}
+      />
     </div>
   );
 }
@@ -609,6 +630,141 @@ function PlatformNav({
         ))}
       </div>
     </nav>
+  );
+}
+
+function DecisionEngine({
+  activeSection,
+  analysis,
+  contractorUrl,
+  ppcPlan,
+}: {
+  activeSection: PlatformSection;
+  analysis: BusinessProfile;
+  contractorUrl: string;
+  ppcPlan: PpcPlan | null;
+}) {
+  const decisions = buildDecisionRecommendations(activeSection, analysis, ppcPlan);
+  const storageKey = decisionMemoryKey(analysis, contractorUrl);
+  const [statuses, setStatuses] = useState<Record<string, DecisionStatus>>({});
+  const [outcomes, setOutcomes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const stored = loadDecisionMemory(storageKey);
+    setStatuses(stored.statuses);
+    setOutcomes(stored.outcomes);
+  }, [storageKey]);
+
+  function updateDecision(decision: DecisionRecommendation, status: DecisionStatus, outcome?: string) {
+    const nextStatuses = { ...statuses, [decision.id]: status };
+    const outcomeNote = outcome ?? outcomes[decision.id] ?? "";
+    const nextOutcomes = { ...outcomes, [decision.id]: outcomeNote };
+    saveDecisionMemory(storageKey, {
+      statuses: nextStatuses,
+      outcomes: nextOutcomes,
+      history: [
+        {
+          decision: decision.recommendedAction,
+          date: new Date().toISOString(),
+          status,
+          outcome: outcomeNote,
+          performance: status === "Completed" ? "Awaiting performance comparison in next memory snapshot." : "Decision state updated.",
+        },
+        ...loadDecisionMemory(storageKey).history,
+      ].slice(0, 80),
+    });
+    setStatuses(nextStatuses);
+    setOutcomes(nextOutcomes);
+  }
+
+  const topDecision = decisions[0];
+
+  return (
+    <Panel className="mt-6">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <Eyebrow>Decision Engine</Eyebrow>
+          <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-ink">
+            <Target className="size-6" aria-hidden="true" />
+            Recommended Next Action
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+            If you only have one hour and one marketing dollar today, start here: {topDecision.recommendedAction}
+          </p>
+        </div>
+        <ScoreBadge label="Decision" score={topDecision.confidenceScore} />
+      </div>
+
+      <div className="mt-5 grid gap-4">
+        {decisions.map((decision) => {
+          const status = statuses[decision.id] ?? "Pending";
+          return (
+            <article className="rounded-md border border-ink/10 bg-frost p-4" key={decision.id}>
+              <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-md px-2 py-1 text-xs font-black ${priorityClass(decision.priority)}`}>{decision.priority}</span>
+                    <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">{decision.category}</span>
+                    <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-graphite">{status}</span>
+                  </div>
+                  <h3 className="mt-3 text-base font-black text-ink">{decision.recommendedAction}</h3>
+                  <p className="mt-2 text-sm leading-6 text-graphite/70">{decision.reasoning}</p>
+                </div>
+                <ConfidenceBadge score={decision.confidenceScore} />
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-4">
+                <DecisionMeta label="Impact" value={decision.expectedImpact} />
+                <DecisionMeta label="Revenue" value={decision.estimatedRevenueOpportunity} />
+                <DecisionMeta label="Difficulty" value={decision.difficulty} />
+                <DecisionMeta label="Time" value={decision.estimatedTime} />
+              </div>
+
+              <div className="mt-4 rounded-md bg-white px-3 py-2">
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">Dependencies</p>
+                <p className="mt-1 text-sm leading-5 text-graphite">{decision.dependencies.join(", ") || "None"}</p>
+              </div>
+
+              <textarea
+                className="mt-3 min-h-20 w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-flame focus:ring-4 focus:ring-flame/15"
+                onChange={(event) => setOutcomes({ ...outcomes, [decision.id]: event.target.value })}
+                placeholder="Outcome or performance note, ex: CTR increased 18%, organic traffic increased 24%, no improvement..."
+                value={outcomes[decision.id] ?? ""}
+              />
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <DecisionButton label="Approve" onClick={() => updateDecision(decision, "Approved")} />
+                <DecisionButton label="Dismiss" onClick={() => updateDecision(decision, "Ignored")} />
+                <DecisionButton label="Remind Later" onClick={() => updateDecision(decision, "Pending", "Remind later")} />
+                <DecisionButton label="Already Completed" onClick={() => updateDecision(decision, "Completed")} />
+                <DecisionButton label="Convert To Task" onClick={() => updateDecision(decision, "In Progress", "Converted to task")} />
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+function DecisionMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-ink/10 bg-white p-3">
+      <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">{label}</p>
+      <p className="mt-1 text-sm font-black text-ink">{value}</p>
+    </div>
+  );
+}
+
+function DecisionButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      className="h-9 rounded-md border border-ink/15 bg-white px-3 text-xs font-black text-ink transition hover:bg-flame/5"
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
   );
 }
 
@@ -3475,6 +3631,139 @@ function nextRecommendedAction(analysis: BusinessProfile, ppcPlan: PpcPlan | nul
   if (missingPage) return `Create or improve the landing page for ${missingPage}.`;
   if (!analysis.phone) return "Add a verified phone number before launching paid campaigns.";
   return "Move to Deploy Center and export Google Ads, SEO, GBP, HighLevel, and reporting assets.";
+}
+
+function buildDecisionRecommendations(
+  section: PlatformSection,
+  analysis: BusinessProfile,
+  ppcPlan: PpcPlan | null,
+): DecisionRecommendation[] {
+  const city = analysis.serviceAreas[0] || "primary market";
+  const topCampaign = ppcPlan?.recommendedLaunchPlan[0];
+  const missingPage = ppcPlan?.report.missingLandingPages.find((item) => !item.startsWith("No major"));
+  const revenueScore = ppcPlan ? Math.round(avg(ppcPlan.campaignReadiness.map((item) => item.priorityScore))) : 35;
+  const baseConfidence = clampScore(Math.round(avg([
+    analysis.growthScore,
+    analysis.seoAnalysis.score,
+    analysis.aiSeoAnalysis.score,
+    revenueScore,
+    analysis.serviceAreas.length ? 76 : 48,
+  ])));
+  const annualHigh = "$25k-$75k annual opportunity";
+  const annualMedium = "$10k-$30k annual opportunity";
+  const annualLow = "$2k-$10k annual opportunity";
+  const common = {
+    confidenceScore: baseConfidence,
+    dependencies: ["Verified tracking", "Owner approval"],
+  };
+  const map: Record<PlatformSection, DecisionRecommendation[]> = {
+    dashboard: [
+      decision("dashboard-revenue-engine", "Revenue", "Run or refresh the Revenue Engine", "High", "Creates the campaign launch plan and budget priorities.", annualHigh, baseConfidence, "Moderate", "30 minutes", ["Website scan", "Service areas"], "The dashboard needs one revenue decision before deployment work can be prioritized."),
+      decision("dashboard-tracking", "CRM", "Verify call, form, and HighLevel tracking", "High", "Improves attribution before any spend increase.", annualHigh, baseConfidence - 2, "Moderate", "45 minutes", ["GTM access", "HighLevel access"], "Marketing decisions only get smarter when the platform can compare outcomes against source-level performance."),
+    ],
+    "website-audit": [
+      decision("audit-contact-path", "Website", analysis.phone ? "Confirm tracked phone number is installed" : "Add a verified phone number to the website", "High", "Protects paid and organic lead capture.", annualHigh, baseConfidence, "Easy", "20 minutes", ["Website access"], "The audit cannot become launch-ready without a measurable conversion path."),
+      decision("audit-trust-proof", "Brand", "Add one visible trust proof block to priority service pages", "Medium", "Improves conversion confidence for paid and organic visitors.", annualMedium, baseConfidence - 4, "Easy", "45 minutes", ["Reviews or proof points"], "Detected differentiators should be converted into proof near CTAs."),
+    ],
+    seo: [
+      decision("seo-city-page", "SEO", `Create or improve the ${city} AC repair page`, "High", "Targets high-intent local search demand.", annualHigh, baseConfidence + 4, "Moderate", "2 hours", ["Service details", "Website CMS"], "Service + city pages are the clearest path from SEO analysis to revenue opportunity."),
+      decision("seo-internal-links", "SEO", "Add internal links from homepage and service pages to priority city pages", "Medium", "Helps search engines understand local service relevance.", annualMedium, baseConfidence, "Easy", "45 minutes", ["CMS access"], "Internal linking turns page recommendations into a crawlable local SEO structure."),
+    ],
+    "ai-visibility": [
+      decision("ai-faq-schema", "SEO", "Publish FAQ content and schema for top homeowner questions", "High", "Improves AI search and answer-engine readiness.", annualMedium, baseConfidence + 2, "Moderate", "90 minutes", ["FAQ answers", "Schema access"], "AI visibility improves when the business gives clear, structured answers with verifiable facts."),
+      decision("ai-entity-proof", "Brand", "Add clearer entity proof: service areas, services, reviews, and company details", "Medium", "Makes the company easier for AI tools to understand and cite.", annualMedium, baseConfidence, "Easy", "1 hour", ["Business profile"], "AI systems need explicit business facts, not implied service claims."),
+    ],
+    "ai-cmo": [
+      decision("cmo-top-action", "Revenue", `Spend the next hour on ${topCampaign?.campaign || `AC Repair in ${city}`}`, "High", "Focuses the day on the highest-ROI decision.", annualHigh, baseConfidence + 6, "Moderate", "1 hour", ["Decision approval"], "AI CMO should turn daily signals into one concrete operating move."),
+      decision("cmo-memory", "CRM", "Save today's decision outcome in Intelligence Memory", "Medium", "Improves future confidence and recommendation quality.", annualMedium, baseConfidence + 1, "Easy", "5 minutes", ["Outcome note"], "Completed and ignored decisions teach the system what works for this client."),
+    ],
+    "revenue-engine": [
+      decision("revenue-launch-campaign", "Google Ads", topCampaign ? `Approve launch plan for ${topCampaign.campaign}` : "Generate the Revenue Engine launch plan", "High", "Moves paid search from strategy to implementation.", annualHigh, baseConfidence + 5, "Moderate", "45 minutes", ["Google Ads access", "Tracking"], "Revenue Engine decisions should create campaign assets, not stop at keyword lists."),
+      decision("revenue-landing-page", "Website", missingPage ? `Create landing page for ${missingPage}` : "QA the best existing landing page for launch campaigns", "High", "Improves conversion rate before budget increases.", annualHigh, baseConfidence + 3, "Moderate", "2 hours", ["CMS access", "Offer approval"], "Paid clicks need matching pages or the campaign will leak revenue."),
+    ],
+    "marketing-intelligence": [
+      decision("marketing-budget", "Google Ads", `Review a 15% budget shift toward AC Repair in ${city}`, "High", "Captures weather and seasonality-driven repair demand.", annualHigh, baseConfidence + 4, "Moderate", "20 minutes", ["Ads performance", "Budget approval"], "Marketing Intelligence exists to decide where today's marginal dollar should go."),
+      decision("marketing-content", "Social Media", `Publish a cooling tip for homeowners in ${city}`, "Medium", "Supports local engagement and GBP/social freshness.", annualLow, baseConfidence - 2, "Easy", "20 minutes", ["Approved copy"], "Weather-driven content gives the campaign a relevant same-day touchpoint."),
+    ],
+    "market-intelligence": [
+      decision("market-gap", "Revenue", "Build the first low-saturation service page: Water Heater Replacement or IAQ", "High", "Targets services with less market competition.", annualHigh, baseConfidence + 5, "Moderate", "2 hours", ["Service confirmation", "CMS access"], "Market Intelligence shows where the contractor can compete without saying what everyone else says."),
+      decision("market-positioning", "Brand", `Test neighborhood comfort positioning in ${city}`, "Medium", "Differentiates from generic fast-service messaging.", annualMedium, baseConfidence, "Moderate", "90 minutes", ["Brand approval"], "The market is crowded with repair claims; neighborhood specificity creates a more ownable position."),
+    ],
+    "deploy-center": [
+      decision("deploy-google-ads", "Google Ads", "Export Google Ads assets and complete launch QA", "High", "Moves approved recommendations into deployment.", annualHigh, baseConfidence + 3, "Moderate", "1 hour", ["Revenue Engine", "Google Ads access"], "Deploy Center should convert strategy into launch-ready files and checks."),
+      decision("deploy-gtm", "CRM", "Install or verify GTM, call tracking, and form tracking", "High", "Enables performance learning across future recommendations.", annualHigh, baseConfidence + 2, "Moderate", "1 hour", ["Website access", "GTM access"], "Without tracking, the platform cannot learn which decisions produce revenue."),
+    ],
+    "client-workspace": [
+      decision("workspace-next-task", "CRM", "Convert the highest-priority recommendation into an owner task", "High", "Creates accountability and moves the client forward.", annualMedium, baseConfidence, "Easy", "10 minutes", ["Task owner"], "The workspace should preserve decisions, task status, and outcomes over time."),
+      decision("workspace-health", "Website", "Fix the lowest client health category before adding new campaigns", "Medium", "Removes operational bottlenecks that reduce campaign ROI.", annualMedium, baseConfidence - 3, "Moderate", "1 hour", ["Access checklist"], "Client health determines whether more traffic can become more revenue."),
+    ],
+    reports: [
+      decision("reports-launch", "Brand", "Send the client a launch report with one approved next action", "Medium", "Aligns the client on priorities and expected impact.", annualMedium, baseConfidence, "Easy", "30 minutes", ["Report review"], "Reports should create decisions, not just summarize activity."),
+      decision("reports-memory", "Revenue", "Log report outcomes into Intelligence Memory", "Medium", "Improves month-over-month recommendations.", annualMedium, baseConfidence, "Easy", "10 minutes", ["Performance notes"], "Monthly learning makes the operating system more valuable over time."),
+    ],
+    settings: [
+      decision("settings-profile", "Brand", "Complete missing business profile fields before generating more assets", "High", "Prevents unsupported claims and weak campaign copy.", annualMedium, baseConfidence, "Easy", "20 minutes", ["Client input"], "Clean inputs make every downstream decision safer and more specific."),
+      decision("settings-access", "CRM", "Complete the access checklist for Ads, Analytics, GBP, Search Console, Website, and HighLevel", "High", "Unlocks deployment and performance learning.", annualHigh, baseConfidence + 2, "Moderate", "45 minutes", ["Client access"], "Decision software needs implementation access to become a marketing operating system."),
+    ],
+  };
+  return map[section].map((item) => ({ ...common, ...item, confidenceScore: item.confidenceScore }));
+}
+
+function decision(
+  id: string,
+  category: DecisionRecommendation["category"],
+  recommendedAction: string,
+  priority: DecisionRecommendation["priority"],
+  expectedImpact: string,
+  estimatedRevenueOpportunity: string,
+  confidenceScore: number,
+  difficulty: DecisionRecommendation["difficulty"],
+  estimatedTime: string,
+  dependencies: string[],
+  reasoning: string,
+): DecisionRecommendation {
+  return {
+    id,
+    category,
+    recommendedAction,
+    priority,
+    expectedImpact,
+    estimatedRevenueOpportunity,
+    confidenceScore: clampScore(confidenceScore),
+    difficulty,
+    estimatedTime,
+    dependencies,
+    reasoning,
+  };
+}
+
+function decisionMemoryKey(analysis: BusinessProfile, contractorUrl: string) {
+  return `hvac-growth-os:decision-engine:${domainLabel(contractorUrl || analysis.companyName || "client")}`;
+}
+
+function loadDecisionMemory(key: string): {
+  statuses: Record<string, DecisionStatus>;
+  outcomes: Record<string, string>;
+  history: Array<{ decision: string; date: string; status: DecisionStatus; outcome: string; performance: string }>;
+} {
+  if (typeof window === "undefined") return { statuses: {}, outcomes: {}, history: [] };
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return { statuses: {}, outcomes: {}, history: [] };
+    const parsed = JSON.parse(raw) as ReturnType<typeof loadDecisionMemory>;
+    return {
+      statuses: parsed.statuses ?? {},
+      outcomes: parsed.outcomes ?? {},
+      history: parsed.history ?? [],
+    };
+  } catch {
+    return { statuses: {}, outcomes: {}, history: [] };
+  }
+}
+
+function saveDecisionMemory(key: string, value: ReturnType<typeof loadDecisionMemory>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(value));
 }
 
 function avg(values: number[]) {
