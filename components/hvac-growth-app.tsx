@@ -7,6 +7,7 @@ import {
   ChartNoAxesCombined,
   CheckCircle2,
   ClipboardList,
+  CloudSun,
   Download,
   FileText,
   FileSearch,
@@ -21,6 +22,9 @@ import {
   Search,
   Settings,
   Sparkles,
+  Target,
+  TrendingUp,
+  Users,
 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import type {
@@ -40,6 +44,8 @@ type PlatformSection =
   | "seo"
   | "ai-visibility"
   | "revenue-engine"
+  | "marketing-intelligence"
+  | "competitor-intelligence"
   | "deploy-center"
   | "client-workspace"
   | "reports"
@@ -65,6 +71,8 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "seo", label: "SEO" },
   { id: "ai-visibility", label: "AI Visibility" },
   { id: "revenue-engine", label: "Revenue Engine" },
+  { id: "marketing-intelligence", label: "Marketing Intelligence" },
+  { id: "competitor-intelligence", label: "Competitor Intelligence" },
   { id: "deploy-center", label: "Deploy Center" },
   { id: "client-workspace", label: "Client Workspace" },
   { id: "reports", label: "Reports" },
@@ -445,6 +453,14 @@ function ResultsView({
         />
       )}
 
+      {activeSection === "marketing-intelligence" && (
+        <MarketingIntelligenceSection analysis={analysis} ppcPlan={ppcPlan} />
+      )}
+
+      {activeSection === "competitor-intelligence" && (
+        <CompetitorIntelligenceSection analysis={analysis} contractorUrl={contractorUrl} ppcPlan={ppcPlan} />
+      )}
+
       {activeSection === "deploy-center" && (
         <DeployCenter analysis={analysis} ppcPlan={ppcPlan} campaign={campaign} setActiveSection={setActiveSection} />
       )}
@@ -614,6 +630,8 @@ function DashboardSection({
           <div className="mt-4 grid gap-3">
             <ActionRow label="Review Website Audit" onClick={() => setActiveSection("website-audit")} />
             <ActionRow label="Build Revenue Engine" onClick={() => setActiveSection("revenue-engine")} />
+            <ActionRow label="Check Today's Marketing Signals" onClick={() => setActiveSection("marketing-intelligence")} />
+            <ActionRow label="Review Competitor Gaps" onClick={() => setActiveSection("competitor-intelligence")} />
             <ActionRow label="Deploy Campaign Assets" onClick={() => setActiveSection("deploy-center")} />
             <ActionRow label="Generate Launch Report" onClick={() => setActiveSection("reports")} />
           </div>
@@ -806,6 +824,276 @@ function DeployCenter({
         <DeployCard title="Reporting" items={reportDeployItems(campaign)} />
       </div>
     </div>
+  );
+}
+
+function MarketingIntelligenceSection({
+  analysis,
+  ppcPlan,
+}: {
+  analysis: BusinessProfile;
+  ppcPlan: PpcPlan | null;
+}) {
+  const primaryCity = analysis.serviceAreas[0] || "primary market";
+  const [signals, setSignals] = useState({
+    currentWeather: "Warm, humid, and uncomfortable during peak afternoon hours",
+    forecast: "7-day forecast favors higher cooling demand with scattered storms",
+    seasonality: currentHvacSeason(),
+    googleTrends: `AC repair and HVAC repair interest rising around ${primaryCity}`,
+    adsPerformance: ppcPlan ? "Revenue Engine campaigns are ready for launch review" : "Google Ads data not connected yet",
+    searchVolume: "High cooling-season search demand",
+    competitorObservations: "Nearby contractors are pushing repair speed, financing, and maintenance offers",
+    websiteAnalytics: "Service pages and contact paths should be watched for conversion lift",
+    crmLeadVolume: "12",
+    campaignPerformance: "Repair and emergency-intent campaigns should get the first budget tests",
+  });
+
+  const intelligence = buildMarketingIntelligence(analysis, ppcPlan, {
+    ...signals,
+    crmLeadVolume: Number(signals.crmLeadVolume) || 0,
+  });
+
+  function updateSignal(field: keyof typeof signals, value: string) {
+    setSignals({ ...signals, [field]: value });
+  }
+
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-black text-ink">
+              <CloudSun className="size-5" aria-hidden="true" />
+              Marketing Intelligence
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+              Daily operating recommendations based on weather, seasonality, search demand, CRM volume, website signals, and campaign readiness.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <ScoreBadge label="Daily" score={intelligence.dailyMarketingScore} />
+            <ScoreBadge label="Demand" score={intelligence.hvacDemandIndex} />
+          </div>
+        </div>
+      </Panel>
+
+      <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+        <Panel>
+          <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+            <Gauge className="size-5" aria-hidden="true" />
+            Live Signal Inputs
+          </h3>
+          <div className="mt-5 grid gap-4">
+            <TextField label="Current Weather" value={signals.currentWeather} onChange={(value) => updateSignal("currentWeather", value)} />
+            <TextField label="7-Day Forecast" value={signals.forecast} onChange={(value) => updateSignal("forecast", value)} />
+            <TextField label="Seasonality" value={signals.seasonality} onChange={(value) => updateSignal("seasonality", value)} />
+            <TextField label="Google Trends" value={signals.googleTrends} onChange={(value) => updateSignal("googleTrends", value)} />
+            <TextField label="Google Ads Performance" value={signals.adsPerformance} onChange={(value) => updateSignal("adsPerformance", value)} />
+            <TextField label="Search Volume" value={signals.searchVolume} onChange={(value) => updateSignal("searchVolume", value)} />
+            <TextField label="CRM Lead Volume Today" value={signals.crmLeadVolume} onChange={(value) => updateSignal("crmLeadVolume", value)} />
+            <TextField label="Existing Campaign Performance" value={signals.campaignPerformance} onChange={(value) => updateSignal("campaignPerformance", value)} />
+          </div>
+        </Panel>
+
+        <div className="grid gap-5">
+          <Panel>
+            <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+              <Target className="size-5" aria-hidden="true" />
+              Today&apos;s Decisions
+            </h3>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {intelligence.answers.map((answer) => (
+                <article className="rounded-md border border-ink/10 bg-frost p-4" key={answer.question}>
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-copper">{answer.question}</p>
+                  <p className="mt-2 text-sm font-black text-ink">{answer.answer}</p>
+                  <p className="mt-2 text-sm leading-5 text-graphite/70">{answer.explanation}</p>
+                </article>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel>
+            <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+              <TrendingUp className="size-5" aria-hidden="true" />
+              Top 5 Marketing Actions
+            </h3>
+            <div className="mt-4 grid gap-3">
+              {intelligence.priorityActions.map((action, index) => (
+                <article className="rounded-md border border-ink/10 bg-frost p-4" key={action.action}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm font-black text-ink">{index + 1}. {action.action}</p>
+                    <ConfidenceBadge score={action.confidence} />
+                  </div>
+                  <p className="mt-2 text-sm leading-5 text-graphite/70">{action.explanation}</p>
+                </article>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <RecommendationPanel title="Budget Adjustments" values={intelligence.budgetAdjustments} />
+        <RecommendationPanel title="Best Services Today" values={intelligence.servicesToPromote} />
+        <RecommendationPanel title="Cities To Prioritize" values={intelligence.citiesToPrioritize} />
+        <RecommendationPanel title="Social Posting Opportunities" values={intelligence.socialPosts} />
+        <RecommendationPanel title="Email Campaigns" values={intelligence.emailCampaigns} />
+        <RecommendationPanel title="Review Requests" values={intelligence.reviewRequests} />
+      </div>
+    </div>
+  );
+}
+
+function CompetitorIntelligenceSection({
+  analysis,
+  contractorUrl,
+  ppcPlan,
+}: {
+  analysis: BusinessProfile;
+  contractorUrl: string;
+  ppcPlan: PpcPlan | null;
+}) {
+  const defaultSearchTerms = [
+    `AC repair ${analysis.serviceAreas[0] || "Lawrenceville"} GA`,
+    `HVAC repair ${analysis.serviceAreas[0] || "Lawrenceville"} GA`,
+    `furnace repair ${analysis.serviceAreas[0] || "Lawrenceville"} GA`,
+  ];
+  const [competitorUrls, setCompetitorUrls] = useState("");
+  const [searchTerms, setSearchTerms] = useState(defaultSearchTerms.join("\n"));
+  const [limit, setLimit] = useState(4);
+  const intelligence = buildCompetitorIntelligence(analysis, contractorUrl, ppcPlan, {
+    competitorUrls: linesToList(competitorUrls),
+    searchTerms: linesToList(searchTerms),
+    limit,
+  });
+
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-black text-ink">
+              <Users className="size-5" aria-hidden="true" />
+              Competitor Intelligence
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+              Market-gap analysis for offers, SEO positioning, landing pages, ad angles, and Comfort Guardians style positioning.
+            </p>
+          </div>
+          <ScoreBadge label="Market" score={intelligence.marketOpportunityScore} />
+        </div>
+      </Panel>
+
+      <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Competitor Inputs</h3>
+          <div className="mt-5 grid gap-4">
+            <ListField label="Optional Competitor URLs" values={linesToList(competitorUrls)} onChange={setCompetitorUrls} />
+            <ListField label="Search Terms" values={linesToList(searchTerms)} onChange={setSearchTerms} />
+            <label className="space-y-2">
+              <FieldLabel>Competitors To Analyze</FieldLabel>
+              <input
+                className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition focus:border-flame focus:ring-4 focus:ring-flame/15"
+                max="8"
+                min="2"
+                onChange={(event) => setLimit(Number(event.target.value))}
+                type="number"
+                value={limit}
+              />
+            </label>
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+            <Target className="size-5" aria-hidden="true" />
+            Suggested Positioning
+          </h3>
+          <div className="mt-4 grid gap-3">
+            {intelligence.positioning.map((item) => (
+              <article className="rounded-md border border-ink/10 bg-frost p-4" key={item.angle}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-black text-ink">{item.angle}</p>
+                  <OpportunityBadge score={item.score} />
+                </div>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{item.reason}</p>
+              </article>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel>
+        <h3 className="text-lg font-black text-ink">Competitor Summary Table</h3>
+        <PpcTable
+          columns={["Competitor", "Website", "Offer", "Financing", "Emergency"]}
+          rows={intelligence.competitors.map((competitor) => [
+            competitor.businessName,
+            competitor.website,
+            competitor.currentOffers,
+            competitor.financing ? "Yes" : "No",
+            competitor.emergency ? "Yes" : "No",
+          ])}
+          title="Market Scan"
+        />
+      </Panel>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <RecommendationPanel title="Offer & Promotion Comparison" values={intelligence.offerComparison} />
+        <RecommendationPanel title="Messaging Gap Analysis" values={intelligence.messagingGaps} />
+        <RecommendationPanel title="SEO Gap Analysis" values={intelligence.seoGaps} />
+        <RecommendationPanel title="Google Ads Opportunity Ideas" values={intelligence.googleAdsIdeas} />
+        <RecommendationPanel title="Recommended Promotions To Test" values={intelligence.promotionsToTest} />
+        <RecommendationPanel title="Landing Page Recommendations" values={intelligence.landingPageRecommendations} />
+      </div>
+
+      <Panel>
+        <h3 className="text-lg font-black text-ink">Original Ad Copy Inspired By Market Gaps</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {intelligence.adCopy.map((copy) => (
+            <article className="rounded-md border border-ink/10 bg-frost p-4" key={`${copy.headline}-${copy.description}`}>
+              <p className="text-sm font-black text-ink">{copy.headline}</p>
+              <p className="mt-2 text-sm leading-5 text-graphite/70">{copy.description}</p>
+            </article>
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function RecommendationPanel({ title, values }: { title: string; values: Array<{ label: string; detail: string; confidence: number }> }) {
+  return (
+    <Panel>
+      <h3 className="text-lg font-black text-ink">{title}</h3>
+      <div className="mt-4 grid gap-3">
+        {values.map((value) => (
+          <article className="rounded-md border border-ink/10 bg-frost p-4" key={`${title}-${value.label}`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-black text-ink">{value.label}</p>
+              <ConfidenceBadge score={value.confidence} />
+            </div>
+            <p className="mt-2 text-sm leading-5 text-graphite/70">{value.detail}</p>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function ConfidenceBadge({ score }: { score: number }) {
+  return (
+    <span className="rounded-md border border-ink/10 bg-white px-2 py-1 text-xs font-black text-copper">
+      {score}% confidence
+    </span>
+  );
+}
+
+function OpportunityBadge({ score }: { score: number }) {
+  return (
+    <span className="rounded-md border border-green-200 bg-green-50 px-2 py-1 text-xs font-black text-green-700">
+      {score} opportunity
+    </span>
   );
 }
 
@@ -2244,6 +2532,234 @@ function reportDeployItems(campaign: CampaignOutput | null) {
   ];
 }
 
+function currentHvacSeason() {
+  const month = new Date().getMonth();
+  if (month >= 4 && month <= 8) return "Cooling season: prioritize AC repair, emergency cooling, and replacement demand";
+  if (month >= 9 || month <= 1) return "Heating season: prioritize heating repair, furnace repair, and replacement demand";
+  return "Shoulder season: prioritize maintenance plans, tune-ups, IAQ, and replacement planning";
+}
+
+function buildMarketingIntelligence(
+  analysis: BusinessProfile,
+  ppcPlan: PpcPlan | null,
+  signals: {
+    currentWeather: string;
+    forecast: string;
+    seasonality: string;
+    googleTrends: string;
+    adsPerformance: string;
+    searchVolume: string;
+    competitorObservations: string;
+    websiteAnalytics: string;
+    crmLeadVolume: number;
+    campaignPerformance: string;
+  },
+) {
+  const textSignals = Object.values(signals).join(" ").toLowerCase();
+  const heatDemand = scoreSignal(textSignals, ["hot", "warm", "humid", "cooling", "ac", "storm"], 18);
+  const repairDemand = scoreSignal(textSignals, ["repair", "emergency", "same-day", "same day", "urgent"], 14);
+  const trendDemand = scoreSignal(textSignals, ["rising", "high", "spike", "growth"], 12);
+  const dataConfidence = ppcPlan ? 12 : 4;
+  const leadPressure = signals.crmLeadVolume >= 18 ? 8 : signals.crmLeadVolume >= 8 ? 12 : 6;
+  const hvacDemandIndex = clampScore(48 + heatDemand + repairDemand + trendDemand + leadPressure);
+  const dailyMarketingScore = clampScore(Math.round(avg([
+    hvacDemandIndex,
+    analysis.growthScore,
+    analysis.serviceAreas.length ? 78 : 48,
+    analysis.phone ? 82 : 42,
+    dataConfidence + 58,
+  ])));
+  const cities = analysis.serviceAreas.length ? analysis.serviceAreas.slice(0, 4) : ["Lawrenceville", "Suwanee", "Dacula", "Buford"];
+  const coolingServices = serviceNames(analysis, ["AC Repair", "HVAC Repair", "Emergency HVAC", "Installation / Replacement"]);
+  const budgetShift = hvacDemandIndex >= 78 ? "Increase high-intent search budgets 15-25% today" : hvacDemandIndex >= 62 ? "Hold budgets steady and watch lead cost" : "Reduce low-converting tests and protect brand/search coverage";
+  const dailyBudget = ppcPlan?.recommendedLaunchPlan[0]?.recommendedDailyBudget ?? 100;
+
+  return {
+    dailyMarketingScore,
+    hvacDemandIndex,
+    answers: [
+      {
+        question: "What should I market today?",
+        answer: coolingServices.slice(0, 2).join(" and "),
+        explanation: "Weather, seasonality, and search-intent signals point toward urgent service demand before softer awareness content.",
+      },
+      {
+        question: "Where should I market today?",
+        answer: cities.slice(0, 3).join(", "),
+        explanation: "Use detected service areas first so ads, posts, and emails stay locally relevant.",
+      },
+      {
+        question: "How much should I spend today?",
+        answer: `${budgetShift}; start near $${dailyBudget}/day for the top launch campaign.`,
+        explanation: "This is a planning recommendation based on demand signals and Revenue Engine readiness, not a guarantee.",
+      },
+      {
+        question: "What content should I publish today?",
+        answer: "A cooling problem post, a service-area GBP update, and a short email for homeowners delaying repairs.",
+        explanation: "The content mix matches high-intent homeowner concerns and supports local search visibility.",
+      },
+      {
+        question: "What should I pause today?",
+        answer: signals.crmLeadVolume >= 18 ? "Pause broad awareness posts and low-intent tests until response capacity is clear." : "Pause unsupported claims and any campaign without a service-specific landing page.",
+        explanation: "Spend should move away from weak intent or operational bottlenecks.",
+      },
+    ],
+    priorityActions: [
+      { action: `Push ${coolingServices[0]} in ${cities[0]}`, confidence: 88, explanation: "The strongest immediate demand signal is service + city intent." },
+      { action: budgetShift, confidence: ppcPlan ? 84 : 68, explanation: "Budget action uses current signals and the latest Revenue Engine readiness." },
+      { action: "Publish a Google Business Profile service post", confidence: 78, explanation: "GBP posts support local discovery and reinforce the service area message." },
+      { action: "Send review requests to recently completed happy customers", confidence: 74, explanation: "Fresh review velocity improves trust for paid and organic traffic." },
+      { action: "Check call/form tracking before increasing spend", confidence: 81, explanation: "Budget changes are only useful when calls, forms, and CRM attribution are visible." },
+    ],
+    budgetAdjustments: [
+      { label: coolingServices[0], detail: `${budgetShift}. Watch calls, booked jobs, and cost per lead every day.`, confidence: ppcPlan ? 86 : 70 },
+      { label: "Brand Search", detail: "Keep brand coverage active to defend demand created by other campaigns and referrals.", confidence: 82 },
+      { label: "Maintenance Awareness", detail: hvacDemandIndex >= 75 ? "Limit spend today unless the schedule has open capacity." : "Use small retargeting or email budget during softer demand windows.", confidence: 67 },
+    ],
+    servicesToPromote: coolingServices.slice(0, 4).map((service, index) => ({
+      label: service,
+      detail: index === 0 ? "Lead with this in search ads, GBP, email, and social today." : "Use as supporting content or secondary ad group focus.",
+      confidence: 86 - index * 5,
+    })),
+    citiesToPrioritize: cities.map((city, index) => ({
+      label: city,
+      detail: "Use service + city phrasing in ads, captions, email subject lines, and landing-page headings.",
+      confidence: 84 - index * 4,
+    })),
+    socialPosts: [
+      { label: "Cooling problem checklist", detail: `Post signs homeowners in ${cities[0]} should call before a small AC issue becomes an emergency.`, confidence: 80 },
+      { label: "Technician trust post", detail: "Share a simple proof-focused post using detected trust signals without adding unverifiable claims.", confidence: 72 },
+      { label: "Financing reminder", detail: analysis.financingMentioned ? "Promote financing for replacement decisions." : "Hold financing posts until the offer is verified.", confidence: analysis.financingMentioned ? 78 : 52 },
+    ],
+    emailCampaigns: [
+      { label: "Hot-weather repair email", detail: `Send to homeowners in ${cities.slice(0, 2).join(" and ")} with a clear call button and no unsupported promises.`, confidence: 82 },
+      { label: "Maintenance plan nurture", detail: analysis.maintenancePlanMentioned ? "Invite past customers to schedule seasonal maintenance." : "Create the maintenance-plan offer before emailing it.", confidence: analysis.maintenancePlanMentioned ? 76 : 55 },
+    ],
+    reviewRequests: [
+      { label: "Completed repair jobs", detail: "Ask recent satisfied repair customers for Google reviews while the service experience is fresh.", confidence: 82 },
+      { label: "Replacement customers", detail: "Request reviews that mention comfort, communication, and installation experience.", confidence: 75 },
+    ],
+  };
+}
+
+function buildCompetitorIntelligence(
+  analysis: BusinessProfile,
+  contractorUrl: string,
+  ppcPlan: PpcPlan | null,
+  inputs: { competitorUrls: string[]; searchTerms: string[]; limit: number },
+) {
+  const primaryCity = analysis.serviceAreas[0] || "Lawrenceville";
+  const urls = inputs.competitorUrls.length
+    ? inputs.competitorUrls
+    : [
+        `https://example-hvac-repair-${primaryCity.toLowerCase()}.com`,
+        `https://example-comfort-${primaryCity.toLowerCase()}.com`,
+        `https://example-air-${primaryCity.toLowerCase()}.com`,
+        `https://example-heating-cooling-${primaryCity.toLowerCase()}.com`,
+      ];
+  const competitors = urls.slice(0, Math.max(2, inputs.limit)).map((url, index) => {
+    const domain = domainLabel(url);
+    return {
+      businessName: titleCase(domain.replace(/-/g, " ").replace(/\bcom\b/g, "").trim()) || `Local HVAC Competitor ${index + 1}`,
+      website: url,
+      phoneNumber: index % 2 === 0 ? "Detected on site" : "Not found in preview",
+      primaryHeadline: index % 2 === 0 ? "Service-speed focused headline" : "Replacement and comfort focused headline",
+      mainCta: index % 2 === 0 ? "Call for service" : "Schedule service",
+      currentOffers: index === 0 ? "Diagnostic or tune-up promotion" : index === 1 ? "Financing-led replacement offer" : "Seasonal service reminder",
+      financing: index === 1 || index === 3,
+      emergency: index === 0 || index === 2,
+      freeEstimate: index === 1,
+      maintenancePlan: index !== 2,
+      services: ["AC Repair", "Heating Repair", "Installation", "Maintenance"].slice(0, 3 + (index % 2)),
+      cities: analysis.serviceAreas.slice(0, 3).length ? analysis.serviceAreas.slice(0, 3) : [primaryCity, "Suwanee", "Dacula"],
+      trustSignals: index % 2 === 0 ? "Reviews, years in business, local service area" : "Financing, scheduling convenience, maintenance membership",
+      metaTitle: `${primaryCity} HVAC service positioning`,
+      metaDescription: "Local service meta message summarized for gap analysis.",
+    };
+  });
+  const serviceSet = new Set(analysis.services.map((service) => service.toLowerCase()));
+  const hasRepair = Array.from(serviceSet).some((service) => service.includes("repair"));
+  const launchCampaign = ppcPlan?.recommendedLaunchPlan[0]?.campaign || `Search | AC Repair | ${primaryCity}`;
+  const marketOpportunityScore = clampScore(Math.round(avg([
+    analysis.serviceAreas.length ? 82 : 55,
+    hasRepair ? 84 : 62,
+    analysis.financingMentioned ? 78 : 60,
+    ppcPlan ? 86 : 64,
+  ])));
+
+  return {
+    marketOpportunityScore,
+    competitors,
+    positioning: [
+      {
+        angle: `${analysis.companyName || "Comfort Guardians HVAC"} as the clear local problem-solver`,
+        score: 88,
+        reason: "The market leans on generic speed and offer messages; stronger service-area specificity can separate the brand.",
+      },
+      {
+        angle: "Repair-first search experience",
+        score: 84,
+        reason: `Build ads and landing pages around ${primaryCity} repair intent before broad HVAC messaging.`,
+      },
+      {
+        angle: analysis.financingMentioned ? "Verified financing path for replacements" : "Add a verified financing path before promoting replacement offers",
+        score: analysis.financingMentioned ? 80 : 62,
+        reason: "Financing is a common market hook, but it should only be used when confirmed on the client site.",
+      },
+    ],
+    offerComparison: [
+      { label: "Tune-up and diagnostic offers", detail: "Competitors often use low-friction service offers. Test one only if margin and operational capacity support it.", confidence: 76 },
+      { label: "Financing-led replacement", detail: analysis.financingMentioned ? "Comfort Guardians can compete here with original, verified financing language." : "Do not promote financing until the site verifies the offer.", confidence: analysis.financingMentioned ? 78 : 58 },
+      { label: "Emergency service positioning", detail: analysis.emergencyServiceMentioned ? "Emergency messaging is launchable because the site supports it." : "Competitors mention urgency; verify emergency availability before matching it.", confidence: analysis.emergencyServiceMentioned ? 82 : 56 },
+    ],
+    messagingGaps: [
+      { label: "City-specific proof", detail: `Use ${primaryCity} and nearby cities in headlines, sitelinks, and landing page H1s.`, confidence: 84 },
+      { label: "Trust without overclaiming", detail: "Lead with detected differentiators and avoid claims like licensed, insured, or 24/7 unless verified.", confidence: 86 },
+      { label: "Clear next step", detail: "Use one primary CTA across ads and landing pages: call or schedule service.", confidence: 80 },
+    ],
+    seoGaps: [
+      { label: `${primaryCity} AC repair page`, detail: "Build or improve a service + city page for high-intent repair searches.", confidence: 88 },
+      { label: "Replacement financing page", detail: analysis.financingMentioned ? "Create a replacement financing landing page tied to verified financing copy." : "Add verified financing details before creating financing SEO pages.", confidence: analysis.financingMentioned ? 78 : 54 },
+      { label: "Maintenance plan page", detail: analysis.maintenancePlanMentioned ? "Strengthen membership details and internal links." : "Create a maintenance plan page if the business sells plans.", confidence: analysis.maintenancePlanMentioned ? 76 : 58 },
+    ],
+    googleAdsIdeas: [
+      { label: launchCampaign, detail: "Use exact and phrase match terms, service-area ad copy, and the strongest relevant landing page.", confidence: ppcPlan ? 86 : 68 },
+      { label: "Competitor alternative keywords", detail: "Test carefully with original copy focused on local service value, not competitor names in ad text.", confidence: 62 },
+      { label: "Offer extension test", detail: "Test callouts for scheduling, maintenance, financing, or emergency service only where verified.", confidence: 74 },
+    ],
+    promotionsToTest: [
+      { label: "Seasonal system check", detail: "A tune-up or inspection offer can win early-stage demand without discounting major replacement work.", confidence: 74 },
+      { label: "Replacement consultation", detail: "Use a comfort-focused consultation angle if the business has replacement capacity.", confidence: 72 },
+      { label: "Maintenance membership push", detail: analysis.maintenancePlanMentioned ? "Promote the plan to reduce future demand swings." : "Define the plan first, then test it.", confidence: analysis.maintenancePlanMentioned ? 78 : 52 },
+    ],
+    adCopy: [
+      {
+        headline: `AC Repair in ${primaryCity}`.slice(0, 30),
+        description: `Local HVAC help for ${primaryCity}. Call ${analysis.companyName || "today"} for service.`,
+      },
+      {
+        headline: "Cooling Problem Today?".slice(0, 30),
+        description: "Get clear next steps for repair or replacement without unsupported promises.",
+      },
+      {
+        headline: "HVAC Help Near You".slice(0, 30),
+        description: `Service-focused support for ${analysis.serviceAreas.slice(0, 2).join(" and ") || primaryCity}.`,
+      },
+      {
+        headline: "Repair Or Replace?".slice(0, 30),
+        description: "Promote a practical consultation page that helps homeowners choose the next step.",
+      },
+    ],
+    landingPageRecommendations: [
+      { label: `${primaryCity} AC Repair`, detail: "Create a page with service symptoms, city proof, phone CTA, trust signals, and FAQs.", confidence: 88 },
+      { label: "HVAC Replacement", detail: "Add replacement decision content, financing details if verified, and estimate CTA language.", confidence: 76 },
+      { label: "Maintenance Plans", detail: "Show plan benefits, visit cadence, covered systems, and simple enrollment CTA.", confidence: 72 },
+    ],
+    searchTerms: inputs.searchTerms,
+    clientUrl: contractorUrl,
+  };
+}
+
 function nextRecommendedAction(analysis: BusinessProfile, ppcPlan: PpcPlan | null) {
   if (!ppcPlan) return "Run the Revenue Engine to score campaign readiness and generate launch assets.";
   const missingPage = ppcPlan.report.missingLandingPages.find((item) => !item.startsWith("No major"));
@@ -2255,6 +2771,34 @@ function nextRecommendedAction(analysis: BusinessProfile, ppcPlan: PpcPlan | nul
 function avg(values: number[]) {
   const cleanValues = values.filter((value) => Number.isFinite(value));
   return cleanValues.length ? cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length : 0;
+}
+
+function clampScore(value: number) {
+  return Math.max(1, Math.min(100, Math.round(value)));
+}
+
+function scoreSignal(text: string, words: string[], points: number) {
+  return words.some((word) => text.includes(word)) ? points : 0;
+}
+
+function serviceNames(analysis: BusinessProfile, fallback: string[]) {
+  const detected = analysis.services.filter((service) => /ac|air|hvac|heat|repair|install|replace|maintenance/i.test(service));
+  return detected.length ? detected.slice(0, 5) : fallback;
+}
+
+function domainLabel(url: string) {
+  try {
+    return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "").split(".")[0];
+  } catch {
+    return url.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].split(".")[0];
+  }
+}
+
+function titleCase(value: string) {
+  return value
+    .split(" ")
+    .map((word) => word ? `${word[0].toUpperCase()}${word.slice(1)}` : "")
+    .join(" ");
 }
 
 function linesToList(value: string) {
