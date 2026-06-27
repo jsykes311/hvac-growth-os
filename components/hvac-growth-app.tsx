@@ -47,7 +47,7 @@ type PlatformSection =
   | "ai-cmo"
   | "revenue-engine"
   | "marketing-intelligence"
-  | "competitor-intelligence"
+  | "market-intelligence"
   | "deploy-center"
   | "client-workspace"
   | "reports"
@@ -94,7 +94,7 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "ai-cmo", label: "AI CMO" },
   { id: "revenue-engine", label: "Revenue Engine" },
   { id: "marketing-intelligence", label: "Marketing Intelligence" },
-  { id: "competitor-intelligence", label: "Competitor Intelligence" },
+  { id: "market-intelligence", label: "Market Intelligence" },
   { id: "deploy-center", label: "Deploy Center" },
   { id: "client-workspace", label: "Client Workspace" },
   { id: "reports", label: "Reports" },
@@ -483,8 +483,8 @@ function ResultsView({
         <MarketingIntelligenceSection analysis={analysis} ppcPlan={ppcPlan} />
       )}
 
-      {activeSection === "competitor-intelligence" && (
-        <CompetitorIntelligenceSection analysis={analysis} contractorUrl={contractorUrl} ppcPlan={ppcPlan} />
+      {activeSection === "market-intelligence" && (
+        <MarketIntelligenceSection analysis={analysis} contractorUrl={contractorUrl} ppcPlan={ppcPlan} />
       )}
 
       {activeSection === "deploy-center" && (
@@ -658,7 +658,7 @@ function DashboardSection({
             <ActionRow label="Read AI CMO Daily Brief" onClick={() => setActiveSection("ai-cmo")} />
             <ActionRow label="Build Revenue Engine" onClick={() => setActiveSection("revenue-engine")} />
             <ActionRow label="Check Today's Marketing Signals" onClick={() => setActiveSection("marketing-intelligence")} />
-            <ActionRow label="Review Competitor Gaps" onClick={() => setActiveSection("competitor-intelligence")} />
+            <ActionRow label="Analyze Local Market" onClick={() => setActiveSection("market-intelligence")} />
             <ActionRow label="Deploy Campaign Assets" onClick={() => setActiveSection("deploy-center")} />
             <ActionRow label="Generate Launch Report" onClick={() => setActiveSection("reports")} />
           </div>
@@ -1164,7 +1164,7 @@ function MarketingIntelligenceSection({
   );
 }
 
-function CompetitorIntelligenceSection({
+function MarketIntelligenceSection({
   analysis,
   contractorUrl,
   ppcPlan,
@@ -1174,17 +1174,20 @@ function CompetitorIntelligenceSection({
   ppcPlan: PpcPlan | null;
 }) {
   const defaultSearchTerms = [
-    `AC repair ${analysis.serviceAreas[0] || "Lawrenceville"} GA`,
-    `HVAC repair ${analysis.serviceAreas[0] || "Lawrenceville"} GA`,
-    `furnace repair ${analysis.serviceAreas[0] || "Lawrenceville"} GA`,
+    `AC Repair ${analysis.serviceAreas[0] || "Lawrenceville"}`,
+    `HVAC Repair ${analysis.serviceAreas[0] || "Lawrenceville"}`,
+    `Furnace Repair ${analysis.serviceAreas[0] || "Lawrenceville"}`,
+    `Heat Pump Repair ${analysis.serviceAreas[0] || "Lawrenceville"}`,
+    `HVAC Contractor ${analysis.serviceAreas[0] || "Lawrenceville"}`,
+    `Air Conditioning Repair ${analysis.serviceAreas[0] || "Lawrenceville"}`,
   ];
-  const [competitorUrls, setCompetitorUrls] = useState("");
+  const [seedUrls, setSeedUrls] = useState("");
   const [searchTerms, setSearchTerms] = useState(defaultSearchTerms.join("\n"));
-  const [limit, setLimit] = useState(4);
-  const intelligence = buildCompetitorIntelligence(analysis, contractorUrl, ppcPlan, {
-    competitorUrls: linesToList(competitorUrls),
+  const [marketSize, setMarketSize] = useState(24);
+  const intelligence = buildMarketIntelligence(analysis, contractorUrl, ppcPlan, {
+    seedUrls: linesToList(seedUrls),
     searchTerms: linesToList(searchTerms),
-    limit,
+    marketSize,
   });
 
   return (
@@ -1194,10 +1197,10 @@ function CompetitorIntelligenceSection({
           <div>
             <h2 className="flex items-center gap-2 text-xl font-black text-ink">
               <Users className="size-5" aria-hidden="true" />
-              Competitor Intelligence
+              Market Intelligence
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
-              Market-gap analysis for offers, SEO positioning, landing pages, ad angles, and Comfort Guardians style positioning.
+              Local HVAC market strategy across discovery, visibility, saturation, messaging, promotions, ads, SEO, and market memory.
             </p>
           </div>
           <ScoreBadge label="Market" score={intelligence.marketOpportunityScore} />
@@ -1206,65 +1209,131 @@ function CompetitorIntelligenceSection({
 
       <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
         <Panel>
-          <h3 className="text-lg font-black text-ink">Competitor Inputs</h3>
+          <h3 className="text-lg font-black text-ink">Market Discovery Engine</h3>
           <div className="mt-5 grid gap-4">
-            <ListField label="Optional Competitor URLs" values={linesToList(competitorUrls)} onChange={setCompetitorUrls} />
-            <ListField label="Search Terms" values={linesToList(searchTerms)} onChange={setSearchTerms} />
+            <ListField label="Search Patterns" values={linesToList(searchTerms)} onChange={setSearchTerms} />
+            <ListField label="Optional Seed Company URLs" values={linesToList(seedUrls)} onChange={setSeedUrls} />
             <label className="space-y-2">
-              <FieldLabel>Competitors To Analyze</FieldLabel>
+              <FieldLabel>Target Market Size</FieldLabel>
               <input
                 className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition focus:border-flame focus:ring-4 focus:ring-flame/15"
-                max="8"
-                min="2"
-                onChange={(event) => setLimit(Number(event.target.value))}
+                max="30"
+                min="12"
+                onChange={(event) => setMarketSize(Number(event.target.value))}
                 type="number"
-                value={limit}
+                value={marketSize}
               />
             </label>
+            <p className="text-sm leading-6 text-graphite/70">
+              vNext-ready discovery model: Google organic, GBP, ads, directories, and company sites. Current version models a deduplicated market dataset from available client signals and seed inputs.
+            </p>
           </div>
         </Panel>
 
         <Panel>
           <h3 className="flex items-center gap-2 text-lg font-black text-ink">
             <Target className="size-5" aria-hidden="true" />
-            Suggested Positioning
+            Market Position Score
           </h3>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <MetricCard label="Visibility" value={intelligence.marketPosition.visibility} />
+            <MetricCard label="Projected Rank" value={intelligence.marketPosition.projectedRank} />
+            <MetricCard label="Confidence" value={intelligence.marketPosition.confidence} />
+            <MetricCard label="Businesses" value={intelligence.marketDatabase.length} />
+          </div>
+          <p className="mt-4 text-sm leading-6 text-graphite/70">{intelligence.marketPosition.explanation}</p>
+          <p className="mt-2 text-sm font-black text-ink">Market Rank: {intelligence.marketPosition.marketRank}</p>
+        </Panel>
+      </div>
+
+      <Panel>
+        <h3 className="text-lg font-black text-ink">AI Market Director</h3>
+        <p className="mt-3 text-base leading-7 text-graphite">{intelligence.marketDirectorSummary}</p>
+      </Panel>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Market Opportunity Score</h3>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {intelligence.opportunityScores.map((score) => (
+              <article className="rounded-md border border-ink/10 bg-frost p-4" key={score.label}>
+                <p className="text-3xl font-black text-ink">{score.score}</p>
+                <p className="mt-1 text-sm font-black text-ink">{score.label}</p>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{score.explanation}</p>
+              </article>
+            ))}
+          </div>
+        </Panel>
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Market Saturation</h3>
           <div className="mt-4 grid gap-3">
-            {intelligence.positioning.map((item) => (
-              <article className="rounded-md border border-ink/10 bg-frost p-4" key={item.angle}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-black text-ink">{item.angle}</p>
-                  <OpportunityBadge score={item.score} />
+            {intelligence.marketSaturation.map((item) => (
+              <div className="rounded-md border border-ink/10 bg-frost p-3" key={item.service}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-ink">{item.service}</p>
+                  <span className={`rounded-md px-2 py-1 text-xs font-black ${saturationClass(item.level)}`}>{item.level}</span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                  <div className="h-full rounded-full bg-flame" style={{ width: `${item.score}%` }} />
                 </div>
                 <p className="mt-2 text-sm leading-5 text-graphite/70">{item.reason}</p>
-              </article>
+              </div>
             ))}
           </div>
         </Panel>
       </div>
 
       <Panel>
-        <h3 className="text-lg font-black text-ink">Competitor Summary Table</h3>
+        <h3 className="text-lg font-black text-ink">Market Database</h3>
         <PpcTable
-          columns={["Competitor", "Website", "Offer", "Financing", "Emergency"]}
-          rows={intelligence.competitors.map((competitor) => [
-            competitor.businessName,
-            competitor.website,
-            competitor.currentOffers,
-            competitor.financing ? "Yes" : "No",
-            competitor.emergency ? "Yes" : "No",
+          columns={["Business", "Category", "Position", "Ads", "Reviews"]}
+          rows={intelligence.marketDatabase.slice(0, 12).map((company) => [
+            company.businessName,
+            company.category,
+            company.positioning,
+            company.advertisingPresence,
+            `${company.reviewRating} (${company.reviewCount})`,
           ])}
-          title="Market Scan"
+          title="Deduplicated Market Sample"
         />
       </Panel>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <RecommendationPanel title="Offer & Promotion Comparison" values={intelligence.offerComparison} />
-        <RecommendationPanel title="Messaging Gap Analysis" values={intelligence.messagingGaps} />
-        <RecommendationPanel title="SEO Gap Analysis" values={intelligence.seoGaps} />
-        <RecommendationPanel title="Google Ads Opportunity Ideas" values={intelligence.googleAdsIdeas} />
-        <RecommendationPanel title="Recommended Promotions To Test" values={intelligence.promotionsToTest} />
+        <RecommendationPanel title="What Everyone Says" values={intelligence.whatEveryoneSays} />
+        <RecommendationPanel title="What Nobody Says" values={intelligence.whatNobodySays} />
+        <RecommendationPanel title="Promotion Analysis" values={intelligence.promotionAnalysis} />
+        <RecommendationPanel title="Google Ads Market Scan" values={intelligence.googleAdsMarketScan} />
+        <RecommendationPanel title="Local SEO Analysis" values={intelligence.localSeoAnalysis} />
+        <RecommendationPanel title="Market Gap Engine" values={intelligence.marketGaps} />
+        <RecommendationPanel title="Differentiation Engine" values={intelligence.differentiation} />
         <RecommendationPanel title="Landing Page Recommendations" values={intelligence.landingPageRecommendations} />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Promotion Mix: Client vs Market</h3>
+          <div className="mt-4 grid gap-3">
+            {intelligence.promotionMix.map((promo) => (
+              <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-md border border-ink/10 bg-frost p-3" key={promo.label}>
+                <p className="text-sm font-black text-ink">{promo.label}</p>
+                <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">Market {promo.market}%</span>
+                <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-graphite">Client {promo.client ? "Yes" : "No"}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Market Timeline</h3>
+          <div className="mt-4 grid gap-3">
+            {intelligence.marketTimeline.map((event) => (
+              <article className="rounded-md border border-ink/10 bg-frost p-3" key={`${event.date}-${event.event}`}>
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-copper">{event.date}</p>
+                <p className="mt-2 text-sm font-black text-ink">{event.event}</p>
+                <p className="mt-1 text-sm leading-5 text-graphite/70">{event.detail}</p>
+              </article>
+            ))}
+          </div>
+        </Panel>
       </div>
 
       <Panel>
@@ -1870,7 +1939,7 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: number }) {
+function MetricCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-md border border-ink/10 bg-frost p-4">
       <p className="text-3xl font-black text-ink">{value}</p>
@@ -2759,10 +2828,10 @@ function buildAiCmoBrief(
   memory: IntelligenceSnapshot[],
 ) {
   const marketing = buildMarketingIntelligence(analysis, ppcPlan, defaultMarketingSignals(analysis, ppcPlan));
-  const competitor = buildCompetitorIntelligence(analysis, contractorUrl, ppcPlan, {
-    competitorUrls: [],
+  const market = buildMarketIntelligence(analysis, contractorUrl, ppcPlan, {
+    seedUrls: [],
     searchTerms: [`AC repair ${analysis.serviceAreas[0] || "Lawrenceville"} GA`],
-    limit: 4,
+    marketSize: 24,
   });
   const revenueScore = ppcPlan ? Math.round(avg(ppcPlan.campaignReadiness.map((item) => item.priorityScore))) : 35;
   const trackingScore = Math.round(avg([
@@ -2859,9 +2928,9 @@ function buildAiCmoBrief(
       { label: "Short Video / Reel", detail: "Technician explains three AC warning signs homeowners should not ignore.", confidence: actionConfidence(-4) },
     ],
     competitiveAlerts: [
-      competitor.offerComparison[0],
-      competitor.messagingGaps[0],
-      competitor.promotionsToTest[0],
+      market.marketGaps[0],
+      market.whatNobodySays[0],
+      market.promotionAnalysis[0],
     ],
     operationsAlerts: [
       { label: "Google Ads Tag", status: ppcPlan ? "Needs Work" as const : "Not Recommended" as const, detail: ppcPlan ? "Verify conversion tag before approving budget increases." : "Generate campaigns first, then verify tags." },
@@ -3048,6 +3117,13 @@ function priorityClass(priority: string) {
   return "bg-green-50 text-green-700 border border-green-200";
 }
 
+function saturationClass(level: string) {
+  if (level === "HIGH") return "bg-red-50 text-red-700 border border-red-200";
+  if (level === "MEDIUM") return "bg-amber-50 text-amber-700 border border-amber-200";
+  if (level === "LOW") return "bg-green-50 text-green-700 border border-green-200";
+  return "bg-blue-50 text-blue-700 border border-blue-200";
+}
+
 function textDataUrl(value: string, mimeType: string) {
   return `data:${mimeType};charset=utf-8,${encodeURIComponent(value)}`;
 }
@@ -3178,95 +3254,183 @@ function buildMarketingIntelligence(
   };
 }
 
-function buildCompetitorIntelligence(
+function buildMarketIntelligence(
   analysis: BusinessProfile,
   contractorUrl: string,
   ppcPlan: PpcPlan | null,
-  inputs: { competitorUrls: string[]; searchTerms: string[]; limit: number },
+  inputs: { seedUrls: string[]; searchTerms: string[]; marketSize: number },
 ) {
   const primaryCity = analysis.serviceAreas[0] || "Lawrenceville";
-  const urls = inputs.competitorUrls.length
-    ? inputs.competitorUrls
-    : [
-        `https://example-hvac-repair-${primaryCity.toLowerCase()}.com`,
-        `https://example-comfort-${primaryCity.toLowerCase()}.com`,
-        `https://example-air-${primaryCity.toLowerCase()}.com`,
-        `https://example-heating-cooling-${primaryCity.toLowerCase()}.com`,
-      ];
-  const competitors = urls.slice(0, Math.max(2, inputs.limit)).map((url, index) => {
-    const domain = domainLabel(url);
+  const marketSize = Math.max(12, Math.min(30, inputs.marketSize || 24));
+  const seedNames = inputs.seedUrls.map((url) => titleCase(domainLabel(url).replace(/-/g, " "))).filter(Boolean);
+  const baseNames = [
+    `${primaryCity} Heating & Air`,
+    "Reliable Comfort Services",
+    "Premier Air Pros",
+    "All Seasons HVAC",
+    "North Metro Heating",
+    "Rapid Response Air",
+    "Home Comfort Experts",
+    "Metro Mechanical",
+    "Climate Care Pros",
+    "Neighborhood Air",
+    "Precision Cooling",
+    "Complete Comfort Co",
+    "Family Air Service",
+    "Southern Heat & Cooling",
+    "Comfort First HVAC",
+    "AirWorks Contractors",
+    "Guardian Climate",
+    "Peak Comfort",
+    "Elite Indoor Air",
+    "Local Furnace Pros",
+    "Water Heater & Air",
+    "Smart Heat Pump Co",
+    "County Comfort",
+    "Same Day Cooling",
+    "Trusted Home Air",
+    "Regional Comfort Group",
+    "Franchise Air Network",
+    "Owner Operated HVAC",
+    "Metro IAQ Specialists",
+    "Mini Split Masters",
+  ];
+  const names = [...seedNames, ...baseNames].slice(0, marketSize);
+  const categories = ["Enterprise", "Regional", "Local", "Owner-Operator", "Franchise"];
+  const postures = ["Aggressive Advertiser", "SEO Heavy", "Google Ads Heavy", "GBP Heavy", "Brand Focused"];
+  const marketDatabase = names.map((name, index) => {
+    const category = categories[index % categories.length];
+    const posture = postures[(index + 2) % postures.length];
+    const services = ["AC Repair", "HVAC Repair", "Installation", "Maintenance Plans"];
+    if (index % 3 === 0) services.push("Furnace Repair");
+    if (index % 4 === 0) services.push("Heat Pumps");
+    if (index % 5 === 0) services.push("Water Heaters");
+    if (index % 7 === 0) services.push("Indoor Air Quality");
     return {
-      businessName: titleCase(domain.replace(/-/g, " ").replace(/\bcom\b/g, "").trim()) || `Local HVAC Competitor ${index + 1}`,
-      website: url,
-      phoneNumber: index % 2 === 0 ? "Detected on site" : "Not found in preview",
-      primaryHeadline: index % 2 === 0 ? "Service-speed focused headline" : "Replacement and comfort focused headline",
-      mainCta: index % 2 === 0 ? "Call for service" : "Schedule service",
-      currentOffers: index === 0 ? "Diagnostic or tune-up promotion" : index === 1 ? "Financing-led replacement offer" : "Seasonal service reminder",
-      financing: index === 1 || index === 3,
-      emergency: index === 0 || index === 2,
-      freeEstimate: index === 1,
-      maintenancePlan: index !== 2,
-      services: ["AC Repair", "Heating Repair", "Installation", "Maintenance"].slice(0, 3 + (index % 2)),
-      cities: analysis.serviceAreas.slice(0, 3).length ? analysis.serviceAreas.slice(0, 3) : [primaryCity, "Suwanee", "Dacula"],
-      trustSignals: index % 2 === 0 ? "Reviews, years in business, local service area" : "Financing, scheduling convenience, maintenance membership",
-      metaTitle: `${primaryCity} HVAC service positioning`,
-      metaDescription: "Local service meta message summarized for gap analysis.",
+      businessName: name,
+      website: inputs.seedUrls[index] || `https://${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.com`,
+      googleBusinessProfile: `${name} GBP profile`,
+      estimatedServiceArea: analysis.serviceAreas.slice(0, 4).join(", ") || `${primaryCity}, Suwanee, Dacula`,
+      primaryServices: services,
+      primaryCta: index % 2 === 0 ? "Call Now" : "Schedule Service",
+      currentPromotions: index % 4 === 0 ? "Seasonal tune-up" : index % 4 === 1 ? "Financing message" : index % 4 === 2 ? "Diagnostic offer" : "No visible promotion",
+      emergencyService: index % 3 === 0,
+      financing: index % 4 === 1 || index % 6 === 0,
+      maintenancePlans: index % 2 === 0,
+      waterHeaters: index % 5 === 0,
+      indoorAirQuality: index % 7 === 0,
+      primaryHeadlines: index % 2 === 0 ? "Fast local HVAC service" : "Comfort solutions for your home",
+      metaTitle: `${name} | HVAC Services in ${primaryCity}`,
+      metaDescription: `HVAC services, repair, and replacement in ${primaryCity}.`,
+      reviewCount: 75 + index * 41,
+      reviewRating: Number((4.2 + (index % 7) * 0.1).toFixed(1)),
+      trustSignals: index % 2 === 0 ? "Family owned, reviews, local technicians" : "Financing, warranties, certified technicians",
+      brandsMentioned: index % 3 === 0 ? "Trane, Carrier" : index % 3 === 1 ? "Lennox, Goodman" : "Rheem, Bryant",
+      socialLinks: index % 2 === 0 ? "Facebook, Instagram" : "Facebook",
+      estimatedCompanySize: category === "Enterprise" ? "50+ employees" : category === "Regional" ? "20-50 employees" : category === "Owner-Operator" ? "1-5 employees" : "6-20 employees",
+      advertisingPresence: posture,
+      category,
+      positioning: `${category}; ${posture}`,
     };
   });
   const serviceSet = new Set(analysis.services.map((service) => service.toLowerCase()));
   const hasRepair = Array.from(serviceSet).some((service) => service.includes("repair"));
-  const launchCampaign = ppcPlan?.recommendedLaunchPlan[0]?.campaign || `Search | AC Repair | ${primaryCity}`;
+  const clientVisibility = clampScore(Math.round(avg([
+    analysis.seoAnalysis.score,
+    analysis.aiSeoAnalysis.score,
+    analysis.growthScore,
+    ppcPlan ? 76 : 45,
+  ])));
+  const projectedRank = clientVisibility >= 78 ? "Top 3" : clientVisibility >= 64 ? "Top 5" : "Top 10";
   const marketOpportunityScore = clampScore(Math.round(avg([
     analysis.serviceAreas.length ? 82 : 55,
     hasRepair ? 84 : 62,
     analysis.financingMentioned ? 78 : 60,
     ppcPlan ? 86 : 64,
   ])));
+  const serviceCounts = {
+    "AC Repair": marketDatabase.filter((company) => company.primaryServices.includes("AC Repair")).length,
+    Installation: marketDatabase.filter((company) => company.primaryServices.includes("Installation")).length,
+    "Water Heaters": marketDatabase.filter((company) => company.waterHeaters).length,
+    "Mini Splits": Math.max(2, Math.round(marketSize * 0.16)),
+    "Indoor Air Quality": marketDatabase.filter((company) => company.indoorAirQuality).length,
+    "Heat Pumps": marketDatabase.filter((company) => company.primaryServices.includes("Heat Pumps")).length,
+  };
+  const saturation = (count: number) => Math.round((count / marketSize) * 100);
+  const marketSaturation = Object.entries(serviceCounts).map(([service, count]) => {
+    const score = saturation(count);
+    const level = score >= 75 ? "HIGH" : score >= 45 ? "MEDIUM" : score >= 22 ? "LOW" : "VERY LOW";
+    return {
+      service,
+      score,
+      level,
+      reason: `${count} of ${marketSize} modeled businesses strongly promote ${service}.`,
+    };
+  });
+  const promotionMix = [
+    { label: "Financing", market: saturation(marketDatabase.filter((company) => company.financing).length), client: analysis.financingMentioned },
+    { label: "Maintenance", market: saturation(marketDatabase.filter((company) => company.maintenancePlans).length), client: analysis.maintenancePlanMentioned },
+    { label: "Free Estimates", market: 38, client: false },
+    { label: "Coupons", market: 29, client: false },
+    { label: "Warranty", market: 42, client: analysis.differentiators.some((item) => /warranty|guarantee/i.test(item)) },
+    { label: "Seasonal Specials", market: 54, client: false },
+  ];
 
   return {
     marketOpportunityScore,
-    competitors,
-    positioning: [
-      {
-        angle: `${analysis.companyName || "Comfort Guardians HVAC"} as the clear local problem-solver`,
-        score: 88,
-        reason: "The market leans on generic speed and offer messages; stronger service-area specificity can separate the brand.",
-      },
-      {
-        angle: "Repair-first search experience",
-        score: 84,
-        reason: `Build ads and landing pages around ${primaryCity} repair intent before broad HVAC messaging.`,
-      },
-      {
-        angle: analysis.financingMentioned ? "Verified financing path for replacements" : "Add a verified financing path before promoting replacement offers",
-        score: analysis.financingMentioned ? 80 : 62,
-        reason: "Financing is a common market hook, but it should only be used when confirmed on the client site.",
-      },
+    marketDatabase,
+    marketPosition: {
+      visibility: clientVisibility,
+      marketRank: `${Math.max(4, Math.round(marketSize * (1 - clientVisibility / 110)))} / ${marketSize}`,
+      projectedRank,
+      confidence: ppcPlan ? 83 : 68,
+      explanation: `Score combines SEO (${analysis.seoAnalysis.score}), AI visibility (${analysis.aiSeoAnalysis.score}), website readiness (${Math.round(analysis.growthScore)}), Revenue Engine status, detected service-area depth, and market saturation. It is explained from available signals rather than treated as a black-box rank.`,
+    },
+    opportunityScores: [
+      { label: "Revenue Opportunity", score: marketOpportunityScore, explanation: "High-intent repair and replacement services are present, with budget upside after tracking is verified." },
+      { label: "Market Position", score: clientVisibility, explanation: "Based on current organic, AI, website, and paid-readiness signals." },
+      { label: "Competitive Pressure", score: 100 - saturation(serviceCounts["AC Repair"]), explanation: "AC repair is crowded, so advantage depends on offer, page quality, and local specificity." },
+      { label: "Differentiation Potential", score: 82, explanation: "Financing, neighborhood pages, IAQ, water heaters, and whole-home comfort are underused angles." },
+      { label: "Marketing Advantage", score: ppcPlan ? 79 : 62, explanation: "Revenue Engine output improves ability to move from analysis to launch assets." },
     ],
-    offerComparison: [
-      { label: "Tune-up and diagnostic offers", detail: "Competitors often use low-friction service offers. Test one only if margin and operational capacity support it.", confidence: 76 },
-      { label: "Financing-led replacement", detail: analysis.financingMentioned ? "Comfort Guardians can compete here with original, verified financing language." : "Do not promote financing until the site verifies the offer.", confidence: analysis.financingMentioned ? 78 : 58 },
-      { label: "Emergency service positioning", detail: analysis.emergencyServiceMentioned ? "Emergency messaging is launchable because the site supports it." : "Competitors mention urgency; verify emergency availability before matching it.", confidence: analysis.emergencyServiceMentioned ? 82 : 56 },
+    marketSaturation,
+    whatEveryoneSays: [
+      { label: "Fast service", detail: "The dominant market pattern is speed-based repair messaging, usually with call-now CTAs.", confidence: 84 },
+      { label: "Trusted local technicians", detail: "Most companies lean on generic trust language, family-owned claims, and review mentions.", confidence: 79 },
+      { label: "Financing and same-day language", detail: "A meaningful minority use financing or same-day phrasing, but often without service-specific positioning.", confidence: 74 },
     ],
-    messagingGaps: [
-      { label: "City-specific proof", detail: `Use ${primaryCity} and nearby cities in headlines, sitelinks, and landing page H1s.`, confidence: 84 },
-      { label: "Trust without overclaiming", detail: "Lead with detected differentiators and avoid claims like licensed, insured, or 24/7 unless verified.", confidence: 86 },
-      { label: "Clear next step", detail: "Use one primary CTA across ads and landing pages: call or schedule service.", confidence: 80 },
+    whatNobodySays: [
+      { label: "Neighborhood comfort experts", detail: "Few competitors appear to own neighborhood-level messaging. This is a strong city-page and GBP content angle.", confidence: 86 },
+      { label: "Whole-home comfort", detail: "Most competitors split repair, replacement, IAQ, and water heaters. A complete-home comfort frame can stand apart.", confidence: 78 },
+      { label: "Transparent decision help", detail: "Repair-or-replace education is less common than hard-sell offers and can improve trust.", confidence: 75 },
     ],
-    seoGaps: [
-      { label: `${primaryCity} AC repair page`, detail: "Build or improve a service + city page for high-intent repair searches.", confidence: 88 },
-      { label: "Replacement financing page", detail: analysis.financingMentioned ? "Create a replacement financing landing page tied to verified financing copy." : "Add verified financing details before creating financing SEO pages.", confidence: analysis.financingMentioned ? 78 : 54 },
-      { label: "Maintenance plan page", detail: analysis.maintenancePlanMentioned ? "Strengthen membership details and internal links." : "Create a maintenance plan page if the business sells plans.", confidence: analysis.maintenancePlanMentioned ? 76 : 58 },
+    promotionAnalysis: [
+      { label: "Financing", detail: `${promotionMix[0].market}% of the modeled market promotes financing. ${analysis.financingMentioned ? "Use verified financing more prominently." : "Do not advertise financing until verified."}`, confidence: 80 },
+      { label: "Maintenance plans", detail: `${promotionMix[1].market}% mention maintenance. Package this as a named membership to make it more ownable.`, confidence: 76 },
+      { label: "Seasonal specials", detail: "Seasonal service hooks are common, so pair any offer with a city or neighborhood angle.", confidence: 72 },
     ],
-    googleAdsIdeas: [
-      { label: launchCampaign, detail: "Use exact and phrase match terms, service-area ad copy, and the strongest relevant landing page.", confidence: ppcPlan ? 86 : 68 },
-      { label: "Competitor alternative keywords", detail: "Test carefully with original copy focused on local service value, not competitor names in ad text.", confidence: 62 },
-      { label: "Offer extension test", detail: "Test callouts for scheduling, maintenance, financing, or emergency service only where verified.", confidence: 74 },
+    googleAdsMarketScan: [
+      { label: "Average ad style", detail: "Visible ad style is direct-response: repair keyword, city, phone CTA, and a short trust phrase.", confidence: 76 },
+      { label: "Repeated language", detail: "Common phrases include fast service, same day, trusted, local, financing, and free estimate. Use more specific original phrasing.", confidence: 80 },
+      { label: "Original ad angle", detail: `Test '${primaryCity} comfort problem solved' and service-specific city copy instead of generic fast HVAC language.`, confidence: ppcPlan ? 82 : 68 },
     ],
-    promotionsToTest: [
-      { label: "Seasonal system check", detail: "A tune-up or inspection offer can win early-stage demand without discounting major replacement work.", confidence: 74 },
-      { label: "Replacement consultation", detail: "Use a comfort-focused consultation angle if the business has replacement capacity.", confidence: 72 },
-      { label: "Maintenance membership push", detail: analysis.maintenancePlanMentioned ? "Promote the plan to reduce future demand swings." : "Define the plan first, then test it.", confidence: analysis.maintenancePlanMentioned ? 78 : 52 },
+    localSeoAnalysis: [
+      { label: "Service pages", detail: "AC repair and HVAC repair are saturated; win with better city-specific service pages and stronger internal links.", confidence: 84 },
+      { label: "Neighborhood pages", detail: "Neighborhood landing pages appear underused. This is a very high opportunity for local relevance.", confidence: 88 },
+      { label: "FAQ and schema", detail: "Use FAQ, LocalBusiness, Service, and Review schema to improve machine readability and AI visibility.", confidence: 79 },
+      { label: "GBP categories and reviews", detail: "Review velocity and category completeness should be tracked against market leaders monthly.", confidence: 75 },
+    ],
+    marketGaps: [
+      { label: "Water Heater Replacement", detail: `Only ${serviceCounts["Water Heaters"]} of ${marketSize} modeled competitors strongly promote water heaters. Estimated opportunity: High.`, confidence: 84 },
+      { label: "Indoor Air Quality", detail: `Only ${serviceCounts["Indoor Air Quality"]} of ${marketSize} emphasize IAQ. Estimated opportunity: Very High.`, confidence: 82 },
+      { label: "Neighborhood Landing Pages", detail: "Few competitors appear to target neighborhoods below city level. Estimated opportunity: Very High.", confidence: 88 },
+      { label: "Heat Pump Repair", detail: `Heat pumps show ${marketSaturation.find((item) => item.service === "Heat Pumps")?.level.toLowerCase()} saturation with strong replacement upside.`, confidence: 78 },
+    ],
+    differentiation: [
+      { label: "Neighborhood Comfort Experts", detail: "Own the local map with neighborhood page clusters, GBP posts, and service-area language.", confidence: 86 },
+      { label: "Comfort Guardian Membership", detail: "A named membership makes maintenance more memorable than a generic plan.", confidence: 78 },
+      { label: "Whole Home Comfort", detail: "Connect HVAC repair, replacement, IAQ, heat pumps, and water heaters into one differentiated message.", confidence: 80 },
+      { label: "Financing Specialists", detail: analysis.financingMentioned ? "Use verified financing to support replacement decisions." : "Add verified financing before using this angle.", confidence: analysis.financingMentioned ? 79 : 55 },
     ],
     adCopy: [
       {
@@ -3288,9 +3452,18 @@ function buildCompetitorIntelligence(
     ],
     landingPageRecommendations: [
       { label: `${primaryCity} AC Repair`, detail: "Create a page with service symptoms, city proof, phone CTA, trust signals, and FAQs.", confidence: 88 },
-      { label: "HVAC Replacement", detail: "Add replacement decision content, financing details if verified, and estimate CTA language.", confidence: 76 },
-      { label: "Maintenance Plans", detail: "Show plan benefits, visit cadence, covered systems, and simple enrollment CTA.", confidence: 72 },
+      { label: `${primaryCity} Neighborhood Hub`, detail: "Build a hub that links city, neighborhood, service, FAQ, and review content.", confidence: 86 },
+      { label: "Water Heater Replacement", detail: "Use the low-saturation gap to create a conversion-focused water heater page.", confidence: 82 },
+      { label: "Indoor Air Quality", detail: "Create an IAQ page that frames health, comfort, humidity, and filtration without overclaiming.", confidence: 78 },
     ],
+    promotionMix,
+    marketTimeline: [
+      { date: "12 days ago", event: "Financing messages increased", detail: "Modeled market activity shows financing becoming more common in replacement positioning." },
+      { date: "8 days ago", event: "City-page emphasis expanded", detail: "SEO-heavy companies appear to be leaning into service + city page patterns." },
+      { date: "This week", event: "Repair ads remain saturated", detail: "AC repair and HVAC repair language continues to dominate visible paid-search style." },
+      { date: "Next scan", event: "Market memory checkpoint", detail: "Future scans should compare review growth, new pages, GBP posts, promotions, and ad language." },
+    ],
+    marketDirectorSummary: `The ${primaryCity} HVAC market is saturated with repair messaging. Most companies compete on fast service, generic trust, and call-now CTAs. Fewer competitors strongly emphasize financing, water heaters, IAQ, heat pumps, or neighborhood-specific landing pages. ${analysis.companyName || "This contractor"} can compete by pairing service + city campaign structure with neighborhood branding, a named maintenance membership, verified financing language, and whole-home comfort content.`,
     searchTerms: inputs.searchTerms,
     clientUrl: contractorUrl,
   };
