@@ -4,8 +4,17 @@
 
 :root {
   color-scheme: light;
-  background: #fbfbfa;
-  color: #071b33;
+  --bg: #f3faf8;
+  --ink: #102d32;
+  --navy: #063944;
+  --muted: #5d7175;
+  --line: rgba(6, 57, 68, .13);
+  --green: #19b8b5;
+  --green-dark: #087b84;
+  --green-soft: rgba(25, 184, 181, .13);
+  --amber: #ffb84d;
+  background: var(--bg);
+  color: var(--ink);
 }
 
 * {
@@ -20,12 +29,247 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    linear-gradient(180deg, rgba(7, 27, 51, 0.035) 0%, rgba(255, 255, 255, 0) 22rem),
-    #fbfbfa;
-  color: #071b33;
+    radial-gradient(circle at 72% 8%, rgba(25, 184, 181, .17), transparent 30%),
+    radial-gradient(circle at 14% 26%, rgba(255, 184, 77, .16), transparent 26%),
+    linear-gradient(180deg, #ffffff, #f3faf8 50%, #e9f6f2);
+  color: var(--ink);
+  overflow-x: hidden;
 }
 
 button,
 input {
   font: inherit;
+}
+
+.background-effects {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(25, 184, 181, .06) 1px, transparent 1px) 0 0 / 110px 110px,
+    linear-gradient(180deg, rgba(255, 255, 255, .78), rgba(243, 250, 248, .92));
+}
+
+.background-effects::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(circle, rgba(25, 184, 181, .22) 0 2px, transparent 2.4px) 0 0 / 160px 120px,
+    linear-gradient(120deg, transparent 0 44%, rgba(25, 184, 181, .1) 45% 46%, transparent 47% 100%);
+  animation: mapDrift 18s linear infinite;
+}
+
+.background-effects::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(8, 123, 132, .07) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(8, 123, 132, .07) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, .42), transparent 78%);
+  animation: gridSlide 22s linear infinite;
+}
+
+.glow {
+  position: fixed;
+  width: 46vw;
+  max-width: 620px;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  filter: blur(34px);
+  opacity: .28;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.glow-one {
+  left: -12vw;
+  top: 16vh;
+  background: rgba(25, 184, 181, .26);
+  animation: glowFloatOne 13s ease-in-out infinite;
+}
+
+.glow-two {
+  right: -16vw;
+  top: -8vh;
+  background: rgba(255, 184, 77, .22);
+  animation: glowFloatTwo 16s ease-in-out infinite;
+}
+
+.wave {
+  position: fixed;
+  left: -18vw;
+  right: -18vw;
+  height: 190px;
+  border-radius: 50%;
+  border-top: 2px solid rgba(25, 184, 181, .22);
+  border-bottom: 1px solid rgba(255, 184, 77, .18);
+  opacity: .58;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.wave::before,
+.wave::after {
+  content: "";
+  position: absolute;
+  inset: 28px 0 auto;
+  height: 120px;
+  border-radius: 50%;
+  border-top: 1px solid rgba(8, 123, 132, .16);
+}
+
+.wave::after {
+  inset: 64px 0 auto;
+  border-top-color: rgba(255, 184, 77, .18);
+}
+
+.wave-one {
+  top: 18vh;
+  transform: rotate(-7deg);
+  animation: waveMove 11s ease-in-out infinite;
+}
+
+.wave-two {
+  top: 46vh;
+  transform: rotate(5deg);
+  animation: waveMoveAlt 14s ease-in-out infinite;
+}
+
+.wave-three {
+  top: 76vh;
+  transform: rotate(-3deg);
+  opacity: .35;
+  animation: waveMove 17s ease-in-out infinite reverse;
+}
+
+@keyframes mapDrift {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 160px 120px, 0 0; }
+}
+
+@keyframes gridSlide {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 56px 56px, 56px 56px; }
+}
+
+@keyframes glowFloatOne {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(8vw, -5vh, 0) scale(1.08); }
+}
+
+@keyframes glowFloatTwo {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-7vw, 6vh, 0) scale(1.12); }
+}
+
+@keyframes waveMove {
+  0%, 100% { transform: translateX(0) rotate(-7deg); }
+  50% { transform: translateX(8vw) rotate(-4deg); }
+}
+
+@keyframes waveMoveAlt {
+  0%, 100% { transform: translateX(0) rotate(5deg); }
+  50% { transform: translateX(-7vw) rotate(2deg); }
+}
+
+.os-channel-orbit {
+  width: min(760px, 100%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+.os-channel-orbit::before {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 50%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(25, 184, 181, .32), rgba(255, 184, 77, .26), transparent);
+  transform: translateY(-50%);
+  z-index: -1;
+}
+
+.os-channel-card {
+  min-height: 118px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px;
+  border: 1px solid rgba(6, 57, 68, .09);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(255, 255, 255, .72)),
+    radial-gradient(circle at 80% 0%, rgba(25, 184, 181, .13), transparent 40%);
+  box-shadow: 0 20px 52px rgba(6, 57, 68, .07);
+  text-align: left;
+  animation: channelFloat 7s ease-in-out infinite;
+}
+
+.os-channel-card:nth-child(2),
+.os-channel-card:nth-child(5) {
+  animation-delay: -1.4s;
+}
+
+.os-channel-card:nth-child(3),
+.os-channel-card:nth-child(6) {
+  animation-delay: -2.8s;
+}
+
+.os-channel-card span {
+  width: fit-content;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(25, 184, 181, .11);
+  color: #087b84;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.os-channel-card strong {
+  color: #063944;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.os-channel-card em {
+  color: #6e8085;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+@keyframes channelFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .background-effects::before,
+  .background-effects::after,
+  .glow,
+  .wave,
+  .os-channel-card {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .os-channel-orbit {
+    grid-template-columns: 1fr;
+  }
+
+  .os-channel-orbit::before {
+    display: none;
+  }
 }

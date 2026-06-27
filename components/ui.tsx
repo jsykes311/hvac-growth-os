@@ -17,12 +17,12 @@ export function Button({
 }: ButtonProps) {
   const styles =
     variant === "primary"
-      ? "bg-flame text-white shadow-[0_12px_30px_rgba(138,36,50,0.18)] hover:bg-[#761f2b]"
-      : "border border-ink/15 bg-white text-ink hover:border-flame/40 hover:bg-[#fbf7f8]";
+      ? "bg-gradient-to-br from-ink to-flame text-white shadow-[0_18px_42px_rgba(25,184,181,0.24)] hover:shadow-[0_18px_44px_rgba(6,57,68,0.18)]"
+      : "border border-ink/15 bg-white/90 text-ink hover:border-flame/40 hover:bg-white";
 
   return (
     <button
-      className={`inline-flex h-12 items-center justify-center gap-2 rounded-lg px-5 text-sm font-bold transition ${styles} disabled:cursor-not-allowed disabled:opacity-60`}
+      className={`inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-sm font-extrabold transition hover:-translate-y-0.5 ${styles} disabled:cursor-not-allowed disabled:opacity-60`}
       disabled={disabled}
       onClick={onClick}
       type={type}
@@ -41,7 +41,7 @@ export function Panel({
 }) {
   return (
     <section
-      className={`rounded-xl border border-ink/10 bg-white p-6 shadow-soft ${className}`}
+      className={`rounded-[22px] border border-ink/10 bg-white/85 p-6 shadow-soft backdrop-blur-md ${className}`}
     >
       {children}
     </section>

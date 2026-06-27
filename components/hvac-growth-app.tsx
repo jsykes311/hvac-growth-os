@@ -254,6 +254,12 @@ export function HvacGrowthApp() {
 
   return (
     <main className="min-h-screen px-5 py-6 sm:px-8 lg:px-12">
+      <div className="background-effects" aria-hidden="true" />
+      <div className="glow glow-one" aria-hidden="true" />
+      <div className="glow glow-two" aria-hidden="true" />
+      <div className="wave wave-one" aria-hidden="true" />
+      <div className="wave wave-two" aria-hidden="true" />
+      <div className="wave wave-three" aria-hidden="true" />
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col">
         <Header />
 
@@ -310,7 +316,7 @@ function Header() {
   return (
     <header className="flex items-center justify-between py-2">
       <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-lg bg-ink text-white shadow-[0_14px_35px_rgba(7,27,51,0.18)]">
+        <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-ink to-flame text-white shadow-[0_18px_42px_rgba(25,184,181,0.22)]">
           <ChartNoAxesCombined className="size-5" aria-hidden="true" />
         </div>
         <div>
@@ -349,6 +355,7 @@ function HomeView({
           Enter a contractor URL. HVAC Growth OS builds the workspace, audits the site, creates the Revenue Engine, and organizes the assets needed to launch.
         </p>
         <OnboardingPreview />
+        <OperatingChannels />
       </section>
 
       <Panel className="w-full">
@@ -614,12 +621,12 @@ function PlatformNav({
   onChange: (section: PlatformSection) => void;
 }) {
   return (
-    <nav className="mb-5 overflow-x-auto rounded-xl border border-ink/10 bg-white p-2 shadow-soft">
+    <nav className="mb-5 overflow-x-auto rounded-[18px] border border-ink/10 bg-white/85 p-2 shadow-soft backdrop-blur-md">
       <div className="flex min-w-max gap-2">
         {PLATFORM_NAV.map((item) => (
           <button
             className={`h-10 rounded-lg px-3 text-sm font-black transition ${
-              activeSection === item.id ? "bg-ink text-white shadow-[0_10px_24px_rgba(7,27,51,0.16)]" : "text-graphite hover:bg-[#f7f1f2] hover:text-ink"
+              activeSection === item.id ? "bg-gradient-to-br from-ink to-flame text-white shadow-[0_12px_28px_rgba(25,184,181,0.2)]" : "text-graphite hover:bg-white hover:text-ink"
             }`}
             key={item.id}
             onClick={() => onChange(item.id)}
@@ -699,7 +706,7 @@ function DecisionEngine({
         {decisions.map((decision) => {
           const status = statuses[decision.id] ?? "Pending";
           return (
-            <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_30px_rgba(7,27,51,0.04)]" key={decision.id}>
+            <article className="rounded-[18px] border border-ink/10 bg-white/82 p-4 shadow-[0_20px_52px_rgba(6,57,68,0.07)] backdrop-blur-sm" key={decision.id}>
               <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -759,7 +766,7 @@ function DecisionMeta({ label, value }: { label: string; value: string }) {
 function DecisionButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
-      className="h-9 rounded-lg border border-ink/15 bg-white px-3 text-xs font-black text-ink transition hover:border-flame/40 hover:bg-[#fbf7f8]"
+      className="h-9 rounded-full border border-ink/15 bg-white/90 px-3 text-xs font-black text-ink transition hover:border-flame/40 hover:bg-white"
       onClick={onClick}
       type="button"
     >
@@ -1528,7 +1535,7 @@ function RecommendationPanel({ title, values }: { title: string; values: Array<{
 
 function ConfidenceBadge({ score }: { score: number }) {
   return (
-    <span className="rounded-lg border border-flame/15 bg-[#fbf7f8] px-2 py-1 text-xs font-black text-flame">
+    <span className="rounded-lg border border-flame/20 bg-teal-50 px-2 py-1 text-xs font-black text-copper">
       {score}% confidence
     </span>
   );
@@ -1669,6 +1676,29 @@ function OnboardingPreview() {
   );
 }
 
+function OperatingChannels() {
+  const channels = [
+    ["01", "Google Ads", "Search demand"],
+    ["02", "SEO", "Local intent"],
+    ["03", "AI CMO", "Daily decisions"],
+    ["04", "Market", "Opportunity map"],
+    ["05", "Website", "Conversion paths"],
+    ["06", "Reporting", "Real outcomes"],
+  ];
+
+  return (
+    <div className="os-channel-orbit" aria-label="HVAC Growth OS operating channels">
+      {channels.map(([number, title, detail]) => (
+        <article className="os-channel-card" key={title}>
+          <span>{number}</span>
+          <strong>{title}</strong>
+          <em>{detail}</em>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function ScoreGrid({ analysis, ppcPlan }: { analysis: BusinessProfile; ppcPlan: PpcPlan | null }) {
   const scores = [
     ["Overall Growth", Math.round(analysis.growthScore)],
@@ -1695,9 +1725,9 @@ function ScoreGrid({ analysis, ppcPlan }: { analysis: BusinessProfile; ppcPlan: 
 function HealthBadge({ color, score }: { color: "Green" | "Yellow" | "Red"; score: number }) {
   const className =
     color === "Green"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      ? "border-teal-200 bg-teal-50 text-teal-700"
       : color === "Yellow"
-        ? "border-flame/20 bg-[#fbf7f8] text-flame"
+        ? "border-flame/20 bg-teal-50 text-copper"
         : "border-slate-200 bg-slate-100 text-slate-700";
 
   return (
@@ -1764,7 +1794,7 @@ function ClientTimeline({ ppcPlan }: { ppcPlan: PpcPlan | null }) {
 function ActionRow({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
-      className="flex items-center justify-between rounded-xl border border-ink/10 bg-[#fbfbfa] px-4 py-3 text-left text-sm font-black text-ink transition hover:border-flame/40 hover:bg-[#fbf7f8]"
+      className="flex items-center justify-between rounded-xl border border-ink/10 bg-[#fbfbfa] px-4 py-3 text-left text-sm font-black text-ink transition hover:border-flame/40 hover:bg-white"
       onClick={onClick}
       type="button"
     >
@@ -2107,9 +2137,9 @@ function MetricCard({ label, value }: { label: string; value: number | string })
 function StatusBadge({ status }: { status: "Ready" | "Needs Work" | "Not Recommended" }) {
   const className =
     status === "Ready"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      ? "bg-teal-50 text-teal-700 border-teal-200"
       : status === "Needs Work"
-        ? "bg-[#fbf7f8] text-flame border-flame/20"
+        ? "bg-teal-50 text-copper border-flame/20"
         : "bg-slate-100 text-graphite border-ink/10";
 
   return (
