@@ -51,6 +51,10 @@ export function HvacGrowthApp() {
   const [ppcPlan, setPpcPlan] = useState<PpcPlan | null>(null);
   const [ppcOverrides, setPpcOverrides] = useState<PpcManualOverrides>({
     monthlyBudget: 3000,
+    averageRepairTicket: 750,
+    averageReplacementTicket: 9500,
+    estimatedCloseRate: 35,
+    estimatedLeadToEstimateRate: 65,
     serviceCities: [],
     servicesToPrioritize: [],
   });
@@ -93,6 +97,10 @@ export function HvacGrowthApp() {
         phoneNumber: payload.profile.phone,
         serviceCities: payload.profile.serviceAreas,
         monthlyBudget: 3000,
+        averageRepairTicket: 750,
+        averageReplacementTicket: 9500,
+        estimatedCloseRate: 35,
+        estimatedLeadToEstimateRate: 65,
         servicesToPrioritize: [],
         emergencyService: payload.profile.emergencyServiceMentioned,
         financing: payload.profile.financingMentioned,
@@ -575,17 +583,17 @@ function PpcPlannerPanel({
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-ink">
             <Megaphone className="size-5" aria-hidden="true" />
-            PPC / Google Ads Generator
+            Revenue Engine
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
-            Builds a search campaign plan from the scraped HVAC profile, with campaign strategy, ad groups,
-            exact and phrase keywords, ads, assets, landing pages, and CSV exports.
+            Scores which HVAC campaigns are ready to launch, what needs fixing first, and which ad assets
+            should be exported from the scraped business profile.
           </p>
         </div>
         {ppcPlan && (
           <div className="rounded-md bg-ink px-4 py-3 text-center text-white">
             <p className="text-3xl font-black leading-none">{ppcPlan.campaigns.length}</p>
-            <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-white/70">campaigns</p>
+            <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-white/70">launch picks</p>
           </div>
         )}
       </div>
@@ -614,9 +622,50 @@ function PpcPlannerPanel({
         <div className="flex items-end">
           <Button disabled={isCreatingPpcPlan} type="submit">
             {isCreatingPpcPlan ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Search className="size-4" aria-hidden="true" />}
-            {isCreatingPpcPlan ? "Generating..." : "Generate PPC Plan"}
+            {isCreatingPpcPlan ? "Building..." : "Build Revenue Engine"}
           </Button>
         </div>
+
+        <label className="space-y-2">
+          <FieldLabel>Avg Repair Ticket</FieldLabel>
+          <input
+            className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+            min="0"
+            onChange={(event) => updateOverride("averageRepairTicket", Number(event.target.value))}
+            type="number"
+            value={overrides.averageRepairTicket ?? 750}
+          />
+        </label>
+        <label className="space-y-2">
+          <FieldLabel>Avg Replacement Ticket</FieldLabel>
+          <input
+            className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+            min="0"
+            onChange={(event) => updateOverride("averageReplacementTicket", Number(event.target.value))}
+            type="number"
+            value={overrides.averageReplacementTicket ?? 9500}
+          />
+        </label>
+        <label className="space-y-2">
+          <FieldLabel>Close Rate %</FieldLabel>
+          <input
+            className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+            min="0"
+            onChange={(event) => updateOverride("estimatedCloseRate", Number(event.target.value))}
+            type="number"
+            value={overrides.estimatedCloseRate ?? 35}
+          />
+        </label>
+        <label className="space-y-2">
+          <FieldLabel>Lead to Estimate %</FieldLabel>
+          <input
+            className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+            min="0"
+            onChange={(event) => updateOverride("estimatedLeadToEstimateRate", Number(event.target.value))}
+            type="number"
+            value={overrides.estimatedLeadToEstimateRate ?? 65}
+          />
+        </label>
 
         <ListField
           label="Service Cities"
@@ -670,7 +719,35 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
 
   return (
     <div className="mt-7 border-t border-ink/10 pt-6">
-      <div className="grid gap-4 md:grid-cols-4">
+      <div>
+        <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Campaign Readiness</h3>
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          {plan.campaignReadiness.map((item) => (
+            <article className="rounded-md border border-ink/10 bg-frost p-4" key={item.campaignKey}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-black text-ink">{item.campaignName}</h4>
+                  <p className="mt-2 text-sm leading-5 text-graphite/70">{item.reasoning}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <StatusBadge status={item.readinessStatus} />
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-ink">{item.priorityScore}</span>
+                </div>
+              </div>
+              <p className="mt-3 text-sm font-bold text-ink">First action: {item.recommendedFirstAction}</p>
+              {item.missingRequirements.length > 0 && (
+                <ul className="mt-3 space-y-1">
+                  {item.missingRequirements.map((requirement) => (
+                    <li className="text-sm leading-5 text-graphite/70" key={requirement}>{requirement}</li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-4">
         <MetricCard label="Keywords" value={plan.keywords.length} />
         <MetricCard label="Ad Groups" value={plan.adGroups.length} />
         <MetricCard label="Headlines" value={headlineCount} />
@@ -679,24 +756,27 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_0.9fr]">
         <div>
-          <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Recommended Launch Campaigns</h3>
+          <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Recommended Launch Plan</h3>
           <div className="mt-3 grid gap-3">
-            {plan.campaignStrategy.map((campaign) => (
+            {plan.recommendedLaunchPlan.map((campaign) => (
               <article className="rounded-md border border-ink/10 bg-frost p-4" key={campaign.campaign}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="text-sm font-black text-ink">{campaign.campaign}</h4>
                   <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">
-                    ${campaign.dailyBudget}/day
+                    ${campaign.recommendedDailyBudget}/day
                   </span>
                 </div>
-                <p className="mt-2 text-sm leading-5 text-graphite/70">{campaign.whyRecommended}</p>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{campaign.whyLaunchNow}</p>
+                <p className="mt-2 text-xs font-black uppercase tracking-[0.12em] text-graphite/60">
+                  ${campaign.monthlyBudgetEstimate}/month estimate
+                </p>
               </article>
             ))}
           </div>
         </div>
 
         <div>
-          <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Detected PPC Signals</h3>
+          <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Detected Revenue Signals</h3>
           <dl className="mt-3 grid gap-3 text-sm">
             <InfoRow label="Business" value={plan.detected.businessName} />
             <InfoRow label="Phone" value={plan.detected.phoneNumber || "Not found"} />
@@ -711,7 +791,7 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
       </div>
 
       <div className="mt-6 rounded-md border border-ink/10 bg-frost p-4">
-        <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Download CSV Exports</h3>
+        <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Export Center</h3>
         <div className="mt-3 flex flex-wrap gap-2">
           {plan.csvExports.map((exportFile) => (
             <a
@@ -750,11 +830,27 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
       </div>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <PpcTable
+          columns={["Campaign", "Ad Group", "Score", "Recommendation"]}
+          rows={plan.landingPageRecommendations.map((page) => [
+            page.campaign,
+            page.adGroup,
+            String(page.landingPageReadinessScore),
+            page.recommendation,
+          ])}
+          title="Landing Page Intelligence"
+        />
+        <ForecastPanel plan={plan} />
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
         <ReportList title="Search Intent Analysis" values={plan.report.searchIntentAnalysis} />
         <ReportList title="Missing Landing Pages" values={plan.report.missingLandingPages} />
         <ReportList title="Tracking Recommendations" values={plan.report.trackingRecommendations} />
         <ReportList title="Next Steps" values={plan.report.nextSteps} />
       </div>
+
+      <ImplementationChecklist plan={plan} />
 
       <div className="mt-6 rounded-md border border-ink/10 bg-white p-4">
         <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Budget Recommendation</h3>
@@ -769,6 +865,77 @@ function MetricCard({ label, value }: { label: string; value: number }) {
     <div className="rounded-md border border-ink/10 bg-frost p-4">
       <p className="text-3xl font-black text-ink">{value}</p>
       <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-graphite/60">{label}</p>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: "Ready" | "Needs Work" | "Not Recommended" }) {
+  const className =
+    status === "Ready"
+      ? "bg-green-50 text-green-700 border-green-200"
+      : status === "Needs Work"
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-red-50 text-red-700 border-red-200";
+
+  return (
+    <span className={`rounded-md border px-2 py-1 text-xs font-black ${className}`}>
+      {status}
+    </span>
+  );
+}
+
+function ForecastPanel({ plan }: { plan: PpcPlan }) {
+  const forecast = plan.roiForecast;
+
+  return (
+    <div>
+      <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Budget & ROI Forecast</h3>
+      <div className="mt-3 rounded-md border border-ink/10 bg-white p-4">
+        <div className="grid grid-cols-2 gap-3">
+          <ForecastMetric label="Clicks" value={String(forecast.estimatedClicks)} />
+          <ForecastMetric label="Leads" value={String(forecast.estimatedLeads)} />
+          <ForecastMetric label="Cost / Lead" value={`$${forecast.estimatedCostPerLead}`} />
+          <ForecastMetric label="Booked Jobs" value={String(forecast.estimatedBookedJobs)} />
+          <ForecastMetric label="Revenue Low" value={`$${forecast.estimatedRevenueLow.toLocaleString()}`} />
+          <ForecastMetric label="Revenue High" value={`$${forecast.estimatedRevenueHigh.toLocaleString()}`} />
+          <ForecastMetric label="ROI Low" value={`${forecast.simpleRoiLow}x`} />
+          <ForecastMetric label="ROI High" value={`${forecast.simpleRoiHigh}x`} />
+        </div>
+        <ul className="mt-4 space-y-2">
+          {forecast.notes.map((note) => (
+            <li className="text-xs leading-5 text-graphite/70" key={note}>{note}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function ForecastMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-frost px-3 py-2">
+      <p className="text-lg font-black text-ink">{value}</p>
+      <p className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-graphite/60">{label}</p>
+    </div>
+  );
+}
+
+function ImplementationChecklist({ plan }: { plan: PpcPlan }) {
+  return (
+    <div className="mt-6">
+      <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Implementation Checklist</h3>
+      <div className="mt-3 grid gap-3 lg:grid-cols-3">
+        {plan.implementationChecklist.map((item) => (
+          <article className="rounded-md border border-ink/10 bg-frost p-3" key={`${item.category}-${item.item}`}>
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="text-sm font-black text-ink">{item.category}</h4>
+              <StatusBadge status={item.status} />
+            </div>
+            <p className="mt-2 text-sm font-bold text-graphite">{item.item}</p>
+            <p className="mt-2 text-sm leading-5 text-graphite/70">{item.notes}</p>
+          </article>
+        ))}
+      </div>
     </div>
   );
 }

@@ -93,6 +93,10 @@ export type PpcManualOverrides = {
   phoneNumber?: string;
   serviceCities?: string[];
   monthlyBudget?: number;
+  averageRepairTicket?: number;
+  averageReplacementTicket?: number;
+  estimatedCloseRate?: number;
+  estimatedLeadToEstimateRate?: number;
   servicesToPrioritize?: string[];
   emergencyService?: boolean;
   financing?: boolean;
@@ -105,7 +109,10 @@ export type PpcCampaign = {
   campaign: string;
   campaignType: "Search";
   dailyBudget: number;
+  monthlyBudgetEstimate?: number;
   priority: "High" | "Medium" | "Low";
+  readinessScore?: number;
+  readinessStatus?: "Ready" | "Needs Work" | "Not Recommended";
   whyRecommended: string;
 };
 
@@ -119,7 +126,7 @@ export type PpcKeyword = {
   adGroup: string;
   keyword: string;
   matchType: "Exact" | "Phrase" | "Broad";
-  intentLevel: "High" | "Medium" | "Test";
+  intentLevel: "High" | "Medium" | "Low" | "Test";
   notes: string;
 };
 
@@ -136,11 +143,54 @@ export type PpcLandingPageRecommendation = {
   campaign: string;
   adGroup: string;
   bestExistingLandingPage: string;
+  landingPageReadinessScore: number;
   recommendation: string;
   suggestedPageTitle: string;
   suggestedH1: string;
   suggestedCta: string;
   metaDescription: string;
+};
+
+export type RevenueCampaignReadiness = {
+  campaignKey: string;
+  campaignName: string;
+  priorityScore: number;
+  readinessStatus: "Ready" | "Needs Work" | "Not Recommended";
+  reasoning: string;
+  missingRequirements: string[];
+  recommendedFirstAction: string;
+};
+
+export type RevenueLaunchPlanItem = {
+  campaign: string;
+  priorityScore: number;
+  recommendedDailyBudget: number;
+  monthlyBudgetEstimate: number;
+  whyLaunchNow: string;
+};
+
+export type RevenueForecast = {
+  monthlyAdBudget: number;
+  averageRepairTicket: number;
+  averageReplacementTicket: number;
+  estimatedCloseRate: number;
+  estimatedLeadToEstimateRate: number;
+  estimatedClicks: number;
+  estimatedLeads: number;
+  estimatedCostPerLead: number;
+  estimatedBookedJobs: number;
+  estimatedRevenueLow: number;
+  estimatedRevenueHigh: number;
+  simpleRoiLow: number;
+  simpleRoiHigh: number;
+  notes: string[];
+};
+
+export type RevenueChecklistItem = {
+  category: string;
+  item: string;
+  status: "Ready" | "Needs Work";
+  notes: string;
 };
 
 export type PpcCsvExport = {
@@ -165,6 +215,8 @@ export type PpcPlan = {
     ctas: string[];
     existingLandingPages: Array<{ label: string; title: string; url: string }>;
   };
+  campaignReadiness: RevenueCampaignReadiness[];
+  recommendedLaunchPlan: RevenueLaunchPlanItem[];
   campaignStrategy: PpcCampaign[];
   campaigns: PpcCampaign[];
   adGroups: PpcAdGroup[];
@@ -184,6 +236,8 @@ export type PpcPlan = {
     displayPaths: Array<{ campaign: string; adGroup: string; path1: string; path2: string }>;
   };
   landingPageRecommendations: PpcLandingPageRecommendation[];
+  roiForecast: RevenueForecast;
+  implementationChecklist: RevenueChecklistItem[];
   report: {
     recommendedLaunchCampaigns: string[];
     budgetRecommendation: string;
