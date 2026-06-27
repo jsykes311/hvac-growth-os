@@ -310,7 +310,7 @@ function Header() {
   return (
     <header className="flex items-center justify-between py-2">
       <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-md bg-ink text-white">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-ink text-white shadow-[0_14px_35px_rgba(7,27,51,0.18)]">
           <ChartNoAxesCombined className="size-5" aria-hidden="true" />
         </div>
         <div>
@@ -318,7 +318,7 @@ function Header() {
           <p className="text-xs font-medium text-graphite/70">Contractor growth intelligence</p>
         </div>
       </div>
-      <p className="hidden text-sm font-semibold text-graphite/70 sm:block">Live website analysis</p>
+      <p className="hidden text-sm font-bold text-graphite/70 sm:block">TallTwin-powered operating system</p>
     </header>
   );
 }
@@ -356,7 +356,7 @@ function HomeView({
           <div className="space-y-2">
             <FieldLabel>Contractor website URL</FieldLabel>
             <input
-              className="h-14 w-full rounded-md border border-ink/15 bg-white px-4 text-base text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+            className="h-14 w-full rounded-lg border border-ink/15 bg-white px-4 text-base text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
               onChange={(event) => setContractorUrl(event.target.value)}
               onInput={(event) => setContractorUrl(event.currentTarget.value)}
               placeholder="https://examplehvac.com"
@@ -614,12 +614,12 @@ function PlatformNav({
   onChange: (section: PlatformSection) => void;
 }) {
   return (
-    <nav className="mb-5 overflow-x-auto rounded-lg border border-ink/10 bg-white/88 p-2 shadow-soft">
+    <nav className="mb-5 overflow-x-auto rounded-xl border border-ink/10 bg-white p-2 shadow-soft">
       <div className="flex min-w-max gap-2">
         {PLATFORM_NAV.map((item) => (
           <button
-            className={`h-10 rounded-md px-3 text-sm font-bold transition ${
-              activeSection === item.id ? "bg-ink text-white" : "text-graphite hover:bg-frost"
+            className={`h-10 rounded-lg px-3 text-sm font-black transition ${
+              activeSection === item.id ? "bg-ink text-white shadow-[0_10px_24px_rgba(7,27,51,0.16)]" : "text-graphite hover:bg-[#f7f1f2] hover:text-ink"
             }`}
             key={item.id}
             onClick={() => onChange(item.id)}
@@ -699,13 +699,13 @@ function DecisionEngine({
         {decisions.map((decision) => {
           const status = statuses[decision.id] ?? "Pending";
           return (
-            <article className="rounded-md border border-ink/10 bg-frost p-4" key={decision.id}>
+            <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_30px_rgba(7,27,51,0.04)]" key={decision.id}>
               <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-md px-2 py-1 text-xs font-black ${priorityClass(decision.priority)}`}>{decision.priority}</span>
-                    <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">{decision.category}</span>
-                    <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-graphite">{status}</span>
+                    <span className="rounded-lg bg-white px-2 py-1 text-xs font-black text-copper ring-1 ring-ink/10">{decision.category}</span>
+                    <span className="rounded-lg bg-white px-2 py-1 text-xs font-black text-graphite ring-1 ring-ink/10">{status}</span>
                   </div>
                   <h3 className="mt-3 text-base font-black text-ink">{decision.recommendedAction}</h3>
                   <p className="mt-2 text-sm leading-6 text-graphite/70">{decision.reasoning}</p>
@@ -720,7 +720,7 @@ function DecisionEngine({
                 <DecisionMeta label="Time" value={decision.estimatedTime} />
               </div>
 
-              <div className="mt-4 rounded-md bg-white px-3 py-2">
+              <div className="mt-4 rounded-lg border border-ink/10 bg-white px-3 py-2">
                 <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">Dependencies</p>
                 <p className="mt-1 text-sm leading-5 text-graphite">{decision.dependencies.join(", ") || "None"}</p>
               </div>
@@ -749,7 +749,7 @@ function DecisionEngine({
 
 function DecisionMeta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-ink/10 bg-white p-3">
+    <div className="rounded-lg border border-ink/10 bg-white p-3">
       <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">{label}</p>
       <p className="mt-1 text-sm font-black text-ink">{value}</p>
     </div>
@@ -759,7 +759,7 @@ function DecisionMeta({ label, value }: { label: string; value: string }) {
 function DecisionButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
-      className="h-9 rounded-md border border-ink/15 bg-white px-3 text-xs font-black text-ink transition hover:bg-flame/5"
+      className="h-9 rounded-lg border border-ink/15 bg-white px-3 text-xs font-black text-ink transition hover:border-flame/40 hover:bg-[#fbf7f8]"
       onClick={onClick}
       type="button"
     >
@@ -794,7 +794,7 @@ function DashboardSection({
             <HealthBadge color={clientHealth.color} score={clientHealth.score} />
           </div>
           <ScoreGrid analysis={analysis} ppcPlan={ppcPlan} />
-          <div className="mt-6 rounded-md border border-ink/10 bg-frost p-4">
+          <div className="mt-6 rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
             <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Next Recommended Action</h3>
             <p className="mt-2 text-sm leading-6 text-graphite">{nextRecommendedAction(analysis, ppcPlan)}</p>
           </div>
@@ -1078,7 +1078,7 @@ function AiCmoSection({
           </div>
           <div className="mt-4 grid gap-3">
             {brief.actions.map((action) => (
-              <article className="rounded-md border border-ink/10 bg-frost p-4" key={action.action}>
+              <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={action.action}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <span className={`rounded-md px-2 py-1 text-xs font-black ${priorityClass(action.priority)}`}>{action.priority}</span>
@@ -1159,7 +1159,7 @@ function AiCmoSection({
           <h3 className="text-lg font-black text-ink">Lessons Learned</h3>
           <div className="mt-4 grid gap-3">
             {brief.lessonsLearned.map((lesson) => (
-              <article className="rounded-md border border-ink/10 bg-frost p-4" key={lesson.label}>
+              <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={lesson.label}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm font-black text-ink">{lesson.label}</p>
                   <ConfidenceBadge score={lesson.confidence} />
@@ -1279,7 +1279,7 @@ function MarketingIntelligenceSection({
             </h3>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {intelligence.answers.map((answer) => (
-                <article className="rounded-md border border-ink/10 bg-frost p-4" key={answer.question}>
+                <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={answer.question}>
                   <p className="text-xs font-black uppercase tracking-[0.12em] text-copper">{answer.question}</p>
                   <p className="mt-2 text-sm font-black text-ink">{answer.answer}</p>
                   <p className="mt-2 text-sm leading-5 text-graphite/70">{answer.explanation}</p>
@@ -1295,7 +1295,7 @@ function MarketingIntelligenceSection({
             </h3>
             <div className="mt-4 grid gap-3">
               {intelligence.priorityActions.map((action, index) => (
-                <article className="rounded-md border border-ink/10 bg-frost p-4" key={action.action}>
+                <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={action.action}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm font-black text-ink">{index + 1}. {action.action}</p>
                     <ConfidenceBadge score={action.confidence} />
@@ -1412,7 +1412,7 @@ function MarketIntelligenceSection({
           <h3 className="text-lg font-black text-ink">Market Opportunity Score</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {intelligence.opportunityScores.map((score) => (
-              <article className="rounded-md border border-ink/10 bg-frost p-4" key={score.label}>
+              <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={score.label}>
                 <p className="text-3xl font-black text-ink">{score.score}</p>
                 <p className="mt-1 text-sm font-black text-ink">{score.label}</p>
                 <p className="mt-2 text-sm leading-5 text-graphite/70">{score.explanation}</p>
@@ -1496,7 +1496,7 @@ function MarketIntelligenceSection({
         <h3 className="text-lg font-black text-ink">Original Ad Copy Inspired By Market Gaps</h3>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {intelligence.adCopy.map((copy) => (
-            <article className="rounded-md border border-ink/10 bg-frost p-4" key={`${copy.headline}-${copy.description}`}>
+            <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={`${copy.headline}-${copy.description}`}>
               <p className="text-sm font-black text-ink">{copy.headline}</p>
               <p className="mt-2 text-sm leading-5 text-graphite/70">{copy.description}</p>
             </article>
@@ -1513,7 +1513,7 @@ function RecommendationPanel({ title, values }: { title: string; values: Array<{
       <h3 className="text-lg font-black text-ink">{title}</h3>
       <div className="mt-4 grid gap-3">
         {values.map((value) => (
-          <article className="rounded-md border border-ink/10 bg-frost p-4" key={`${title}-${value.label}`}>
+          <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={`${title}-${value.label}`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-black text-ink">{value.label}</p>
               <ConfidenceBadge score={value.confidence} />
@@ -1528,7 +1528,7 @@ function RecommendationPanel({ title, values }: { title: string; values: Array<{
 
 function ConfidenceBadge({ score }: { score: number }) {
   return (
-    <span className="rounded-md border border-ink/10 bg-white px-2 py-1 text-xs font-black text-copper">
+    <span className="rounded-lg border border-flame/15 bg-[#fbf7f8] px-2 py-1 text-xs font-black text-flame">
       {score}% confidence
     </span>
   );
@@ -1536,7 +1536,7 @@ function ConfidenceBadge({ score }: { score: number }) {
 
 function OpportunityBadge({ score }: { score: number }) {
   return (
-    <span className="rounded-md border border-green-200 bg-green-50 px-2 py-1 text-xs font-black text-green-700">
+    <span className="rounded-lg border border-ink/10 bg-white px-2 py-1 text-xs font-black text-copper">
       {score} opportunity
     </span>
   );
@@ -1576,7 +1576,7 @@ function ReportsSection({
         </h2>
         <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-5">
           {["Launch Report", "Weekly Marketing Report", "Monthly Executive Report", "Quarterly Growth Review", "Annual Marketing Review"].map((report) => (
-            <article className="rounded-md border border-ink/10 bg-frost p-4" key={report}>
+            <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={report}>
               <p className="text-sm font-black text-ink">{report}</p>
               <p className="mt-2 text-sm leading-5 text-graphite/70">
                 {ppcPlan ? "Ready to generate from current workspace data." : "Run Revenue Engine to complete this report."}
@@ -1683,7 +1683,7 @@ function ScoreGrid({ analysis, ppcPlan }: { analysis: BusinessProfile; ppcPlan: 
   return (
     <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {scores.map(([label, score]) => (
-        <div className="rounded-md border border-ink/10 bg-frost p-3" key={label}>
+        <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-3" key={label}>
           <p className="text-2xl font-black text-ink">{score}</p>
           <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-graphite/60">{label}</p>
         </div>
@@ -1695,13 +1695,13 @@ function ScoreGrid({ analysis, ppcPlan }: { analysis: BusinessProfile; ppcPlan: 
 function HealthBadge({ color, score }: { color: "Green" | "Yellow" | "Red"; score: number }) {
   const className =
     color === "Green"
-      ? "border-green-200 bg-green-50 text-green-700"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
       : color === "Yellow"
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : "border-red-200 bg-red-50 text-red-700";
+        ? "border-flame/20 bg-[#fbf7f8] text-flame"
+        : "border-slate-200 bg-slate-100 text-slate-700";
 
   return (
-    <div className={`rounded-md border px-4 py-3 text-center ${className}`}>
+    <div className={`rounded-xl border px-4 py-3 text-center ${className}`}>
       <p className="text-2xl font-black leading-none">{score}</p>
       <p className="mt-1 text-xs font-black uppercase tracking-[0.12em]">{color}</p>
     </div>
@@ -1719,10 +1719,10 @@ function TaskCenter({ analysis, ppcPlan }: { analysis: BusinessProfile; ppcPlan:
       </h2>
       <div className="mt-4 grid gap-3">
         {tasks.map((task) => (
-          <article className="rounded-md border border-ink/10 bg-frost p-3" key={task.title}>
+          <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-3" key={task.title}>
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-black text-ink">{task.title}</p>
-              <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">{task.priority}</span>
+              <span className="rounded-lg bg-white px-2 py-1 text-xs font-black text-copper ring-1 ring-ink/10">{task.priority}</span>
             </div>
             <p className="mt-2 text-sm leading-5 text-graphite/70">{task.detail}</p>
           </article>
@@ -1764,7 +1764,7 @@ function ClientTimeline({ ppcPlan }: { ppcPlan: PpcPlan | null }) {
 function ActionRow({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
-      className="flex items-center justify-between rounded-md border border-ink/10 bg-frost px-4 py-3 text-left text-sm font-black text-ink transition hover:border-flame/40 hover:bg-flame/5"
+      className="flex items-center justify-between rounded-xl border border-ink/10 bg-[#fbfbfa] px-4 py-3 text-left text-sm font-black text-ink transition hover:border-flame/40 hover:bg-[#fbf7f8]"
       onClick={onClick}
       type="button"
     >
@@ -1780,7 +1780,7 @@ function DeployCard({ title, items }: { title: string; items: Array<{ label: str
       <h3 className="text-lg font-black text-ink">{title}</h3>
       <div className="mt-4 grid gap-3">
         {items.map((item) => (
-          <div className="rounded-md border border-ink/10 bg-frost p-3" key={item.label}>
+          <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-3" key={item.label}>
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-black text-ink">{item.label}</p>
               <StatusBadge status={item.status} />
@@ -1958,7 +1958,7 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
         <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Campaign Readiness</h3>
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           {plan.campaignReadiness.map((item) => (
-            <article className="rounded-md border border-ink/10 bg-frost p-4" key={item.campaignKey}>
+            <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={item.campaignKey}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-black text-ink">{item.campaignName}</h4>
@@ -1994,7 +1994,7 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
           <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Recommended Launch Plan</h3>
           <div className="mt-3 grid gap-3">
             {plan.recommendedLaunchPlan.map((campaign) => (
-              <article className="rounded-md border border-ink/10 bg-frost p-4" key={campaign.campaign}>
+              <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={campaign.campaign}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="text-sm font-black text-ink">{campaign.campaign}</h4>
                   <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">
@@ -2097,7 +2097,7 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
 
 function MetricCard({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-md border border-ink/10 bg-frost p-4">
+    <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]">
       <p className="text-3xl font-black text-ink">{value}</p>
       <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-graphite/60">{label}</p>
     </div>
@@ -2107,13 +2107,13 @@ function MetricCard({ label, value }: { label: string; value: number | string })
 function StatusBadge({ status }: { status: "Ready" | "Needs Work" | "Not Recommended" }) {
   const className =
     status === "Ready"
-      ? "bg-green-50 text-green-700 border-green-200"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
       : status === "Needs Work"
-        ? "bg-amber-50 text-amber-700 border-amber-200"
-        : "bg-red-50 text-red-700 border-red-200";
+        ? "bg-[#fbf7f8] text-flame border-flame/20"
+        : "bg-slate-100 text-graphite border-ink/10";
 
   return (
-    <span className={`rounded-md border px-2 py-1 text-xs font-black ${className}`}>
+    <span className={`rounded-lg border px-2 py-1 text-xs font-black ${className}`}>
       {status}
     </span>
   );
@@ -2187,12 +2187,12 @@ function PpcTable({
   return (
     <div>
       <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">{title}</h3>
-      <div className="mt-3 overflow-hidden rounded-md border border-ink/10 bg-white">
+      <div className="mt-3 overflow-hidden rounded-xl border border-ink/10 bg-white shadow-[0_10px_28px_rgba(7,27,51,0.035)]">
         <table className="w-full table-fixed text-left text-xs">
-          <thead className="bg-frost text-graphite/70">
+          <thead className="bg-[#f7f1f2] text-graphite/80">
             <tr>
               {columns.map((column) => (
-                <th className="px-3 py-2 font-black" key={column}>{column}</th>
+                <th className="px-3 py-3 font-black" key={column}>{column}</th>
               ))}
             </tr>
           </thead>
@@ -2200,7 +2200,7 @@ function PpcTable({
             {rows.map((row, index) => (
               <tr className="border-t border-ink/10" key={`${title}-${index}`}>
                 {row.map((cell, cellIndex) => (
-                  <td className="truncate px-3 py-2 font-medium text-graphite" key={`${cell}-${cellIndex}`} title={cell}>
+                  <td className="truncate px-3 py-3 font-medium text-graphite" key={`${cell}-${cellIndex}`} title={cell}>
                     {cell}
                   </td>
                 ))}
@@ -2380,7 +2380,7 @@ function KeywordUpdateList({
 
 function ScoreBadge({ label, score }: { label: string; score: number }) {
   return (
-    <div className="rounded-md bg-ink px-4 py-3 text-center text-white">
+    <div className="rounded-xl bg-ink px-4 py-3 text-center text-white shadow-[0_14px_35px_rgba(7,27,51,0.18)]">
       <p className="text-3xl font-black leading-none">{Math.round(score)}</p>
       <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-white/70">{label}</p>
     </div>

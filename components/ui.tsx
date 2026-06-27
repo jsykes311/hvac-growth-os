@@ -17,12 +17,12 @@ export function Button({
 }: ButtonProps) {
   const styles =
     variant === "primary"
-      ? "bg-flame text-white hover:bg-[#d8442f]"
-      : "border border-ink/15 bg-white text-ink hover:bg-frost";
+      ? "bg-flame text-white shadow-[0_12px_30px_rgba(138,36,50,0.18)] hover:bg-[#761f2b]"
+      : "border border-ink/15 bg-white text-ink hover:border-flame/40 hover:bg-[#fbf7f8]";
 
   return (
     <button
-      className={`inline-flex h-12 items-center justify-center gap-2 rounded-md px-5 text-sm font-semibold shadow-sm transition ${styles} disabled:cursor-not-allowed disabled:opacity-60`}
+      className={`inline-flex h-12 items-center justify-center gap-2 rounded-lg px-5 text-sm font-bold transition ${styles} disabled:cursor-not-allowed disabled:opacity-60`}
       disabled={disabled}
       onClick={onClick}
       type={type}
@@ -41,7 +41,7 @@ export function Panel({
 }) {
   return (
     <section
-      className={`rounded-lg border border-ink/10 bg-white/88 p-6 shadow-soft backdrop-blur ${className}`}
+      className={`rounded-xl border border-ink/10 bg-white p-6 shadow-soft ${className}`}
     >
       {children}
     </section>
@@ -49,12 +49,12 @@ export function Panel({
 }
 
 export function FieldLabel({ children }: { children: ReactNode }) {
-  return <label className="text-sm font-semibold text-graphite">{children}</label>;
+  return <label className="text-sm font-bold text-graphite">{children}</label>;
 }
 
 export function Eyebrow({ children }: { children: ReactNode }) {
   return (
-    <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-copper">
+    <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-copper">
       {children}
     </p>
   );

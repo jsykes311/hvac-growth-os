@@ -9,14 +9,14 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#14213d",
-        flame: "#e94f37",
-        copper: "#c46f32",
-        frost: "#f4f8fb",
-        graphite: "#24303f",
+        ink: "#071b33",
+        flame: "#8a2432",
+        copper: "#9f3444",
+        frost: "#f6f7f9",
+        graphite: "#243244",
       },
       boxShadow: {
-        soft: "0 18px 50px rgba(20, 33, 61, 0.08)",
+        soft: "0 22px 60px rgba(7, 27, 51, 0.08)",
       },
     },
   },
