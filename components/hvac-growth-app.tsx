@@ -15,7 +15,14 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FormEvent, useState } from "react";
-import type { AnalyzedPage, BusinessProfile, CampaignImage, CampaignOutput } from "@/lib/types";
+import type {
+  AnalyzedPage,
+  BusinessProfile,
+  CampaignImage,
+  CampaignOutput,
+  PpcManualOverrides,
+  PpcPlan,
+} from "@/lib/types";
 import { Button, Eyebrow, FieldLabel, Panel } from "@/components/ui";
 
 type View = "home" | "results";
@@ -41,10 +48,17 @@ export function HvacGrowthApp() {
   const [scrapedPages, setScrapedPages] = useState<AnalyzedPage[]>([]);
   const [campaign, setCampaign] = useState<CampaignOutput | null>(null);
   const [campaignImage, setCampaignImage] = useState<CampaignImage | null>(null);
+  const [ppcPlan, setPpcPlan] = useState<PpcPlan | null>(null);
+  const [ppcOverrides, setPpcOverrides] = useState<PpcManualOverrides>({
+    monthlyBudget: 3000,
+    serviceCities: [],
+    servicesToPrioritize: [],
+  });
   const [goal, setGoal] = useState(CAMPAIGN_GOALS[0]);
   const [offer, setOffer] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
+  const [isCreatingPpcPlan, setIsCreatingPpcPlan] = useState(false);
   const [error, setError] = useState("");
 
   const isReady = contractorUrl.trim().length > 3;
@@ -58,6 +72,7 @@ export function HvacGrowthApp() {
     setScrapedPages([]);
     setCampaign(null);
     setCampaignImage(null);
+    setPpcPlan(null);
 
     try {
       const response = await fetch("/api/analyze", {
@@ -73,6 +88,15 @@ export function HvacGrowthApp() {
 
       setAnalysis(payload.profile);
       setScrapedPages(payload.scrapedPages ?? []);
+      setPpcOverrides({
+        businessName: payload.profile.companyName,
+        phoneNumber: payload.profile.phone,
+        serviceCities: payload.profile.serviceAreas,
+        monthlyBudget: 3000,
+        servicesToPrioritize: [],
+        emergencyService: payload.profile.emergencyServiceMentioned,
+        financing: payload.profile.financingMentioned,
+      });
       setView("results");
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to analyze this website.");
@@ -112,6 +136,38 @@ export function HvacGrowthApp() {
     }
   }
 
+  async function handleCreatePpcPlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!analysis || isCreatingPpcPlan) return;
+
+    setIsCreatingPpcPlan(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/ppc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profile: analysis,
+          scrapedPages,
+          url: contractorUrl,
+          overrides: ppcOverrides,
+        }),
+      });
+      const payload = (await response.json()) as { plan?: PpcPlan } & ApiError;
+
+      if (!response.ok || !payload.plan) {
+        throw new Error(payload.error || "Unable to create a PPC plan.");
+      }
+
+      setPpcPlan(payload.plan);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to create a PPC plan.");
+    } finally {
+      setIsCreatingPpcPlan(false);
+    }
+  }
+
   return (
     <main className="min-h-screen px-5 py-6 sm:px-8 lg:px-12">
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col">
@@ -136,20 +192,26 @@ export function HvacGrowthApp() {
               error={error}
               goal={goal}
               isCreatingCampaign={isCreatingCampaign}
+              isCreatingPpcPlan={isCreatingPpcPlan}
               offer={offer}
+              ppcOverrides={ppcOverrides}
+              ppcPlan={ppcPlan}
               scrapedPages={scrapedPages}
               onBack={() => {
                 setView("home");
                 setError("");
               }}
               onCreateCampaign={handleCreateCampaign}
+              onCreatePpcPlan={handleCreatePpcPlan}
               onUpdateAnalysis={(nextAnalysis) => {
                 setAnalysis(nextAnalysis);
                 setCampaign(null);
                 setCampaignImage(null);
+                setPpcPlan(null);
               }}
               setGoal={setGoal}
               setOffer={setOffer}
+              setPpcOverrides={setPpcOverrides}
             />
           )
         )}
@@ -233,13 +295,18 @@ function ResultsView({
   error,
   goal,
   isCreatingCampaign,
+  isCreatingPpcPlan,
   offer,
+  ppcOverrides,
+  ppcPlan,
   scrapedPages,
   onBack,
   onCreateCampaign,
+  onCreatePpcPlan,
   onUpdateAnalysis,
   setGoal,
   setOffer,
+  setPpcOverrides,
 }: {
   analysis: BusinessProfile;
   campaign: CampaignOutput | null;
@@ -248,13 +315,18 @@ function ResultsView({
   error: string;
   goal: string;
   isCreatingCampaign: boolean;
+  isCreatingPpcPlan: boolean;
   offer: string;
+  ppcOverrides: PpcManualOverrides;
+  ppcPlan: PpcPlan | null;
   scrapedPages: AnalyzedPage[];
   onBack: () => void;
   onCreateCampaign: (event: FormEvent<HTMLFormElement>) => void;
+  onCreatePpcPlan: (event: FormEvent<HTMLFormElement>) => void;
   onUpdateAnalysis: (analysis: BusinessProfile) => void;
   setGoal: (value: string) => void;
   setOffer: (value: string) => void;
+  setPpcOverrides: (value: PpcManualOverrides) => void;
 }) {
   function updateBrandColor(field: "primaryColor" | "secondaryColor" | "accentColor", value: string) {
     onUpdateAnalysis({ ...analysis, [field]: value });
@@ -398,6 +470,15 @@ function ResultsView({
         />
       </div>
 
+      <PpcPlannerPanel
+        analysis={analysis}
+        isCreatingPpcPlan={isCreatingPpcPlan}
+        onCreatePpcPlan={onCreatePpcPlan}
+        overrides={ppcOverrides}
+        ppcPlan={ppcPlan}
+        setOverrides={setPpcOverrides}
+      />
+
       <CampaignForm
         error={error}
         goal={goal}
@@ -466,6 +547,282 @@ function CampaignForm({
       </form>
       {error && <div className="mt-4"><ErrorMessage message={error} /></div>}
     </Panel>
+  );
+}
+
+function PpcPlannerPanel({
+  analysis,
+  isCreatingPpcPlan,
+  onCreatePpcPlan,
+  overrides,
+  ppcPlan,
+  setOverrides,
+}: {
+  analysis: BusinessProfile;
+  isCreatingPpcPlan: boolean;
+  onCreatePpcPlan: (event: FormEvent<HTMLFormElement>) => void;
+  overrides: PpcManualOverrides;
+  ppcPlan: PpcPlan | null;
+  setOverrides: (value: PpcManualOverrides) => void;
+}) {
+  function updateOverride<K extends keyof PpcManualOverrides>(field: K, value: PpcManualOverrides[K]) {
+    setOverrides({ ...overrides, [field]: value });
+  }
+
+  return (
+    <Panel className="mt-5">
+      <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-black text-ink">
+            <Megaphone className="size-5" aria-hidden="true" />
+            PPC / Google Ads Generator
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+            Builds a search campaign plan from the scraped HVAC profile, with campaign strategy, ad groups,
+            exact and phrase keywords, ads, assets, landing pages, and CSV exports.
+          </p>
+        </div>
+        {ppcPlan && (
+          <div className="rounded-md bg-ink px-4 py-3 text-center text-white">
+            <p className="text-3xl font-black leading-none">{ppcPlan.campaigns.length}</p>
+            <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-white/70">campaigns</p>
+          </div>
+        )}
+      </div>
+
+      <form className="grid gap-4 lg:grid-cols-4" onSubmit={onCreatePpcPlan}>
+        <TextField
+          label="Business Name"
+          onChange={(value) => updateOverride("businessName", value)}
+          value={overrides.businessName ?? analysis.companyName}
+        />
+        <TextField
+          label="Phone Number"
+          onChange={(value) => updateOverride("phoneNumber", value)}
+          value={overrides.phoneNumber ?? analysis.phone}
+        />
+        <label className="space-y-2">
+          <FieldLabel>Monthly Budget</FieldLabel>
+          <input
+            className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+            min="0"
+            onChange={(event) => updateOverride("monthlyBudget", Number(event.target.value))}
+            type="number"
+            value={overrides.monthlyBudget ?? 3000}
+          />
+        </label>
+        <div className="flex items-end">
+          <Button disabled={isCreatingPpcPlan} type="submit">
+            {isCreatingPpcPlan ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Search className="size-4" aria-hidden="true" />}
+            {isCreatingPpcPlan ? "Generating..." : "Generate PPC Plan"}
+          </Button>
+        </div>
+
+        <ListField
+          label="Service Cities"
+          onChange={(value) => updateOverride("serviceCities", linesToList(value))}
+          values={overrides.serviceCities?.length ? overrides.serviceCities : analysis.serviceAreas}
+        />
+        <ListField
+          label="Services to Prioritize"
+          onChange={(value) => updateOverride("servicesToPrioritize", linesToList(value))}
+          values={overrides.servicesToPrioritize ?? []}
+        />
+        <div className="grid content-start gap-3">
+          <ToggleField
+            checked={overrides.emergencyService ?? analysis.emergencyServiceMentioned}
+            label="Emergency Service"
+            onChange={(value) => updateOverride("emergencyService", value)}
+          />
+          <ToggleField
+            checked={overrides.financing ?? analysis.financingMentioned}
+            label="Financing"
+            onChange={(value) => updateOverride("financing", value)}
+          />
+          <ToggleField
+            checked={Boolean(overrides.freeEstimates)}
+            label="Free Estimates"
+            onChange={(value) => updateOverride("freeEstimates", value)}
+          />
+        </div>
+        <div className="grid content-start gap-3">
+          <ToggleField
+            checked={Boolean(overrides.licensedAndInsured)}
+            label="Licensed and Insured"
+            onChange={(value) => updateOverride("licensedAndInsured", value)}
+          />
+          <ToggleField
+            checked={Boolean(overrides.broadMatchEnabled)}
+            label="Enable Broad Match"
+            onChange={(value) => updateOverride("broadMatchEnabled", value)}
+          />
+        </div>
+      </form>
+
+      {ppcPlan && <PpcPlanResults plan={ppcPlan} />}
+    </Panel>
+  );
+}
+
+function PpcPlanResults({ plan }: { plan: PpcPlan }) {
+  const headlineCount = plan.responsiveSearchAds.filter((asset) => asset.assetType === "Headline").length;
+  const descriptionCount = plan.responsiveSearchAds.filter((asset) => asset.assetType === "Description").length;
+
+  return (
+    <div className="mt-7 border-t border-ink/10 pt-6">
+      <div className="grid gap-4 md:grid-cols-4">
+        <MetricCard label="Keywords" value={plan.keywords.length} />
+        <MetricCard label="Ad Groups" value={plan.adGroups.length} />
+        <MetricCard label="Headlines" value={headlineCount} />
+        <MetricCard label="Descriptions" value={descriptionCount} />
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_0.9fr]">
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Recommended Launch Campaigns</h3>
+          <div className="mt-3 grid gap-3">
+            {plan.campaignStrategy.map((campaign) => (
+              <article className="rounded-md border border-ink/10 bg-frost p-4" key={campaign.campaign}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-sm font-black text-ink">{campaign.campaign}</h4>
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">
+                    ${campaign.dailyBudget}/day
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{campaign.whyRecommended}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Detected PPC Signals</h3>
+          <dl className="mt-3 grid gap-3 text-sm">
+            <InfoRow label="Business" value={plan.detected.businessName} />
+            <InfoRow label="Phone" value={plan.detected.phoneNumber || "Not found"} />
+            <InfoRow label="Financing" value={yesNo(plan.detected.financing)} />
+            <InfoRow label="Emergency" value={yesNo(plan.detected.emergencyService)} />
+            <InfoRow label="Maintenance" value={yesNo(plan.detected.maintenancePlans)} />
+            <InfoRow label="Heat Pumps" value={yesNo(plan.detected.heatPumps)} />
+            <InfoRow label="Water Heaters" value={yesNo(plan.detected.waterHeaters)} />
+            <InfoRow label="IAQ" value={yesNo(plan.detected.indoorAirQuality)} />
+          </dl>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-md border border-ink/10 bg-frost p-4">
+        <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Download CSV Exports</h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {plan.csvExports.map((exportFile) => (
+            <a
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-ink/15 bg-white px-3 text-sm font-semibold text-ink shadow-sm transition hover:bg-flame/5"
+              download={exportFile.fileName}
+              href={exportFile.dataUrl}
+              key={exportFile.fileName}
+            >
+              <Download className="size-4" aria-hidden="true" />
+              {exportFile.label}
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <PpcTable
+          columns={["Campaign", "Ad Group", "Keyword", "Match"]}
+          rows={plan.keywords.slice(0, 12).map((keyword) => [
+            keyword.campaign,
+            keyword.adGroup,
+            keyword.keyword,
+            keyword.matchType,
+          ])}
+          title="Keyword Preview"
+        />
+        <PpcTable
+          columns={["Ad Group", "Type", "Text"]}
+          rows={plan.responsiveSearchAds.slice(0, 12).map((asset) => [
+            asset.adGroup,
+            asset.assetType,
+            asset.text,
+          ])}
+          title="Responsive Search Ad Preview"
+        />
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <ReportList title="Search Intent Analysis" values={plan.report.searchIntentAnalysis} />
+        <ReportList title="Missing Landing Pages" values={plan.report.missingLandingPages} />
+        <ReportList title="Tracking Recommendations" values={plan.report.trackingRecommendations} />
+        <ReportList title="Next Steps" values={plan.report.nextSteps} />
+      </div>
+
+      <div className="mt-6 rounded-md border border-ink/10 bg-white p-4">
+        <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Budget Recommendation</h3>
+        <p className="mt-3 text-sm leading-6 text-graphite">{plan.report.budgetRecommendation}</p>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-ink/10 bg-frost p-4">
+      <p className="text-3xl font-black text-ink">{value}</p>
+      <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-graphite/60">{label}</p>
+    </div>
+  );
+}
+
+function PpcTable({
+  columns,
+  rows,
+  title,
+}: {
+  columns: string[];
+  rows: string[][];
+  title: string;
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">{title}</h3>
+      <div className="mt-3 overflow-hidden rounded-md border border-ink/10 bg-white">
+        <table className="w-full table-fixed text-left text-xs">
+          <thead className="bg-frost text-graphite/70">
+            <tr>
+              {columns.map((column) => (
+                <th className="px-3 py-2 font-black" key={column}>{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr className="border-t border-ink/10" key={`${title}-${index}`}>
+                {row.map((cell, cellIndex) => (
+                  <td className="truncate px-3 py-2 font-medium text-graphite" key={`${cell}-${cellIndex}`} title={cell}>
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ReportList({ title, values }: { title: string; values: string[] }) {
+  return (
+    <div>
+      <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">{title}</h3>
+      <ul className="mt-3 space-y-2">
+        {values.map((value) => (
+          <li className="rounded-md bg-frost px-3 py-2 text-sm leading-5 text-graphite" key={value}>
+            {value}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
