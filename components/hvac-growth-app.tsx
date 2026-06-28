@@ -93,7 +93,15 @@ type DecisionRecommendation = {
 };
 type DeploymentApprovalStatus = "Pending" | "Approved" | "Dismissed" | "Remind Later";
 type DeploymentRuntimeStatus = "Waiting" | "Success" | "Failed";
-type DeploymentTarget = "Google Ads" | "Google Business Profile" | "HighLevel" | "Landing Pages" | "Reports";
+type ChannelStatus = "Ready" | "Needs Setup" | "Pending Review" | "Deployed" | "Failed";
+type DeploymentTarget =
+  | "Google Ads"
+  | "Google Business Profile"
+  | "Social Media"
+  | "Website / Landing Pages"
+  | "SEO"
+  | "HighLevel / CRM"
+  | "Reports";
 type DeploymentCandidate = {
   id: string;
   target: DeploymentTarget;
@@ -115,6 +123,16 @@ type DeploymentRecord = {
   history: Array<{ date: string; actor: string; event: string }>;
   deployedAt?: string;
   deployedBy?: string;
+};
+type ImplementationChannel = {
+  target: DeploymentTarget;
+  status: ChannelStatus;
+  pendingDeployments: number;
+  topRecommendedDeployment: string;
+  requiredIntegrations: string[];
+  blockingIssues: string[];
+  lastDeployedItem: string;
+  candidate?: DeploymentCandidate;
 };
 
 const CAMPAIGN_GOALS = [
@@ -1074,10 +1092,45 @@ function DeployCenter({
     persist({ ...records, [candidate.id]: nextRecord });
   }
 
+  function previewCandidate(candidate: DeploymentCandidate) {
+    const nextRecord = updateDeploymentRecord(records[candidate.id], candidate, {
+      approvalStatus: records[candidate.id]?.approvalStatus ?? "Pending",
+      runtimeStatus: records[candidate.id]?.runtimeStatus ?? "Waiting",
+      event: "Preview reviewed by user.",
+      log: "Preview opened. Exact draft output is ready for approval review.",
+    });
+    persist({ ...records, [candidate.id]: nextRecord });
+  }
+
+  function exportChannel(channel: ImplementationChannel) {
+    if (!channel.candidate) return;
+    const record = records[channel.candidate.id];
+    const payload = {
+      channel: channel.target,
+      status: channel.status,
+      pendingDeployments: channel.pendingDeployments,
+      topRecommendedDeployment: channel.topRecommendedDeployment,
+      requiredIntegrations: channel.requiredIntegrations,
+      blockingIssues: channel.blockingIssues,
+      lastDeployedItem: channel.lastDeployedItem,
+      preview: channel.candidate.preview,
+      deploymentRecord: record ?? null,
+    };
+    downloadJson(`${slugify(channel.target)}-deployment-packet.json`, payload);
+    const nextRecord = updateDeploymentRecord(record, channel.candidate, {
+      approvalStatus: record?.approvalStatus ?? "Pending",
+      runtimeStatus: record?.runtimeStatus ?? "Waiting",
+      event: "Deployment packet exported.",
+      log: "Export created for client review or implementation handoff.",
+    });
+    persist({ ...records, [channel.candidate.id]: nextRecord });
+  }
+
   const deploymentHistory = Object.values(records)
     .flatMap((record) => record.history.map((item) => ({ ...item, title: record.title, status: record.runtimeStatus })))
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
     .slice(0, 8);
+  const implementationChannels = buildImplementationChannels(candidates, records);
 
   return (
     <div className="grid gap-5">
@@ -1103,6 +1156,18 @@ function DeployCenter({
           <MetricCard label="History Events" value={String(deploymentHistory.length)} />
         </div>
       </Panel>
+      <div className="grid gap-5 xl:grid-cols-2">
+        {implementationChannels.map((channel) => (
+          <ImplementationChannelCard
+            channel={channel}
+            key={channel.target}
+            onApprove={() => channel.candidate && updateDeployment(channel.candidate, "Approved")}
+            onDeploy={() => channel.candidate && deployCandidate(channel.candidate)}
+            onExport={() => exportChannel(channel)}
+            onPreview={() => channel.candidate && previewCandidate(channel.candidate)}
+          />
+        ))}
+      </div>
       <div className="grid gap-5">
         {candidates.map((candidate) => (
           <DeploymentWorkflowCard
@@ -1925,6 +1990,86 @@ function ActionRow({ label, onClick }: { label: string; onClick: () => void }) {
       <Rocket className="size-4 text-copper" aria-hidden="true" />
     </button>
   );
+}
+
+function ImplementationChannelCard({
+  channel,
+  onApprove,
+  onDeploy,
+  onExport,
+  onPreview,
+}: {
+  channel: ImplementationChannel;
+  onApprove: () => void;
+  onDeploy: () => void;
+  onExport: () => void;
+  onPreview: () => void;
+}) {
+  return (
+    <Panel className="relative overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ink via-flame to-copper" />
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-black text-ink">{channel.target}</h3>
+            <ChannelStatusBadge status={channel.status} />
+          </div>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">{channel.topRecommendedDeployment}</p>
+        </div>
+        <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] px-4 py-3 text-center">
+          <p className="text-2xl font-black text-ink">{channel.pendingDeployments}</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.12em] text-graphite/55">Pending</p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <ChannelDetail label="Required integrations" values={channel.requiredIntegrations} />
+        <ChannelDetail label="Blocking issues" values={channel.blockingIssues} emptyText="No blockers found" />
+      </div>
+
+      <div className="mt-4 rounded-xl border border-ink/10 bg-[#fbfbfa] p-3">
+        <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/55">Last deployed item</p>
+        <p className="mt-1 text-sm font-bold text-ink">{channel.lastDeployedItem}</p>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-black text-ink transition hover:border-flame/40" disabled={!channel.candidate} onClick={onPreview} type="button">Preview</button>
+        <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-black text-ink transition hover:border-flame/40" disabled={!channel.candidate} onClick={onApprove} type="button">Approve</button>
+        <button className="rounded-lg bg-ink px-3 py-2 text-xs font-black text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50" disabled={!channel.candidate} onClick={onDeploy} type="button">Deploy</button>
+        <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-black text-ink transition hover:border-flame/40" disabled={!channel.candidate} onClick={onExport} type="button">Export</button>
+      </div>
+    </Panel>
+  );
+}
+
+function ChannelDetail({ emptyText = "None", label, values }: { emptyText?: string; label: string; values: string[] }) {
+  return (
+    <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-3">
+      <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {values.length ? values.map((value) => (
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-graphite/75" key={value}>{value}</span>
+        )) : (
+          <span className="text-sm font-bold text-graphite/50">{emptyText}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChannelStatusBadge({ status }: { status: ChannelStatus }) {
+  const className =
+    status === "Ready"
+      ? "bg-teal-50 text-teal-700 border-teal-200"
+      : status === "Needs Setup"
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : status === "Pending Review"
+          ? "bg-blue-50 text-blue-700 border-blue-200"
+          : status === "Deployed"
+            ? "bg-green-50 text-green-700 border-green-200"
+            : "bg-rose-50 text-rose-700 border-rose-200";
+
+  return <span className={`rounded-full border px-3 py-1 text-xs font-black ${className}`}>{status}</span>;
 }
 
 function DeploymentWorkflowCard({
@@ -3255,7 +3400,7 @@ function buildDeploymentCandidates(
     },
     {
       id: "highlevel-automation-draft",
-      target: "HighLevel",
+      target: "HighLevel / CRM",
       title: "Create HighLevel automation draft",
       recommendation: "Create a speed-to-lead and missed-call follow-up automation draft so CRM operations are ready before campaigns are enabled.",
       preview: [
@@ -3273,7 +3418,7 @@ function buildDeploymentCandidates(
     },
     {
       id: "landing-page-draft",
-      target: "Landing Pages",
+      target: "Website / Landing Pages",
       title: "Generate landing page draft",
       recommendation: missingPage
         ? `Generate a draft landing page for ${missingPage.campaign} because Revenue Engine found no strong existing destination.`
@@ -3290,6 +3435,42 @@ function buildDeploymentCandidates(
       ],
       deployMode: "Publishing target: website CMS or repo. Safe output: draft page only.",
       intelligenceMemoryNote: "Stores page draft, target service, missing-page reason, and later conversion/page-performance changes.",
+    },
+    {
+      id: "social-post-draft",
+      target: "Social Media",
+      title: "Create social media post draft",
+      recommendation: `Create an owner-friendly social post about ${primaryService} so trust-building content supports current demand without overpromising results.`,
+      preview: [
+        campaign?.facebookAd || `Post idea: homeowner tip for ${primaryService} in ${primaryCity}`,
+        "Creative angle: practical service education",
+        "Status: Draft only",
+      ],
+      dependencies: [
+        { label: "Social account access", exists: false, detail: "Connect Facebook/Instagram pages before scheduling or posting." },
+        { label: "Brand voice", exists: Boolean(analysis.brandTone), detail: analysis.brandTone ? "Brand tone detected." : "Confirm tone before posting." },
+      ],
+      deployMode: "API target: social scheduler. Safe output: post draft only.",
+      intelligenceMemoryNote: "Stores post topic, channel readiness, and later engagement or lead-assist observations.",
+    },
+    {
+      id: "seo-update-draft",
+      target: "SEO",
+      title: "Create SEO update draft",
+      recommendation: analysis.seoAnalysis.keywordUpdates.length
+        ? "Create a metadata and on-page SEO update draft from the highest-priority audit gaps."
+        : "Create a baseline SEO improvement draft using detected services, cities, and AI search readiness gaps.",
+      preview: [
+        analysis.seoAnalysis.keywordUpdates[0]?.suggestedText || `Title idea: ${primaryService} in ${primaryCity}`,
+        analysis.seoAnalysis.metaDescription || "Meta description draft from service-area and conversion context.",
+        `${analysis.aiSeoAnalysis.schemaRecommendations.length} schema recommendation${analysis.aiSeoAnalysis.schemaRecommendations.length === 1 ? "" : "s"}`,
+      ],
+      dependencies: [
+        { label: "Website audit", exists: true, detail: "Current audit and SEO signals are loaded." },
+        { label: "Website access", exists: false, detail: "Connect CMS or repo before publishing SEO changes." },
+      ],
+      deployMode: "Publishing target: website CMS or repo. Safe output: SEO draft only.",
+      intelligenceMemoryNote: "Stores SEO draft, target pages, and later ranking, traffic, and AI visibility movement.",
     },
     {
       id: "report-draft",
@@ -3315,6 +3496,80 @@ function buildDeploymentCandidates(
 function validateDeployment(candidate: DeploymentCandidate) {
   const missing = candidate.dependencies.filter((dependency) => !dependency.exists).map((dependency) => dependency.label);
   return { ready: missing.length === 0, missing };
+}
+
+function buildImplementationChannels(
+  candidates: DeploymentCandidate[],
+  records: Record<string, DeploymentRecord>,
+): ImplementationChannel[] {
+  const targets: DeploymentTarget[] = [
+    "Google Ads",
+    "Google Business Profile",
+    "Social Media",
+    "Website / Landing Pages",
+    "SEO",
+    "HighLevel / CRM",
+    "Reports",
+  ];
+
+  return targets.map((target) => {
+    const channelCandidates = candidates.filter((candidate) => candidate.target === target);
+    const topCandidate = channelCandidates[0];
+    const channelRecords = channelCandidates
+      .map((candidate) => records[candidate.id])
+      .filter((record): record is DeploymentRecord => Boolean(record));
+    const latestSuccess = channelRecords
+      .filter((record) => record.runtimeStatus === "Success")
+      .sort((a, b) => Date.parse(b.deployedAt ?? "") - Date.parse(a.deployedAt ?? ""))[0];
+    const failedRecord = channelRecords.find((record) => record.runtimeStatus === "Failed");
+    const pendingDeployments = channelCandidates.filter((candidate) => {
+      const record = records[candidate.id];
+      return record?.runtimeStatus !== "Success" && record?.approvalStatus !== "Dismissed";
+    }).length;
+    const requiredIntegrations = uniqueStrings(channelCandidates.flatMap((candidate) => candidate.dependencies.map((dependency) => dependency.label)));
+    const blockingIssues = uniqueStrings(channelCandidates.flatMap((candidate) => candidate.dependencies.filter((dependency) => !dependency.exists).map((dependency) => dependency.detail)));
+    const approvedReady = channelCandidates.some((candidate) => records[candidate.id]?.approvalStatus === "Approved" && validateDeployment(candidate).ready);
+    const pendingReview = channelCandidates.some((candidate) => !records[candidate.id] || records[candidate.id]?.approvalStatus === "Pending" || records[candidate.id]?.approvalStatus === "Remind Later");
+
+    let status: ChannelStatus = "Pending Review";
+    if (failedRecord) status = "Failed";
+    else if (latestSuccess) status = "Deployed";
+    else if (blockingIssues.length) status = "Needs Setup";
+    else if (approvedReady) status = "Ready";
+    else if (pendingReview) status = "Pending Review";
+
+    return {
+      target,
+      status,
+      pendingDeployments,
+      topRecommendedDeployment: topCandidate?.title ?? "No deployment candidate available yet.",
+      requiredIntegrations,
+      blockingIssues,
+      lastDeployedItem: latestSuccess ? `${latestSuccess.title} on ${new Date(latestSuccess.deployedAt ?? "").toLocaleDateString()}` : "Nothing deployed yet",
+      candidate: topCandidate,
+    };
+  });
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function downloadJson(fileName: string, payload: unknown) {
+  if (typeof document === "undefined") return;
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function updateDeploymentRecord(
