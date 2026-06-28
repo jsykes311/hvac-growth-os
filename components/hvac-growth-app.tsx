@@ -134,6 +134,11 @@ type ConnectedAppStatus = {
     customerIds: string[];
     lastSyncAt: string;
     permissionMode: PermissionMode;
+    setup: {
+      items: Array<{ configured: boolean; detail: string; envVar: string; label: string }>;
+      missingItems: string[];
+      ready: boolean;
+    };
     tokenStored: boolean;
   };
 };
@@ -1265,13 +1270,13 @@ function ConnectedAppsSection() {
     try {
       const response = await fetch("/api/google-ads/status", { cache: "no-store" });
       const payload = (await response.json()) as ConnectedAppStatus & ApiError;
-      if (!response.ok) throw new Error(payload.error || "Unable to load connected apps.");
+      if (!response.ok) throw new Error("Connected Apps setup could not be loaded. Please refresh the page.");
       setStatus(payload);
       if (payload.googleAds.connected) {
         await loadGoogleAdsData();
       }
     } catch (caughtError) {
-      setMessage(caughtError instanceof Error ? caughtError.message : "Unable to load connected apps.");
+      setMessage(caughtError instanceof Error ? caughtError.message : "Connected Apps setup could not be loaded. Please refresh the page.");
     } finally {
       setIsLoading(false);
     }
@@ -1287,12 +1292,12 @@ function ConnectedAppsSection() {
     try {
       const response = await fetch("/api/google-ads/sync", { method: "POST" });
       const payload = (await response.json()) as { data?: GoogleAdsDataPayload } & ApiError;
-      if (!response.ok) throw new Error(payload.error || "Unable to sync Google Ads.");
+      if (!response.ok) throw new Error("Google Ads is not ready to sync yet. Review the setup checklist below, then try again.");
       setGoogleAdsData(payload.data ?? null);
       await refreshConnectedApps();
       setMessage("Google Ads data refreshed in read-only mode.");
     } catch (caughtError) {
-      setMessage(caughtError instanceof Error ? caughtError.message : "Unable to sync Google Ads.");
+      setMessage(caughtError instanceof Error ? caughtError.message : "Google Ads is not ready to sync yet. Review the setup checklist below, then try again.");
     } finally {
       setIsSyncing(false);
     }
@@ -1307,10 +1312,10 @@ function ConnectedAppsSection() {
         body: JSON.stringify({ customerId }),
       });
       const payload = (await response.json()) as ApiError;
-      if (!response.ok) throw new Error(payload.error || "Unable to select customer account.");
+      if (!response.ok) throw new Error("That Google Ads account could not be selected. Refresh the account list and try again.");
       await refreshConnectedApps();
     } catch (caughtError) {
-      setMessage(caughtError instanceof Error ? caughtError.message : "Unable to select customer account.");
+      setMessage(caughtError instanceof Error ? caughtError.message : "That Google Ads account could not be selected. Refresh the account list and try again.");
     }
   }
 
@@ -1347,7 +1352,11 @@ function ConnectedAppsSection() {
           connected={Boolean(googleAds?.connected)}
           description="Read campaigns, ad groups, keywords, search terms, ads, assets, budgets, and conversions."
           mode={googleAds?.permissionMode ?? "Read Only"}
-          primaryAction={<a className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-4 text-sm font-black text-white" href="/api/google-ads/connect" rel="noreferrer" target="_blank">Connect Google Ads</a>}
+          primaryAction={googleAds?.configured ? (
+            <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-4 text-sm font-black text-white" href="/api/google-ads/connect" rel="noreferrer" target="_blank">Connect Google Ads</a>
+          ) : (
+            <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink/10 px-4 text-sm font-black text-ink" href="#google-ads-setup">Open Setup</a>
+          )}
           secondaryAction={<Button disabled={!googleAds?.connected || isSyncing} onClick={syncGoogleAds} variant="secondary">{isSyncing ? "Syncing..." : "Refresh Data"}</Button>}
           title="Google Ads"
         />
@@ -1371,6 +1380,8 @@ function ConnectedAppsSection() {
           />
         ))}
       </div>
+
+      <GoogleAdsSetupWizard googleAds={googleAds} />
 
       <Panel>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
@@ -1487,6 +1498,75 @@ function ConnectedAppCard({
   );
 }
 
+function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["googleAds"] }) {
+  const setupItems = googleAds?.setup.items ?? [];
+  const missingItems = googleAds?.setup.missingItems ?? [];
+  const ready = Boolean(googleAds?.setup.ready);
+  const connected = Boolean(googleAds?.connected);
+
+  return (
+    <Panel className="scroll-mt-28" id="google-ads-setup">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <Eyebrow>Google Ads Setup</Eyebrow>
+          <h3 className="text-xl font-black text-ink">Connect Google Ads safely in read-only mode.</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+            Complete these setup steps before OAuth is enabled. HVAC Growth OS will only read account data in this version.
+          </p>
+        </div>
+        <span className={`rounded-full border px-3 py-2 text-xs font-black ${connected ? "border-green-200 bg-green-50 text-green-700" : ready ? "border-teal-200 bg-teal-50 text-teal-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+          {connected ? "Connected" : ready ? "Ready to connect" : `${missingItems.length || 6} setup item${(missingItems.length || 6) === 1 ? "" : "s"} missing`}
+        </span>
+      </div>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+        <div className="grid gap-3">
+          {(setupItems.length ? setupItems : defaultGoogleAdsSetupItems()).map((item) => (
+            <div className="flex gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={item.envVar}>
+              <CheckCircle2 className={`mt-0.5 size-5 shrink-0 ${item.configured ? "text-green-600" : "text-copper"}`} aria-hidden="true" />
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-black text-ink">{item.label}</p>
+                  <span className={`rounded-full px-2 py-1 text-[11px] font-black ${item.configured ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+                    {item.configured ? "Configured" : "Missing"}
+                  </span>
+                </div>
+                <p className="mt-1 font-mono text-xs font-bold text-graphite/60">{item.envVar}</p>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{item.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-2xl border border-ink/10 bg-ink p-5 text-white">
+          <h4 className="text-lg font-black">Connection checklist</h4>
+          <div className="mt-4 grid gap-3 text-sm leading-6 text-white/75">
+            <p>1. Add the required values in Render environment settings.</p>
+            <p>2. Make sure the redirect URI matches Google Cloud exactly.</p>
+            <p>3. Redeploy the service after changing environment variables.</p>
+            <p>4. Return here and refresh status.</p>
+            <p>5. Connect Google Ads and select the active customer ID.</p>
+          </div>
+          <div className="mt-5 rounded-xl bg-white/8 p-4">
+            <p className="text-xs font-black uppercase tracking-[0.12em] text-white/55">Current mode</p>
+            <p className="mt-1 text-sm font-black">Read Only</p>
+            <p className="mt-2 text-sm leading-5 text-white/65">No campaigns, budgets, keywords, ads, or assets can be changed from this connector.</p>
+          </div>
+          <div className="mt-5">
+            {ready ? (
+              <a className="inline-flex h-11 items-center justify-center rounded-full bg-white px-4 text-sm font-black text-ink" href="/api/google-ads/connect" rel="noreferrer" target="_blank">Connect Google Ads</a>
+            ) : (
+              <button className="inline-flex h-11 cursor-not-allowed items-center justify-center rounded-full bg-white/15 px-4 text-sm font-black text-white/65" disabled type="button">
+                Complete setup to connect
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function PermissionModePills({ activeMode }: { activeMode: PermissionMode }) {
   const modes: PermissionMode[] = ["Read Only", "Draft Mode", "Agency Mode", "Owner Mode"];
   return (
@@ -1510,6 +1590,17 @@ function InfoTile({ label, value }: { label: string; value: string }) {
       <p className="mt-2 break-words text-sm font-black text-ink">{value}</p>
     </div>
   );
+}
+
+function defaultGoogleAdsSetupItems() {
+  return [
+    { configured: false, detail: "Required to call the Google Ads API.", envVar: "GOOGLE_ADS_DEVELOPER_TOKEN", label: "Google Ads developer token" },
+    { configured: false, detail: "Required to send users to Google OAuth consent.", envVar: "GOOGLE_CLIENT_ID", label: "Google OAuth client ID" },
+    { configured: false, detail: "Required to exchange the authorization code for tokens.", envVar: "GOOGLE_CLIENT_SECRET", label: "Google OAuth client secret" },
+    { configured: false, detail: "Manager or login customer ID used for Google Ads API requests.", envVar: "GOOGLE_ADS_LOGIN_CUSTOMER_ID", label: "Google Ads login customer ID" },
+    { configured: false, detail: "Must match the authorized redirect URI in Google Cloud.", envVar: "GOOGLE_OAUTH_REDIRECT_URI", label: "OAuth redirect URI" },
+    { configured: false, detail: "Required to encrypt the stored refresh token.", envVar: "GOOGLE_TOKEN_ENCRYPTION_KEY", label: "Token encryption key" },
+  ];
 }
 
 function GoogleAdsDataTable({ rows }: { rows: GoogleAdsMetricRow[] }) {

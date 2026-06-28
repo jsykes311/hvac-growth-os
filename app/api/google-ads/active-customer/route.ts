@@ -10,8 +10,9 @@ export async function POST(request: NextRequest) {
     await setActiveGoogleAdsCustomer(customerId);
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error("Google Ads active customer selection failed", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to select Google Ads customer account." },
+      { error: "That Google Ads account could not be selected. Refresh the account list and try again." },
       { status: 500 },
     );
   }

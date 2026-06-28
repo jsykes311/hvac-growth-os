@@ -64,8 +64,55 @@ export function googleAdsConfig() {
 }
 
 export function isGoogleAdsConfigured() {
+  return googleAdsSetupStatus().ready;
+}
+
+export function googleAdsSetupStatus() {
   const config = googleAdsConfig();
-  return Boolean(config.clientId && config.clientSecret && config.developerToken && config.loginCustomerId && config.redirectUri && config.encryptionKey);
+  const items = [
+    {
+      configured: Boolean(config.developerToken),
+      detail: "Required to call the Google Ads API.",
+      envVar: "GOOGLE_ADS_DEVELOPER_TOKEN",
+      label: "Google Ads developer token",
+    },
+    {
+      configured: Boolean(config.clientId),
+      detail: "Required to send users to Google OAuth consent.",
+      envVar: "GOOGLE_CLIENT_ID",
+      label: "Google OAuth client ID",
+    },
+    {
+      configured: Boolean(config.clientSecret),
+      detail: "Required to exchange the authorization code for tokens.",
+      envVar: "GOOGLE_CLIENT_SECRET",
+      label: "Google OAuth client secret",
+    },
+    {
+      configured: Boolean(config.loginCustomerId),
+      detail: "Manager or login customer ID used for Google Ads API requests.",
+      envVar: "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+      label: "Google Ads login customer ID",
+    },
+    {
+      configured: Boolean(config.redirectUri),
+      detail: "Must match the authorized redirect URI in Google Cloud.",
+      envVar: "GOOGLE_OAUTH_REDIRECT_URI",
+      label: "OAuth redirect URI",
+    },
+    {
+      configured: Boolean(config.encryptionKey),
+      detail: "Required to encrypt the stored refresh token.",
+      envVar: "GOOGLE_TOKEN_ENCRYPTION_KEY",
+      label: "Token encryption key",
+    },
+  ];
+
+  return {
+    items,
+    missingItems: items.filter((item) => !item.configured).map((item) => item.envVar),
+    ready: items.every((item) => item.configured),
+  };
 }
 
 export function buildGoogleOAuthUrl({ origin, state }: { origin: string; state: string }) {
@@ -134,14 +181,16 @@ export async function exchangeGoogleCode({ code, origin }: { code: string; origi
 
 export async function getGoogleAdsConnectionStatus() {
   const store = await loadGoogleAdsStore();
+  const setup = googleAdsSetupStatus();
   return {
     googleAds: {
       activeCustomerId: store.activeCustomerId,
       connected: Boolean(store.tokenSet?.refreshToken),
-      configured: isGoogleAdsConfigured(),
+      configured: setup.ready,
       customerIds: store.customerIds,
       lastSyncAt: store.lastSyncAt,
       permissionMode: store.permissionMode,
+      setup,
       tokenStored: Boolean(store.tokenSet?.refreshToken),
     },
   };

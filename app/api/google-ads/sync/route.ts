@@ -8,8 +8,9 @@ export async function POST() {
     const data = await syncGoogleAdsData();
     return NextResponse.json({ data });
   } catch (error) {
+    console.error("Google Ads sync failed", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to sync Google Ads data." },
+      { error: "Google Ads is not ready to sync yet. Review Google Ads Setup and try again." },
       { status: 500 },
     );
   }

@@ -35,13 +35,16 @@ export function Button({
 export function Panel({
   children,
   className = "",
+  id,
 }: {
   children: ReactNode;
   className?: string;
+  id?: string;
 }) {
   return (
     <section
       className={`rounded-[22px] border border-ink/10 bg-white/85 p-6 shadow-soft backdrop-blur-md ${className}`}
+      id={id}
     >
       {children}
     </section>

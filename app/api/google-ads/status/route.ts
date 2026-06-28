@@ -7,8 +7,9 @@ export async function GET() {
   try {
     return NextResponse.json(await getGoogleAdsConnectionStatus());
   } catch (error) {
+    console.error("Google Ads status load failed", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to load Google Ads connection status." },
+      { error: "Google Ads setup status could not be loaded. Refresh Connected Apps and try again." },
       { status: 500 },
     );
   }
