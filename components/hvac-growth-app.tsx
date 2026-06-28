@@ -27,7 +27,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useState } from "react";
 import type {
   AnalyzedPage,
   BusinessProfile,
@@ -90,6 +90,31 @@ type DecisionRecommendation = {
   estimatedTime: string;
   dependencies: string[];
   reasoning: string;
+};
+type DeploymentApprovalStatus = "Pending" | "Approved" | "Dismissed" | "Remind Later";
+type DeploymentRuntimeStatus = "Waiting" | "Success" | "Failed";
+type DeploymentTarget = "Google Ads" | "Google Business Profile" | "HighLevel" | "Landing Pages" | "Reports";
+type DeploymentCandidate = {
+  id: string;
+  target: DeploymentTarget;
+  title: string;
+  recommendation: string;
+  preview: string[];
+  dependencies: Array<{ label: string; exists: boolean; detail: string }>;
+  deployMode: string;
+  intelligenceMemoryNote: string;
+};
+type DeploymentRecord = {
+  id: string;
+  deploymentId: string;
+  target: DeploymentTarget;
+  title: string;
+  approvalStatus: DeploymentApprovalStatus;
+  runtimeStatus: DeploymentRuntimeStatus;
+  log: string[];
+  history: Array<{ date: string; actor: string; event: string }>;
+  deployedAt?: string;
+  deployedBy?: string;
 };
 
 const CAMPAIGN_GOALS = [
@@ -509,7 +534,13 @@ function ResultsView({
       )}
 
       {activeSection === "deploy-center" && (
-        <DeployCenter analysis={analysis} ppcPlan={ppcPlan} campaign={campaign} setActiveSection={setActiveSection} />
+        <DeployCenter
+          analysis={analysis}
+          campaign={campaign}
+          contractorUrl={contractorUrl}
+          ppcPlan={ppcPlan}
+          setActiveSection={setActiveSection}
+        />
       )}
 
       {activeSection === "client-workspace" && (
@@ -981,14 +1012,73 @@ function ClientWorkspace({
 function DeployCenter({
   analysis,
   campaign,
+  contractorUrl,
   ppcPlan,
   setActiveSection,
 }: {
   analysis: BusinessProfile;
   campaign: CampaignOutput | null;
+  contractorUrl: string;
   ppcPlan: PpcPlan | null;
   setActiveSection: (section: PlatformSection) => void;
 }) {
+  const storageKey = deploymentMemoryKey(analysis, contractorUrl);
+  const candidates = buildDeploymentCandidates(analysis, ppcPlan, campaign);
+  const [records, setRecords] = useState<Record<string, DeploymentRecord>>({});
+
+  useEffect(() => {
+    setRecords(loadDeploymentMemory(storageKey));
+  }, [storageKey]);
+
+  function persist(nextRecords: Record<string, DeploymentRecord>) {
+    setRecords(nextRecords);
+    saveDeploymentMemory(storageKey, nextRecords);
+  }
+
+  function updateDeployment(candidate: DeploymentCandidate, approvalStatus: DeploymentApprovalStatus) {
+    const nextRecord = updateDeploymentRecord(records[candidate.id], candidate, {
+      approvalStatus,
+      runtimeStatus: approvalStatus === "Approved" ? "Waiting" : records[candidate.id]?.runtimeStatus ?? "Waiting",
+      event:
+        approvalStatus === "Approved"
+          ? "Approved by user. Waiting for deploy action."
+          : `${approvalStatus} by user.`,
+      log:
+        approvalStatus === "Approved"
+          ? "Approval captured. External systems will only receive paused or draft assets."
+          : `Recommendation marked ${approvalStatus.toLowerCase()}.`,
+    });
+    persist({ ...records, [candidate.id]: nextRecord });
+  }
+
+  function deployCandidate(candidate: DeploymentCandidate) {
+    const validation = validateDeployment(candidate);
+    const approved = records[candidate.id]?.approvalStatus === "Approved";
+    const success = approved && validation.ready;
+    const nextRecord = updateDeploymentRecord(records[candidate.id], candidate, {
+      approvalStatus: records[candidate.id]?.approvalStatus ?? "Pending",
+      runtimeStatus: success ? "Success" : "Failed",
+      event: success
+        ? `${candidate.deployMode} generated. No live activation was performed.`
+        : approved
+          ? "Deployment blocked by missing dependencies."
+          : "Deployment blocked because human approval is required.",
+      log: success
+        ? `${candidate.target} deployment created in a safe paused/draft state and written to Intelligence Memory.`
+        : approved
+          ? `Validation failed: ${validation.missing.join(", ")}.`
+          : "Deploy button was pressed before approval. No asset was created.",
+      deployedAt: success ? new Date().toISOString() : records[candidate.id]?.deployedAt,
+      deployedBy: success ? currentActor() : records[candidate.id]?.deployedBy,
+    });
+    persist({ ...records, [candidate.id]: nextRecord });
+  }
+
+  const deploymentHistory = Object.values(records)
+    .flatMap((record) => record.history.map((item) => ({ ...item, title: record.title, status: record.runtimeStatus })))
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, 8);
+
   return (
     <div className="grid gap-5">
       <Panel>
@@ -999,20 +1089,53 @@ function DeployCenter({
               Deploy Center
             </h2>
             <p className="mt-2 text-sm leading-6 text-graphite/70">
-              Everything generated by HVAC Growth OS is organized here for implementation.
+              Deploy Center now works as a human-approved deployment pipeline. Every recommendation is previewed, validated, approved, then created as a paused or draft asset before anything can go live.
             </p>
           </div>
           <Button onClick={() => setActiveSection("revenue-engine")} variant="secondary">Open Revenue Engine</Button>
         </div>
       </Panel>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <DeployCard title="Google Ads" items={googleAdsDeployItems(ppcPlan)} />
-        <DeployCard title="Landing Pages" items={landingPageDeployItems(ppcPlan)} />
-        <DeployCard title="SEO" items={seoDeployItems(analysis)} />
-        <DeployCard title="Google Business Profile" items={gbpDeployItems(analysis)} />
-        <DeployCard title="HighLevel" items={highLevelDeployItems()} />
-        <DeployCard title="Reporting" items={reportDeployItems(campaign)} />
+      <Panel className="bg-ink text-white">
+        <div className="grid gap-4 md:grid-cols-4">
+          <MetricCard label="Waiting" value={String(Object.values(records).filter((record) => record.runtimeStatus === "Waiting").length || candidates.length)} />
+          <MetricCard label="Approved" value={String(Object.values(records).filter((record) => record.approvalStatus === "Approved").length)} />
+          <MetricCard label="Successful Drafts" value={String(Object.values(records).filter((record) => record.runtimeStatus === "Success").length)} />
+          <MetricCard label="History Events" value={String(deploymentHistory.length)} />
+        </div>
+      </Panel>
+      <div className="grid gap-5">
+        {candidates.map((candidate) => (
+          <DeploymentWorkflowCard
+            candidate={candidate}
+            key={candidate.id}
+            onDeploy={deployCandidate}
+            onUpdate={updateDeployment}
+            record={records[candidate.id]}
+          />
+        ))}
       </div>
+      <Panel>
+        <h3 className="text-lg font-black text-ink">Deployment History</h3>
+        <p className="mt-2 text-sm leading-6 text-graphite/70">
+          Every approval and deployment event is stored in client memory with who acted, when it happened, and what happened afterward.
+        </p>
+        <div className="mt-4 grid gap-3">
+          {deploymentHistory.length ? deploymentHistory.map((item) => (
+            <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-3" key={`${item.title}-${item.date}-${item.event}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-black text-ink">{item.title}</p>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-graphite/70">{item.status}</span>
+              </div>
+              <p className="mt-1 text-sm text-graphite/70">{item.event}</p>
+              <p className="mt-1 text-xs font-bold text-graphite/50">{new Date(item.date).toLocaleString()} by {item.actor}</p>
+            </div>
+          )) : (
+            <p className="rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">
+              No deployments yet. Approve a recommendation, then create a paused or draft deployment.
+            </p>
+          )}
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -1802,6 +1925,133 @@ function ActionRow({ label, onClick }: { label: string; onClick: () => void }) {
       <Rocket className="size-4 text-copper" aria-hidden="true" />
     </button>
   );
+}
+
+function DeploymentWorkflowCard({
+  candidate,
+  onDeploy,
+  onUpdate,
+  record,
+}: {
+  candidate: DeploymentCandidate;
+  onDeploy: (candidate: DeploymentCandidate) => void;
+  onUpdate: (candidate: DeploymentCandidate, status: DeploymentApprovalStatus) => void;
+  record?: DeploymentRecord;
+}) {
+  const validation = validateDeployment(candidate);
+  const approvalStatus = record?.approvalStatus ?? "Pending";
+  const runtimeStatus = record?.runtimeStatus ?? "Waiting";
+  const log = record?.log ?? ["Waiting for human review."];
+  const history = record?.history ?? [];
+
+  return (
+    <Panel>
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-ink px-3 py-1 text-xs font-black text-white">{candidate.target}</span>
+            <DeploymentStatusBadge status={runtimeStatus} />
+            <ApprovalBadge status={approvalStatus} />
+          </div>
+          <h3 className="mt-3 text-xl font-black text-ink">{candidate.title}</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">{candidate.recommendation}</p>
+        </div>
+        <Button onClick={() => onDeploy(candidate)} variant={approvalStatus === "Approved" ? "primary" : "secondary"}>
+          Deploy Draft
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-5">
+        <PipelineStage title="1. Recommendation">
+          <p>{candidate.recommendation}</p>
+          <p className="mt-2 font-bold text-ink">Memory feed: {candidate.intelligenceMemoryNote}</p>
+        </PipelineStage>
+        <PipelineStage title="2. Preview">
+          <BulletList emptyText="" values={candidate.preview} />
+        </PipelineStage>
+        <PipelineStage title="3. Validation">
+          <div className="grid gap-2">
+            {candidate.dependencies.map((dependency) => (
+              <div className="flex gap-2" key={dependency.label}>
+                <CheckCircle2 className={`mt-0.5 size-4 ${dependency.exists ? "text-green-600" : "text-copper"}`} aria-hidden="true" />
+                <p>
+                  <strong className="text-ink">{dependency.label}:</strong> {dependency.detail}
+                </p>
+              </div>
+            ))}
+          </div>
+        </PipelineStage>
+        <PipelineStage title="4. Approval">
+          <div className="grid gap-2">
+            <button className="rounded-lg bg-ink px-3 py-2 text-left text-xs font-black text-white" onClick={() => onUpdate(candidate, "Approved")} type="button">Approve</button>
+            <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-left text-xs font-black text-ink" onClick={() => onUpdate(candidate, "Dismissed")} type="button">Dismiss</button>
+            <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-left text-xs font-black text-ink" onClick={() => onUpdate(candidate, "Remind Later")} type="button">Remind Later</button>
+          </div>
+        </PipelineStage>
+        <PipelineStage title="5. Deploy">
+          <p className="font-bold text-ink">{candidate.deployMode}</p>
+          <p className="mt-2">{validation.ready ? "Dependencies are ready for a safe draft deployment." : `Waiting on: ${validation.missing.join(", ")}`}</p>
+          <p className="mt-2">Campaigns and assets are never enabled automatically.</p>
+        </PipelineStage>
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
+          <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Deployment Log</h4>
+          <div className="mt-3 grid gap-2">
+            {log.map((entry, index) => (
+              <p className="rounded-lg bg-white px-3 py-2 text-sm text-graphite/75" key={`${entry}-${index}`}>{entry}</p>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
+          <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Deployment History</h4>
+          <div className="mt-3 grid gap-2">
+            {history.length ? history.slice(0, 4).map((item) => (
+              <p className="rounded-lg bg-white px-3 py-2 text-sm text-graphite/75" key={`${item.date}-${item.event}`}>
+                {item.event} <span className="font-bold text-graphite/45">({new Date(item.date).toLocaleString()} by {item.actor})</span>
+              </p>
+            )) : (
+              <p className="rounded-lg bg-white px-3 py-2 text-sm text-graphite/75">No action taken yet.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function PipelineStage({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 text-sm leading-6 text-graphite/70">
+      <h4 className="mb-3 text-xs font-black uppercase tracking-[0.12em] text-ink">{title}</h4>
+      {children}
+    </div>
+  );
+}
+
+function DeploymentStatusBadge({ status }: { status: DeploymentRuntimeStatus }) {
+  const className =
+    status === "Success"
+      ? "bg-green-50 text-green-700 border-green-200"
+      : status === "Failed"
+        ? "bg-rose-50 text-rose-700 border-rose-200"
+        : "bg-amber-50 text-amber-700 border-amber-200";
+
+  return <span className={`rounded-full border px-3 py-1 text-xs font-black ${className}`}>{status}</span>;
+}
+
+function ApprovalBadge({ status }: { status: DeploymentApprovalStatus }) {
+  const className =
+    status === "Approved"
+      ? "bg-teal-50 text-teal-700 border-teal-200"
+      : status === "Dismissed"
+        ? "bg-slate-100 text-graphite border-ink/10"
+        : status === "Remind Later"
+          ? "bg-amber-50 text-amber-700 border-amber-200"
+          : "bg-white text-graphite border-ink/10";
+
+  return <span className={`rounded-full border px-3 py-1 text-xs font-black ${className}`}>{status}</span>;
 }
 
 function DeployCard({ title, items }: { title: string; items: Array<{ label: string; status: "Ready" | "Needs Work"; detail: string }> }) {
@@ -2952,6 +3202,185 @@ function buildTasks(analysis: BusinessProfile, ppcPlan: PpcPlan | null) {
     { title: "Review Search Terms", priority: "Medium", detail: "Review search terms twice weekly after launch." },
     { title: "Publish GBP Post", priority: "Low", detail: "Use weekly service, financing, maintenance, or seasonal content." },
   ];
+}
+
+function buildDeploymentCandidates(
+  analysis: BusinessProfile,
+  ppcPlan: PpcPlan | null,
+  campaign: CampaignOutput | null,
+): DeploymentCandidate[] {
+  const topCampaign = ppcPlan?.recommendedLaunchPlan[0];
+  const missingPage = ppcPlan?.landingPageRecommendations.find((page) => page.bestExistingLandingPage === "Recommended new page");
+  const primaryCity = analysis.serviceAreas[0] || "primary service area";
+  const primaryService = analysis.services[0] || "HVAC service";
+
+  return [
+    {
+      id: "google-ads-paused-campaigns",
+      target: "Google Ads",
+      title: "Create Google Ads campaigns in PAUSED state",
+      recommendation: topCampaign
+        ? `Create paused Google Ads campaigns for ${topCampaign.campaign} because Revenue Engine scored it ${topCampaign.priorityScore}/100 and identified it as launch-ready.`
+        : "Run Revenue Engine first, then create paused Google Ads campaigns from approved launch recommendations.",
+      preview: [
+        `${ppcPlan?.recommendedLaunchPlan.length ?? 0} launch campaign${ppcPlan?.recommendedLaunchPlan.length === 1 ? "" : "s"} in PAUSED state`,
+        `${ppcPlan?.keywords.length ?? 0} exact and phrase keywords`,
+        `${ppcPlan?.responsiveSearchAds.length ?? 0} responsive search ad assets`,
+        `${ppcPlan?.negativeKeywords.length ?? 0} starter negative keywords`,
+      ],
+      dependencies: [
+        { label: "Revenue Engine", exists: Boolean(ppcPlan), detail: ppcPlan ? "Campaign structure is available." : "Run Revenue Engine first." },
+        { label: "Google Ads access", exists: false, detail: "Connect customer ID and API credentials before external creation." },
+        { label: "Conversion tracking", exists: false, detail: "Confirm calls, forms, and GTM before launch review." },
+      ],
+      deployMode: "API target: Google Ads. Safe output: paused campaign draft until account access is connected.",
+      intelligenceMemoryNote: "Stores approved campaign, paused state, validation results, and later CTR/CPC/conversion outcomes.",
+    },
+    {
+      id: "gbp-post-draft",
+      target: "Google Business Profile",
+      title: "Create Google Business Profile post draft",
+      recommendation: `Draft a GBP post promoting ${primaryService} in ${primaryCity} so the client has timely local content without publishing automatically.`,
+      preview: [
+        campaign?.googleBusinessProfilePost || `Service-focused post draft for ${primaryService}`,
+        "CTA: Call or request service",
+        "Status: Draft only",
+      ],
+      dependencies: [
+        { label: "Business profile", exists: Boolean(analysis.companyName), detail: "Business name is available." },
+        { label: "GBP access", exists: false, detail: "Connect or verify GBP permissions before API draft creation." },
+      ],
+      deployMode: "API target: Google Business Profile. Safe output: post draft only.",
+      intelligenceMemoryNote: "Stores draft topic, service focus, and later profile activity or review response signals.",
+    },
+    {
+      id: "highlevel-automation-draft",
+      target: "HighLevel",
+      title: "Create HighLevel automation draft",
+      recommendation: "Create a speed-to-lead and missed-call follow-up automation draft so CRM operations are ready before campaigns are enabled.",
+      preview: [
+        "Trigger: new form lead or missed call",
+        "Step 1: immediate SMS follow-up",
+        "Step 2: internal notification",
+        "Step 3: estimate follow-up sequence",
+      ],
+      dependencies: [
+        { label: "HighLevel access", exists: false, detail: "Connect location and API token before external draft creation." },
+        { label: "Phone tracking", exists: Boolean(analysis.phone), detail: analysis.phone ? "Phone number detected." : "Add phone number." },
+      ],
+      deployMode: "API target: HighLevel. Safe output: automation draft only.",
+      intelligenceMemoryNote: "Stores automation draft, CRM dependency status, and later response-time or pipeline changes.",
+    },
+    {
+      id: "landing-page-draft",
+      target: "Landing Pages",
+      title: "Generate landing page draft",
+      recommendation: missingPage
+        ? `Generate a draft landing page for ${missingPage.campaign} because Revenue Engine found no strong existing destination.`
+        : "Generate a draft campaign landing page from the strongest existing Revenue Engine recommendation.",
+      preview: [
+        missingPage?.suggestedPageTitle || `${analysis.companyName} ${primaryService} landing page`,
+        missingPage?.suggestedH1 || `${primaryService} in ${primaryCity}`,
+        missingPage?.suggestedCta || "Request Service",
+        missingPage?.metaDescription || "Draft SEO meta description based on service, city, and offer context.",
+      ],
+      dependencies: [
+        { label: "Landing page recommendation", exists: Boolean(ppcPlan?.landingPageRecommendations.length), detail: ppcPlan ? "Landing page intelligence is available." : "Run Revenue Engine first." },
+        { label: "Website access", exists: false, detail: "Connect CMS, repo, or page builder before publishing." },
+      ],
+      deployMode: "Publishing target: website CMS or repo. Safe output: draft page only.",
+      intelligenceMemoryNote: "Stores page draft, target service, missing-page reason, and later conversion/page-performance changes.",
+    },
+    {
+      id: "report-draft",
+      target: "Reports",
+      title: "Generate launch report draft",
+      recommendation: "Create a launch report draft so the owner can review what is ready, what is blocked, and what needs approval before live deployment.",
+      preview: [
+        `Client: ${analysis.companyName || "HVAC client"}`,
+        `Revenue Engine: ${ppcPlan ? "Complete" : "Not generated"}`,
+        `Campaign creative: ${campaign ? "Available" : "Not generated"}`,
+        "Status: Draft report only",
+      ],
+      dependencies: [
+        { label: "Website audit", exists: true, detail: "Current client analysis is loaded." },
+        { label: "Revenue Engine", exists: Boolean(ppcPlan), detail: ppcPlan ? "Launch recommendations are available." : "Run Revenue Engine for richer reporting." },
+      ],
+      deployMode: "Report output: draft HTML/PDF-ready report.",
+      intelligenceMemoryNote: "Stores launch summary and follow-up outcomes for future monthly and quarterly reports.",
+    },
+  ];
+}
+
+function validateDeployment(candidate: DeploymentCandidate) {
+  const missing = candidate.dependencies.filter((dependency) => !dependency.exists).map((dependency) => dependency.label);
+  return { ready: missing.length === 0, missing };
+}
+
+function updateDeploymentRecord(
+  existing: DeploymentRecord | undefined,
+  candidate: DeploymentCandidate,
+  update: {
+    approvalStatus: DeploymentApprovalStatus;
+    runtimeStatus: DeploymentRuntimeStatus;
+    event: string;
+    log: string;
+    deployedAt?: string;
+    deployedBy?: string;
+  },
+): DeploymentRecord {
+  const now = new Date().toISOString();
+  const actor = currentActor();
+  const base: DeploymentRecord = existing ?? {
+    id: candidate.id,
+    deploymentId: `dep-${candidate.id}-${Date.now()}`,
+    target: candidate.target,
+    title: candidate.title,
+    approvalStatus: "Pending",
+    runtimeStatus: "Waiting",
+    log: [`Recommendation created for ${candidate.target}.`],
+    history: [],
+  };
+
+  return {
+    ...base,
+    approvalStatus: update.approvalStatus,
+    runtimeStatus: update.runtimeStatus,
+    log: [
+      `${new Date(now).toLocaleString()}: ${update.log}`,
+      ...base.log,
+    ].slice(0, 8),
+    history: [
+      { date: now, actor, event: update.event },
+      ...base.history,
+    ].slice(0, 12),
+    deployedAt: update.deployedAt,
+    deployedBy: update.deployedBy,
+  };
+}
+
+function deploymentMemoryKey(analysis: BusinessProfile, contractorUrl: string) {
+  return `hvac-growth-os:deploy-center:${domainLabel(contractorUrl || analysis.companyName || "client")}`;
+}
+
+function loadDeploymentMemory(key: string): Record<string, DeploymentRecord> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, DeploymentRecord>;
+  } catch {
+    return {};
+  }
+}
+
+function saveDeploymentMemory(key: string, records: Record<string, DeploymentRecord>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(records));
+}
+
+function currentActor() {
+  return "Current user";
 }
 
 function googleAdsDeployItems(ppcPlan: PpcPlan | null) {
