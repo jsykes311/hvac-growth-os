@@ -53,8 +53,8 @@ const DEFAULT_API_VERSION = "v19";
 export function googleAdsConfig() {
   return {
     apiVersion: process.env.GOOGLE_ADS_API_VERSION || DEFAULT_API_VERSION,
-    clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
-    clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
+    clientId: process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID || "",
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
     developerToken: process.env.GOOGLE_ADS_DEVELOPER_TOKEN || "",
     encryptionKey: process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || "",
     loginCustomerId: cleanCustomerId(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || ""),
@@ -65,7 +65,7 @@ export function googleAdsConfig() {
 
 export function isGoogleAdsConfigured() {
   const config = googleAdsConfig();
-  return Boolean(config.clientId && config.clientSecret && config.developerToken && config.encryptionKey);
+  return Boolean(config.clientId && config.clientSecret && config.developerToken && config.loginCustomerId && config.redirectUri && config.encryptionKey);
 }
 
 export function buildGoogleOAuthUrl({ origin, state }: { origin: string; state: string }) {
@@ -167,7 +167,7 @@ export async function getStoredGoogleAdsData() {
 export async function syncGoogleAdsData() {
   const store = await loadGoogleAdsStore();
   if (!store.tokenSet?.refreshToken) throw new Error("Connect Google Ads before syncing data.");
-  if (!isGoogleAdsConfigured()) throw new Error("Google Ads OAuth, developer token, and token encryption env vars are required.");
+  if (!isGoogleAdsConfigured()) throw new Error("Google Ads developer token, OAuth client, login customer ID, redirect URI, and token encryption env vars are required.");
 
   const accessToken = await getFreshAccessToken(store);
   const customerIds = await listAccessibleCustomers(accessToken);

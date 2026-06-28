@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export async function GET(request: NextRequest) {
   try {
     if (!isGoogleAdsConfigured()) {
-      throw new Error("Google Ads is not configured. Add OAuth, developer token, and token encryption env vars first.");
+      throw new Error("Google Ads is not configured. Add developer token, Google OAuth client, login customer ID, redirect URI, and token encryption env vars first.");
     }
 
     const state = crypto.randomBytes(24).toString("hex");
