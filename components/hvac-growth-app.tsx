@@ -27,7 +27,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { FormEvent, type ReactNode, useEffect, useState } from "react";
+import { FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import type {
   AnalyzedPage,
   BusinessProfile,
@@ -44,6 +44,7 @@ type PlatformSection =
   | "website-audit"
   | "seo"
   | "ai-visibility"
+  | "connected-apps"
   | "ai-cmo"
   | "revenue-engine"
   | "marketing-intelligence"
@@ -124,6 +125,42 @@ type DeploymentRecord = {
   deployedAt?: string;
   deployedBy?: string;
 };
+type PermissionMode = "Read Only" | "Draft Mode" | "Agency Mode" | "Owner Mode";
+type ConnectedAppStatus = {
+  googleAds: {
+    activeCustomerId: string;
+    connected: boolean;
+    configured: boolean;
+    customerIds: string[];
+    lastSyncAt: string;
+    permissionMode: PermissionMode;
+    tokenStored: boolean;
+  };
+};
+type GoogleAdsMetricRow = {
+  id: string;
+  name: string;
+  campaign?: string;
+  adGroup?: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  avgCpc: number;
+  cost: number;
+  conversions: number;
+};
+type GoogleAdsDataPayload = {
+  activeCustomerId: string;
+  lastSyncAt: string;
+  campaigns: GoogleAdsMetricRow[];
+  adGroups: GoogleAdsMetricRow[];
+  keywords: GoogleAdsMetricRow[];
+  searchTerms: GoogleAdsMetricRow[];
+  ads: GoogleAdsMetricRow[];
+  assets: GoogleAdsMetricRow[];
+  budgets: Array<{ id: string; name: string; amount: number; status: string }>;
+  conversions: GoogleAdsMetricRow[];
+};
 type ImplementationChannel = {
   target: DeploymentTarget;
   status: ChannelStatus;
@@ -148,6 +185,7 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "website-audit", label: "Website Audit" },
   { id: "seo", label: "SEO" },
   { id: "ai-visibility", label: "AI Visibility" },
+  { id: "connected-apps", label: "Connected Apps" },
   { id: "ai-cmo", label: "AI CMO" },
   { id: "revenue-engine", label: "Revenue Engine" },
   { id: "marketing-intelligence", label: "Marketing Intelligence" },
@@ -527,6 +565,7 @@ function ResultsView({
 
       {activeSection === "seo" && <SeoAnalysisPanel analysis={analysis} />}
       {activeSection === "ai-visibility" && <AiSeoAnalysisPanel analysis={analysis} />}
+      {activeSection === "connected-apps" && <ConnectedAppsSection />}
 
       {activeSection === "ai-cmo" && (
         <AiCmoSection analysis={analysis} contractorUrl={contractorUrl} ppcPlan={ppcPlan} />
@@ -1203,6 +1242,325 @@ function DeployCenter({
       </Panel>
     </div>
   );
+}
+
+function ConnectedAppsSection() {
+  const [status, setStatus] = useState<ConnectedAppStatus | null>(null);
+  const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
+  const [activeTable, setActiveTable] = useState<keyof Pick<GoogleAdsDataPayload, "campaigns" | "adGroups" | "keywords" | "searchTerms" | "ads" | "assets" | "conversions">>("campaigns");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const loadGoogleAdsData = useCallback(async () => {
+    const response = await fetch("/api/google-ads/data", { cache: "no-store" });
+    const payload = (await response.json()) as { data?: GoogleAdsDataPayload } & ApiError;
+    if (!response.ok) throw new Error(payload.error || "Unable to load Google Ads data.");
+    setGoogleAdsData(payload.data ?? null);
+  }, []);
+
+  const refreshConnectedApps = useCallback(async () => {
+    setIsLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/google-ads/status", { cache: "no-store" });
+      const payload = (await response.json()) as ConnectedAppStatus & ApiError;
+      if (!response.ok) throw new Error(payload.error || "Unable to load connected apps.");
+      setStatus(payload);
+      if (payload.googleAds.connected) {
+        await loadGoogleAdsData();
+      }
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Unable to load connected apps.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadGoogleAdsData]);
+
+  useEffect(() => {
+    void refreshConnectedApps();
+  }, [refreshConnectedApps]);
+
+  async function syncGoogleAds() {
+    setIsSyncing(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/google-ads/sync", { method: "POST" });
+      const payload = (await response.json()) as { data?: GoogleAdsDataPayload } & ApiError;
+      if (!response.ok) throw new Error(payload.error || "Unable to sync Google Ads.");
+      setGoogleAdsData(payload.data ?? null);
+      await refreshConnectedApps();
+      setMessage("Google Ads data refreshed in read-only mode.");
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Unable to sync Google Ads.");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  async function selectCustomer(customerId: string) {
+    setMessage("");
+    try {
+      const response = await fetch("/api/google-ads/active-customer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId }),
+      });
+      const payload = (await response.json()) as ApiError;
+      if (!response.ok) throw new Error(payload.error || "Unable to select customer account.");
+      await refreshConnectedApps();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Unable to select customer account.");
+    }
+  }
+
+  const googleAds = status?.googleAds;
+  const tableRows = googleAdsData?.[activeTable] ?? [];
+
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div>
+            <Eyebrow>Connected Apps</Eyebrow>
+            <h2 className="flex items-center gap-2 text-xl font-black text-ink">
+              <Settings className="size-5" aria-hidden="true" />
+              External marketing data connections
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+              Connect read-only data sources now so HVAC Growth OS can learn from real performance. Write actions remain disabled until a future approval-based deployment mode is enabled.
+            </p>
+          </div>
+          <Button onClick={refreshConnectedApps} variant="secondary">{isLoading ? "Refreshing..." : "Refresh Status"}</Button>
+        </div>
+      </Panel>
+
+      {message && (
+        <div className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-bold text-graphite/75 shadow-soft">
+          {message}
+        </div>
+      )}
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <ConnectedAppCard
+          configured={Boolean(googleAds?.configured)}
+          connected={Boolean(googleAds?.connected)}
+          description="Read campaigns, ad groups, keywords, search terms, ads, assets, budgets, and conversions."
+          mode={googleAds?.permissionMode ?? "Read Only"}
+          primaryAction={<a className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-4 text-sm font-black text-white" href="/api/google-ads/connect" rel="noreferrer" target="_blank">Connect Google Ads</a>}
+          secondaryAction={<Button disabled={!googleAds?.connected || isSyncing} onClick={syncGoogleAds} variant="secondary">{isSyncing ? "Syncing..." : "Refresh Data"}</Button>}
+          title="Google Ads"
+        />
+        {[
+          ["Google Analytics", "Website traffic, events, source quality, and conversion paths."],
+          ["Google Search Console", "Queries, pages, clicks, impressions, indexing, and search visibility."],
+          ["Google Business Profile", "Calls, views, posts, reviews, services, and local profile activity."],
+          ["HighLevel", "Leads, pipeline, calls, forms, appointments, automations, and revenue stages."],
+          ["Meta / Facebook / Instagram", "Social content, engagement, ads, audiences, and lead forms."],
+          ["LinkedIn", "Professional visibility, posts, page engagement, and B2B referral signals."],
+          ["Weather Data", "Forecast, temperature swings, heat waves, cold snaps, and demand triggers."],
+        ].map(([title, description]) => (
+          <ConnectedAppCard
+            configured={false}
+            connected={false}
+            description={description}
+            key={title}
+            mode="Read Only"
+            primaryAction={<Button disabled variant="secondary">Coming Soon</Button>}
+            title={title}
+          />
+        ))}
+      </div>
+
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+          <div>
+            <h3 className="text-lg font-black text-ink">Google Ads Connection</h3>
+            <p className="mt-2 text-sm leading-6 text-graphite/70">
+              Current permission mode is read-only. HVAC Growth OS can read data, but cannot create, edit, pause, delete, or publish anything.
+            </p>
+          </div>
+          <PermissionModePills activeMode={googleAds?.permissionMode ?? "Read Only"} />
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          <InfoTile label="Connection" value={googleAds?.connected ? "Connected" : googleAds?.configured ? "Not connected" : "Needs setup"} />
+          <InfoTile label="Last sync" value={googleAds?.lastSyncAt ? new Date(googleAds.lastSyncAt).toLocaleString() : "Never synced"} />
+          <InfoTile label="Active customer" value={googleAds?.activeCustomerId || "None selected"} />
+        </div>
+        <div className="mt-5 grid gap-3">
+          <FieldLabel>Connected Google Ads customer IDs</FieldLabel>
+          {googleAds?.customerIds.length ? (
+            <select
+              className="h-11 rounded-md border border-ink/15 bg-white px-3 text-sm font-bold text-ink outline-none transition focus:border-flame focus:ring-4 focus:ring-flame/15"
+              onChange={(event) => selectCustomer(event.target.value)}
+              value={googleAds.activeCustomerId || googleAds.customerIds[0]}
+            >
+              {googleAds.customerIds.map((customerId) => (
+                <option key={customerId} value={customerId}>{customerId}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">
+              No customer IDs loaded yet. Connect Google Ads, then refresh data.
+            </p>
+          )}
+        </div>
+      </Panel>
+
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div>
+            <h3 className="text-lg font-black text-ink">Google Ads Data</h3>
+            <p className="mt-2 text-sm leading-6 text-graphite/70">
+              Read-only performance data synced from the selected Google Ads customer account.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["campaigns", "adGroups", "keywords", "searchTerms", "ads", "assets", "conversions"] as const).map((table) => (
+              <button
+                className={`rounded-full px-3 py-2 text-xs font-black transition ${activeTable === table ? "bg-ink text-white" : "border border-ink/10 bg-white text-ink hover:border-flame/40"}`}
+                key={table}
+                onClick={() => setActiveTable(table)}
+                type="button"
+              >
+                {tableLabel(table)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <GoogleAdsDataTable rows={tableRows} />
+        {googleAdsData?.budgets.length ? (
+          <div className="mt-6">
+            <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Budgets</h4>
+            <div className="mt-3 grid gap-2">
+              {googleAdsData.budgets.map((budget) => (
+                <div className="flex flex-wrap justify-between gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-3 text-sm" key={budget.id}>
+                  <strong className="text-ink">{budget.name}</strong>
+                  <span className="font-bold text-graphite/70">${budget.amount.toFixed(2)} per day</span>
+                  <span className="font-bold text-graphite/55">{budget.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </Panel>
+    </div>
+  );
+}
+
+function ConnectedAppCard({
+  configured,
+  connected,
+  description,
+  mode,
+  primaryAction,
+  secondaryAction,
+  title,
+}: {
+  configured: boolean;
+  connected: boolean;
+  description: string;
+  mode: PermissionMode;
+  primaryAction: ReactNode;
+  secondaryAction?: ReactNode;
+  title: string;
+}) {
+  return (
+    <Panel>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-black text-ink">{title}</h3>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">{description}</p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-black ${connected ? "border-teal-200 bg-teal-50 text-teal-700" : configured ? "border-amber-200 bg-amber-50 text-amber-700" : "border-ink/10 bg-slate-100 text-graphite"}`}>
+          {connected ? "Connected" : configured ? "Ready to Connect" : "Needs Setup"}
+        </span>
+      </div>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <span className="rounded-full bg-[#fbfbfa] px-3 py-2 text-xs font-black text-graphite/70">Mode: {mode}</span>
+        <div className="flex flex-wrap gap-2">
+          {primaryAction}
+          {secondaryAction}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function PermissionModePills({ activeMode }: { activeMode: PermissionMode }) {
+  const modes: PermissionMode[] = ["Read Only", "Draft Mode", "Agency Mode", "Owner Mode"];
+  return (
+    <div className="flex flex-wrap gap-2">
+      {modes.map((mode) => (
+        <span
+          className={`rounded-full border px-3 py-2 text-xs font-black ${mode === activeMode ? "border-teal-200 bg-teal-50 text-teal-700" : "border-ink/10 bg-white text-graphite/55"}`}
+          key={mode}
+        >
+          {mode}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
+      <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+      <p className="mt-2 break-words text-sm font-black text-ink">{value}</p>
+    </div>
+  );
+}
+
+function GoogleAdsDataTable({ rows }: { rows: GoogleAdsMetricRow[] }) {
+  if (!rows.length) {
+    return (
+      <p className="mt-5 rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">
+        No synced rows yet. Connect Google Ads and refresh data.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-5 overflow-x-auto rounded-xl border border-ink/10">
+      <table className="min-w-full divide-y divide-ink/10 text-left text-sm">
+        <thead className="bg-[#fbfbfa] text-xs uppercase tracking-[0.12em] text-graphite/55">
+          <tr>
+            <th className="px-4 py-3">Name</th>
+            <th className="px-4 py-3">Campaign</th>
+            <th className="px-4 py-3">Ad Group</th>
+            <th className="px-4 py-3">Clicks</th>
+            <th className="px-4 py-3">Impr.</th>
+            <th className="px-4 py-3">CTR</th>
+            <th className="px-4 py-3">Avg CPC</th>
+            <th className="px-4 py-3">Cost</th>
+            <th className="px-4 py-3">Conv.</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-ink/10 bg-white">
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td className="px-4 py-3 font-bold text-ink">{row.name}</td>
+              <td className="px-4 py-3 text-graphite/70">{row.campaign || "-"}</td>
+              <td className="px-4 py-3 text-graphite/70">{row.adGroup || "-"}</td>
+              <td className="px-4 py-3 text-graphite/70">{row.clicks}</td>
+              <td className="px-4 py-3 text-graphite/70">{row.impressions}</td>
+              <td className="px-4 py-3 text-graphite/70">{formatPercent(row.ctr)}</td>
+              <td className="px-4 py-3 text-graphite/70">${row.avgCpc.toFixed(2)}</td>
+              <td className="px-4 py-3 text-graphite/70">${row.cost.toFixed(2)}</td>
+              <td className="px-4 py-3 text-graphite/70">{row.conversions}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function tableLabel(table: keyof Pick<GoogleAdsDataPayload, "campaigns" | "adGroups" | "keywords" | "searchTerms" | "ads" | "assets" | "conversions">) {
+  return table
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function AiCmoSection({
@@ -4387,6 +4745,10 @@ function buildDecisionRecommendations(
       decision("ai-faq-schema", "SEO", "Publish FAQ content and schema for top homeowner questions", "High", "Improves AI search and answer-engine readiness.", annualMedium, baseConfidence + 2, "Moderate", "90 minutes", ["FAQ answers", "Schema access"], "AI visibility improves when the business gives clear, structured answers with verifiable facts."),
       decision("ai-entity-proof", "Brand", "Add clearer entity proof: service areas, services, reviews, and company details", "Medium", "Makes the company easier for AI tools to understand and cite.", annualMedium, baseConfidence, "Easy", "1 hour", ["Business profile"], "AI systems need explicit business facts, not implied service claims."),
     ],
+    "connected-apps": [
+      decision("connected-google-ads", "Google Ads", "Connect Google Ads in read-only mode", "High", "Lets HVAC Growth OS use real spend, search terms, CPC, CTR, and conversion data.", annualHigh, baseConfidence + 4, "Moderate", "30 minutes", ["Google OAuth access", "Google Ads developer token"], "Connected Apps is the bridge from generated recommendations to performance-aware decisions."),
+      decision("connected-customer-sync", "CRM", "Select the active Google Ads customer account and refresh data", "High", "Prevents recommendations from using stale or wrong-account performance data.", annualHigh, baseConfidence + 3, "Easy", "10 minutes", ["Connected Google Ads account"], "The platform needs one active customer account before it can compare campaigns, search terms, and deployment readiness."),
+    ],
     "ai-cmo": [
       decision("cmo-top-action", "Revenue", `Spend the next hour on ${topCampaign?.campaign || `AC Repair in ${city}`}`, "High", "Focuses the day on the highest-ROI decision.", annualHigh, baseConfidence + 6, "Moderate", "1 hour", ["Decision approval"], "AI CMO should turn daily signals into one concrete operating move."),
       decision("cmo-memory", "CRM", "Save today's decision outcome in Intelligence Memory", "Medium", "Improves future confidence and recommendation quality.", annualMedium, baseConfidence + 1, "Easy", "5 minutes", ["Outcome note"], "Completed and ignored decisions teach the system what works for this client."),
@@ -4483,6 +4845,10 @@ function saveDecisionMemory(key: string, value: ReturnType<typeof loadDecisionMe
 function avg(values: number[]) {
   const cleanValues = values.filter((value) => Number.isFinite(value));
   return cleanValues.length ? cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length : 0;
+}
+
+function formatPercent(value: number) {
+  return `${(value * 100).toFixed(2)}%`;
 }
 
 function clampScore(value: number) {
