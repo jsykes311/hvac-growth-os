@@ -58,6 +58,24 @@ GOOGLE_ADS_TOKEN_STORE_PATH=/tmp/hvac-growth-os-google-ads-store.json
 
 For production, move the encrypted Google token store into a persistent database or secret-backed storage service. The current file store is the first read-only foundation and is safe for local or single-service testing, but Render's filesystem is ephemeral.
 
+HighLevel read-only Connected Apps variables:
+
+```bash
+HIGHLEVEL_CLIENT_ID=...
+HIGHLEVEL_CLIENT_SECRET=...
+HIGHLEVEL_OAUTH_REDIRECT_URI=https://your-render-domain.onrender.com/api/highlevel/callback
+HIGHLEVEL_TOKEN_ENCRYPTION_KEY=use-a-long-random-secret
+HIGHLEVEL_OAUTH_SCOPES="locations.readonly contacts.readonly opportunities.readonly conversations.readonly calendars.readonly forms.readonly tags.readonly workflows.readonly custom-fields.readonly"
+HIGHLEVEL_API_VERSION=2021-07-28
+HIGHLEVEL_TOKEN_STORE_PATH=/tmp/hvac-growth-os-highlevel-store.json
+```
+
+The HighLevel connector is read-only in this phase. It syncs locations, contacts, opportunities, pipelines, conversations, calendars, forms, tags, workflows, and custom fields, then feeds Revenue Engine and AI CMO with funnel metrics: leads, estimates, won opportunities, pipeline value, lead sources, opportunity stages, campaign attribution, revenue, and ROI planning signals.
+
+Future HighLevel write operations, such as creating workflows, pipelines, automations, or forms, should route through Deploy Center approval and create drafts only until a human approves deployment.
+
+For production, move the encrypted HighLevel token store into a persistent database or secret-backed storage service. The current file store is the first read-only foundation and is safe for local or single-service testing, but Render's filesystem is ephemeral.
+
 ## Render deployment
 
 This repo includes `render.yaml` for a Render Blueprint web service.
@@ -70,6 +88,7 @@ Render settings:
 - Required secret env vars: `OPENAI_API_KEY`, `FIRECRAWL_API_KEY`, `HVAC_GROWTH_OS_AUTH_SECRET`, `HVAC_GROWTH_OS_USERS`
 - Optional env vars: `OPENAI_MODEL`, `OPENAI_IMAGE_MODEL`
 - Google Ads read-only connector env vars: `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID`, `GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, optional `GOOGLE_ADS_API_VERSION`
+- HighLevel read-only connector env vars: `HIGHLEVEL_CLIENT_ID`, `HIGHLEVEL_CLIENT_SECRET`, `HIGHLEVEL_OAUTH_REDIRECT_URI`, `HIGHLEVEL_TOKEN_ENCRYPTION_KEY`, optional `HIGHLEVEL_OAUTH_SCOPES`, optional `HIGHLEVEL_API_VERSION`
 
 Deploy flow:
 
