@@ -1,12 +1,12 @@
-import { HvacGrowthApp } from "@/components/hvac-growth-app";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 import { sessionCookieName, verifySessionToken } from "@/lib/auth";
 
-export default async function Home() {
+export const runtime = "nodejs";
+
+export async function GET() {
   const cookieStore = await cookies();
   const session = await verifySessionToken(cookieStore.get(sessionCookieName())?.value);
-  if (!session) redirect("/login");
-
-  return <HvacGrowthApp currentUser={session} />;
+  if (!session) return NextResponse.json({ user: null }, { status: 401 });
+  return NextResponse.json({ user: session });
 }

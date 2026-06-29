@@ -28,6 +28,7 @@ import {
   Users,
 } from "lucide-react";
 import { FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import type { AuthSession } from "@/lib/auth";
 import type {
   AnalyzedPage,
   BusinessProfile,
@@ -201,7 +202,7 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "settings", label: "Settings" },
 ];
 
-export function HvacGrowthApp() {
+export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
   const [contractorUrl, setContractorUrl] = useState("");
   const [view, setView] = useState<View>("home");
   const [activeSection, setActiveSection] = useState<PlatformSection>("dashboard");
@@ -347,7 +348,7 @@ export function HvacGrowthApp() {
       <div className="wave wave-two" aria-hidden="true" />
       <div className="wave wave-three" aria-hidden="true" />
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col">
-        <Header />
+        <Header currentUser={currentUser} />
 
         {view === "home" ? (
           <HomeView
@@ -398,9 +399,14 @@ export function HvacGrowthApp() {
   );
 }
 
-function Header() {
+function Header({ currentUser }: { currentUser: AuthSession }) {
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.assign("/login");
+  }
+
   return (
-    <header className="flex items-center justify-between py-2">
+    <header className="flex flex-col gap-4 py-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
         <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-ink to-flame text-white shadow-[0_18px_42px_rgba(25,184,181,0.22)]">
           <ChartNoAxesCombined className="size-5" aria-hidden="true" />
@@ -410,7 +416,20 @@ function Header() {
           <p className="text-xs font-medium text-graphite/70">Contractor growth intelligence</p>
         </div>
       </div>
-      <p className="hidden text-sm font-bold text-graphite/70 sm:block">TallTwin-powered operating system</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="rounded-full border border-ink/10 bg-white/80 px-4 py-2 text-sm font-bold text-graphite/75 shadow-[0_10px_28px_rgba(6,57,68,0.04)]">
+          <span className="text-ink">{currentUser.name}</span>
+          <span className="mx-2 text-graphite/35">/</span>
+          <span>{currentUser.role}</span>
+        </div>
+        <button
+          className="rounded-full border border-ink/10 bg-white/85 px-4 py-2 text-sm font-black text-ink transition hover:border-flame/40 hover:bg-white"
+          onClick={handleLogout}
+          type="button"
+        >
+          Sign out
+        </button>
+      </div>
     </header>
   );
 }
@@ -2283,6 +2302,18 @@ function SettingsSection({
             "Future-ready: multiple industries, historical reports, versioned audits, recurring scans",
           ]}
         />
+        <div className="mt-6 rounded-2xl border border-ink/10 bg-[#fbfbfa] p-4">
+          <h3 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Private Access</h3>
+          <BulletList
+            emptyText=""
+            values={[
+              "Public signup is closed.",
+              "Approved users are managed by admins through HVAC_GROWTH_OS_USERS.",
+              "Roles supported: Admin, TallTwin Team, Client, Viewer.",
+              "Client users are scoped with clientIds so future multi-client workspaces can filter data by account.",
+            ]}
+          />
+        </div>
       </Panel>
     </div>
   );

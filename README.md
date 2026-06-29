@@ -19,6 +19,30 @@ OPENAI_MODEL=gpt-4.1-mini
 OPENAI_IMAGE_MODEL=gpt-image-1
 ```
 
+Private app access variables:
+
+```bash
+HVAC_GROWTH_OS_AUTH_SECRET=use-a-long-random-secret
+HVAC_GROWTH_OS_USERS='[
+  {
+    "email": "admin@talltwin.com",
+    "name": "TallTwin Admin",
+    "role": "Admin",
+    "passwordHash": "sha256-password-hash",
+    "clientIds": []
+  },
+  {
+    "email": "client@example.com",
+    "name": "Client User",
+    "role": "Client",
+    "passwordHash": "sha256-password-hash",
+    "clientIds": ["comfort-guardians"]
+  }
+]'
+```
+
+Supported roles are `Admin`, `TallTwin Team`, `Client`, and `Viewer`. Public signup is disabled; approved users are added manually through `HVAC_GROWTH_OS_USERS`.
+
 Google Ads read-only Connected Apps variables:
 
 ```bash
@@ -43,7 +67,7 @@ Render settings:
 - Runtime: Node
 - Build command: `npm install && npm run build`
 - Start command: `npm start`
-- Required secret env vars: `OPENAI_API_KEY`, `FIRECRAWL_API_KEY`
+- Required secret env vars: `OPENAI_API_KEY`, `FIRECRAWL_API_KEY`, `HVAC_GROWTH_OS_AUTH_SECRET`, `HVAC_GROWTH_OS_USERS`
 - Optional env vars: `OPENAI_MODEL`, `OPENAI_IMAGE_MODEL`
 - Google Ads read-only connector env vars: `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID`, `GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, optional `GOOGLE_ADS_API_VERSION`
 
