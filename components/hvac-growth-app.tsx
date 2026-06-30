@@ -144,17 +144,23 @@ type ConnectedAppStatus = {
   };
   highLevel: {
     activeLocationId: string;
+    closedWon: number;
     connected: boolean;
     connectedLocation: string;
+    connectionSource: string;
     configured: boolean;
     lastSyncAt: string;
+    leadSources: Array<{ source: string; count: number; value: number }>;
+    openOpportunities: number;
     permissionMode: PermissionMode;
+    pipelineValue: number;
     setup: {
       items: Array<{ configured: boolean; detail: string; envVar: string; label: string }>;
       missingItems: string[];
       ready: boolean;
     };
     tokenStored: boolean;
+    totalContacts: number;
   };
 };
 type GoogleAdsMetricRow = {
@@ -191,16 +197,31 @@ type HighLevelRecord = {
   createdAt?: string;
 };
 type RevenueFunnelPayload = {
+  googleAdsClicks: number;
   googleAdsSpend: number;
+  crmLeads: number;
+  phoneCalls: number;
   leads: number;
   estimates: number;
   wonOpportunities: number;
+  wonJobs: number;
   pipelineValue: number;
   revenue: number;
+  estimatedRevenue: number;
   roi: number;
   leadSources: Array<{ source: string; count: number; value: number }>;
   opportunityStages: Array<{ stage: string; count: number; value: number }>;
   campaignAttribution: Array<{ campaign: string; leads: number; value: number }>;
+};
+type HighLevelSnapshot = {
+  closedWon: number;
+  contacts: number;
+  estimatedRevenue: number;
+  openOpportunities: number;
+  phoneCalls: number;
+  pipelineValue: number;
+  syncedAt: string;
+  wonJobs: number;
 };
 type HighLevelDataPayload = {
   activeLocationId: string;
@@ -209,14 +230,17 @@ type HighLevelDataPayload = {
   locations: HighLevelRecord[];
   contacts: HighLevelRecord[];
   opportunities: HighLevelRecord[];
+  opportunityStages: HighLevelRecord[];
   pipelines: HighLevelRecord[];
   conversations: HighLevelRecord[];
+  calls: HighLevelRecord[];
   calendars: HighLevelRecord[];
   forms: HighLevelRecord[];
   tags: HighLevelRecord[];
   workflows: HighLevelRecord[];
   customFields: HighLevelRecord[];
   revenueFunnel: RevenueFunnelPayload;
+  snapshots: HighLevelSnapshot[];
 };
 type ImplementationChannel = {
   target: DeploymentTarget;
@@ -1324,7 +1348,7 @@ function ConnectedAppsSection() {
   const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
   const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
   const [activeTable, setActiveTable] = useState<keyof Pick<GoogleAdsDataPayload, "campaigns" | "adGroups" | "keywords" | "searchTerms" | "ads" | "assets" | "conversions">>("campaigns");
-  const [activeHighLevelTable, setActiveHighLevelTable] = useState<keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "pipelines" | "conversations" | "calendars" | "forms" | "tags" | "workflows" | "customFields">>("contacts");
+  const [activeHighLevelTable, setActiveHighLevelTable] = useState<keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "tags" | "workflows" | "customFields">>("contacts");
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSyncingHighLevel, setIsSyncingHighLevel] = useState(false);
@@ -1469,7 +1493,9 @@ function ConnectedAppsSection() {
           connected={Boolean(highLevel?.connected)}
           description="Read locations, contacts, opportunities, pipelines, conversations, calendars, forms, tags, workflows, custom fields, and revenue funnel metrics."
           mode={highLevel?.permissionMode ?? "Read Only"}
-          primaryAction={highLevel?.configured ? (
+          primaryAction={highLevel?.connectionSource === "API Key" ? (
+            <Button disabled variant="secondary">API Key Active</Button>
+          ) : highLevel?.configured ? (
             <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-4 text-sm font-black text-white" href="/api/highlevel/connect" rel="noreferrer" target="_blank">Connect HighLevel</a>
           ) : (
             <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink/10 px-4 text-sm font-black text-ink" href="#highlevel-setup">Open Setup</a>
@@ -1583,10 +1609,21 @@ function ConnectedAppsSection() {
           </div>
           <PermissionModePills activeMode={highLevel?.permissionMode ?? "Read Only"} />
         </div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+        <div className="mt-5 grid gap-4 lg:grid-cols-4">
           <InfoTile label="Connection" value={highLevel?.connected ? "Connected" : highLevel?.configured ? "Not connected" : "Needs setup"} />
+          <InfoTile label="Connection type" value={highLevel?.connectionSource || "Not selected"} />
           <InfoTile label="Last sync" value={highLevel?.lastSyncAt ? new Date(highLevel.lastSyncAt).toLocaleString() : "Never synced"} />
           <InfoTile label="Connected location" value={highLevel?.connectedLocation || highLevel?.activeLocationId || "None selected"} />
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-4">
+          <InfoTile label="Total contacts" value={String(highLevel?.totalContacts ?? highLevelData?.contacts.length ?? 0)} />
+          <InfoTile label="Open opportunities" value={String(highLevel?.openOpportunities ?? 0)} />
+          <InfoTile label="Closed won" value={String(highLevel?.closedWon ?? 0)} />
+          <InfoTile label="Pipeline value" value={`$${Math.round(highLevel?.pipelineValue ?? highLevelData?.revenueFunnel.pipelineValue ?? 0).toLocaleString()}`} />
+        </div>
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          <MiniAttributionTable rows={(highLevel?.leadSources ?? highLevelData?.revenueFunnel.leadSources ?? []).map((row) => [row.source, String(row.count), `$${Math.round(row.value).toLocaleString()}`])} title="Lead Sources" />
+          <MiniSnapshotTable snapshots={highLevelData?.snapshots ?? []} />
         </div>
       </Panel>
 
@@ -1601,7 +1638,7 @@ function ConnectedAppsSection() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(["contacts", "opportunities", "pipelines", "conversations", "calendars", "forms", "tags", "workflows", "customFields"] as const).map((table) => (
+            {(["contacts", "opportunities", "opportunityStages", "pipelines", "conversations", "calls", "calendars", "forms", "tags", "workflows", "customFields"] as const).map((table) => (
               <button
                 className={`rounded-full px-3 py-2 text-xs font-black transition ${activeHighLevelTable === table ? "bg-ink text-white" : "border border-ink/10 bg-white text-ink hover:border-flame/40"}`}
                 key={table}
@@ -1782,7 +1819,11 @@ function HighLevelSetupWizard({ highLevel }: { highLevel?: ConnectedAppStatus["h
             <p className="mt-2 text-sm leading-5 text-white/65">No workflows, pipelines, automations, forms, contacts, or opportunities can be modified from this connector.</p>
           </div>
           <div className="mt-5">
-            {ready ? (
+            {highLevel?.connectionSource === "API Key" ? (
+              <button className="inline-flex h-11 cursor-not-allowed items-center justify-center rounded-full bg-white/15 px-4 text-sm font-black text-white/65" disabled type="button">
+                API key fallback active
+              </button>
+            ) : ready ? (
               <a className="inline-flex h-11 items-center justify-center rounded-full bg-white px-4 text-sm font-black text-ink" href="/api/highlevel/connect" rel="noreferrer" target="_blank">Connect HighLevel</a>
             ) : (
               <button className="inline-flex h-11 cursor-not-allowed items-center justify-center rounded-full bg-white/15 px-4 text-sm font-black text-white/65" disabled type="button">
@@ -1815,14 +1856,19 @@ function PermissionModePills({ activeMode }: { activeMode: PermissionMode }) {
 function RevenueFunnelPanel({ funnel, highLevelConnected }: { funnel?: RevenueFunnelPayload; highLevelConnected: boolean }) {
   const fallback: RevenueFunnelPayload = {
     campaignAttribution: [],
+    crmLeads: 0,
     estimates: 0,
+    estimatedRevenue: 0,
+    googleAdsClicks: 0,
     googleAdsSpend: 0,
     leadSources: [],
     leads: 0,
     opportunityStages: [],
+    phoneCalls: 0,
     pipelineValue: 0,
     revenue: 0,
     roi: 0,
+    wonJobs: 0,
     wonOpportunities: 0,
   };
   const data = funnel ?? fallback;
@@ -1832,7 +1878,7 @@ function RevenueFunnelPanel({ funnel, highLevelConnected }: { funnel?: RevenueFu
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <Eyebrow>Revenue Funnel</Eyebrow>
-          <h3 className="text-xl font-black text-ink">Google Ads → Lead → Estimate → Won → Revenue → ROI</h3>
+          <h3 className="text-xl font-black text-ink">Google Ads → Clicks → CRM Leads → Phone Calls → Estimates → Won Jobs → Estimated Revenue</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
             HighLevel data gives Revenue Engine a real CRM funnel. These are planning metrics from synced CRM records, not financial guarantees.
           </p>
@@ -1841,12 +1887,13 @@ function RevenueFunnelPanel({ funnel, highLevelConnected }: { funnel?: RevenueFu
           {highLevelConnected ? "CRM data available" : "Connect HighLevel"}
         </span>
       </div>
-      <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <FunnelMetric label="Google Ads" value={`$${data.googleAdsSpend.toLocaleString()}`} />
-        <FunnelMetric label="Leads" value={String(data.leads)} />
+      <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-7">
+        <FunnelMetric label="Google Ads Clicks" value={data.googleAdsClicks ? String(data.googleAdsClicks) : "Pending"} />
+        <FunnelMetric label="CRM Leads" value={String(data.crmLeads || data.leads)} />
+        <FunnelMetric label="Phone Calls" value={String(data.phoneCalls)} />
         <FunnelMetric label="Estimates" value={String(data.estimates)} />
-        <FunnelMetric label="Won" value={String(data.wonOpportunities)} />
-        <FunnelMetric label="Revenue" value={`$${Math.round(data.revenue).toLocaleString()}`} />
+        <FunnelMetric label="Won Jobs" value={String(data.wonJobs || data.wonOpportunities)} />
+        <FunnelMetric label="Estimated Revenue" value={`$${Math.round(data.estimatedRevenue || data.revenue).toLocaleString()}`} />
         <FunnelMetric label="ROI" value={data.roi ? `${data.roi}x` : "Pending"} />
       </div>
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
@@ -1886,6 +1933,26 @@ function MiniAttributionTable({ rows, title }: { rows: string[][]; title: string
   );
 }
 
+function MiniSnapshotTable({ snapshots }: { snapshots: HighLevelSnapshot[] }) {
+  return (
+    <div>
+      <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Historical Snapshots</h4>
+      <div className="mt-3 grid gap-2">
+        {snapshots.length ? snapshots.slice(0, 5).map((snapshot) => (
+          <div className="grid gap-2 rounded-xl border border-ink/10 bg-white p-3 text-xs sm:grid-cols-[1fr_auto_auto_auto]" key={snapshot.syncedAt}>
+            <strong className="text-ink">{new Date(snapshot.syncedAt).toLocaleString()}</strong>
+            <span className="font-bold text-graphite/70">{snapshot.contacts} contacts</span>
+            <span className="font-bold text-graphite/70">{snapshot.openOpportunities} open</span>
+            <span className="font-bold text-graphite/70">${Math.round(snapshot.pipelineValue).toLocaleString()} pipeline</span>
+          </div>
+        )) : (
+          <p className="rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">No HighLevel snapshots yet. Run the first read-only sync to start tracking history.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
@@ -1908,9 +1975,11 @@ function defaultGoogleAdsSetupItems() {
 
 function defaultHighLevelSetupItems() {
   return [
-    { configured: false, detail: "Required to send users to HighLevel OAuth consent.", envVar: "HIGHLEVEL_CLIENT_ID", label: "HighLevel OAuth client ID" },
-    { configured: false, detail: "Required to exchange the authorization code for HighLevel tokens.", envVar: "HIGHLEVEL_CLIENT_SECRET", label: "HighLevel OAuth client secret" },
-    { configured: false, detail: "Must match the redirect URI in the HighLevel marketplace app.", envVar: "HIGHLEVEL_OAUTH_REDIRECT_URI", label: "HighLevel OAuth redirect URI" },
+    { configured: false, detail: "Preferred path for sending users to HighLevel OAuth consent. Optional when API key fallback is configured.", envVar: "HIGHLEVEL_CLIENT_ID", label: "HighLevel OAuth client ID" },
+    { configured: false, detail: "Preferred path for exchanging OAuth authorization codes. Optional when API key fallback is configured.", envVar: "HIGHLEVEL_CLIENT_SECRET", label: "HighLevel OAuth client secret" },
+    { configured: false, detail: "Must match the redirect URI in the HighLevel marketplace app. Optional when API key fallback is configured.", envVar: "HIGHLEVEL_OAUTH_REDIRECT_URI", label: "HighLevel OAuth redirect URI" },
+    { configured: false, detail: "Fallback read-only connection when OAuth is not available for the account.", envVar: "HIGHLEVEL_API_KEY", label: "HighLevel API key fallback" },
+    { configured: false, detail: "Required with API key fallback so HVAC Growth OS knows which HighLevel location to sync.", envVar: "HIGHLEVEL_LOCATION_ID", label: "HighLevel location ID" },
     { configured: false, detail: "Required to encrypt the stored HighLevel refresh token. Use a dedicated HighLevel key or the shared Google token key.", envVar: "HIGHLEVEL_TOKEN_ENCRYPTION_KEY", label: "HighLevel token encryption key" },
   ];
 }
@@ -2005,7 +2074,7 @@ function tableLabel(table: keyof Pick<GoogleAdsDataPayload, "campaigns" | "adGro
     .replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function highLevelTableLabel(table: keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "pipelines" | "conversations" | "calendars" | "forms" | "tags" | "workflows" | "customFields">) {
+function highLevelTableLabel(table: keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "tags" | "workflows" | "customFields">) {
   return table
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (letter) => letter.toUpperCase());
@@ -4572,7 +4641,7 @@ function buildAiCmoBrief(
   const historicalConfidence = memory.length >= 3 ? 16 : memory.length >= 2 ? 10 : 4;
   const baseConfidence = clampScore(62 + historicalConfidence + (ppcPlan ? 8 : 0) + (analysis.serviceAreas.length ? 5 : 0) + (hasCrmData ? 8 : 0));
   const headline = hasCrmData
-    ? `Today's best opportunity is ${topService} in ${topCity} with CRM evidence from ${crmFunnel?.leads ?? 0} leads, ${crmFunnel?.estimates ?? 0} estimates, and $${Math.round(crmFunnel?.pipelineValue ?? 0).toLocaleString()} in pipeline value.`
+    ? `Today's best opportunity is ${topService} in ${topCity} with CRM evidence from ${crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0} leads, ${crmFunnel?.phoneCalls ?? 0} phone calls, ${crmFunnel?.wonJobs ?? crmFunnel?.wonOpportunities ?? 0} won jobs, and $${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()} in estimated revenue.`
     : `Today's best opportunity is ${topService} in ${topCity} due to ${marketing.hvacDemandIndex >= 78 ? "high" : "moderate"} HVAC demand, seasonal urgency, and ${ppcPlan ? "active campaign readiness" : "a clear need to finish campaign setup"}.`;
 
   const missingPage = ppcPlan?.report.missingLandingPages.find((item) => !item.startsWith("No major"));
@@ -4633,13 +4702,14 @@ function buildAiCmoBrief(
       { label: "Seasonality", value: currentHvacSeason() },
       { label: "HVAC Demand Level", value: `${marketing.hvacDemandIndex}/100` },
       { label: "Most Likely To Convert", value: `${topService} in ${topCity}` },
-      { label: "CRM Leads", value: hasCrmData ? `${crmFunnel?.leads ?? 0} synced leads` : "HighLevel not connected" },
+      { label: "CRM Leads", value: hasCrmData ? `${crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0} synced leads` : "HighLevel not connected" },
+      { label: "Phone Calls", value: hasCrmData ? `${crmFunnel?.phoneCalls ?? 0} synced calls` : "Waiting on CRM sync" },
       { label: "Pipeline Value", value: hasCrmData ? `$${Math.round(crmFunnel?.pipelineValue ?? 0).toLocaleString()}` : "Waiting on CRM sync" },
     ],
     campaignRecommendations: [
       { label: "Promote", detail: `${campaignToPromote}. Use exact and phrase match terms tied to ${topCity}.`, confidence: actionConfidence(7) },
       { label: "Pause", detail: "Pause low-intent or unsupported campaigns until tracking and landing pages are ready.", confidence: actionConfidence(-2) },
-      { label: "Budget", detail: hasCrmData ? `Review budget toward the best CRM source. Current synced revenue: $${Math.round(crmFunnel?.revenue ?? 0).toLocaleString()}; pipeline: $${Math.round(crmFunnel?.pipelineValue ?? 0).toLocaleString()}. Do not apply automatically.` : "Review a 15% shift toward the highest-readiness repair campaign. Do not apply automatically.", confidence: actionConfidence(hasCrmData ? 8 : 3) },
+      { label: "Budget", detail: hasCrmData ? `Review budget toward the best CRM source. Current estimated revenue: $${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()}; pipeline: $${Math.round(crmFunnel?.pipelineValue ?? 0).toLocaleString()}. Do not apply automatically.` : "Review a 15% shift toward the highest-readiness repair campaign. Do not apply automatically.", confidence: actionConfidence(hasCrmData ? 8 : 3) },
       { label: "Cities", detail: marketing.citiesToPrioritize.slice(0, 3).map((city) => city.label).join(", "), confidence: actionConfidence(1) },
       { label: "CRM Stage", detail: hasCrmData && crmFunnel?.opportunityStages[0] ? `Watch ${crmFunnel.opportunityStages[0].stage}: ${crmFunnel.opportunityStages[0].count} opportunities, $${Math.round(crmFunnel.opportunityStages[0].value).toLocaleString()} value.` : "Connect HighLevel to see stage-level bottlenecks.", confidence: actionConfidence(hasCrmData ? 6 : -8) },
     ],
@@ -4656,7 +4726,7 @@ function buildAiCmoBrief(
     ],
     operationsAlerts: [
       { label: "Google Ads Tag", status: ppcPlan ? "Needs Work" as const : "Not Recommended" as const, detail: ppcPlan ? "Verify conversion tag before approving budget increases." : "Generate campaigns first, then verify tags." },
-      { label: "HighLevel Connected", status: hasCrmData ? "Ready" as const : "Needs Work" as const, detail: hasCrmData ? `CRM funnel synced: ${crmFunnel?.leads ?? 0} leads, ${crmFunnel?.wonOpportunities ?? 0} won opportunities, $${Math.round(crmFunnel?.revenue ?? 0).toLocaleString()} revenue.` : "CRM and pipeline metrics are not connected in this workspace yet." },
+      { label: "HighLevel Connected", status: hasCrmData ? "Ready" as const : "Needs Work" as const, detail: hasCrmData ? `CRM funnel synced: ${crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0} leads, ${crmFunnel?.phoneCalls ?? 0} calls, ${crmFunnel?.wonJobs ?? crmFunnel?.wonOpportunities ?? 0} won jobs, $${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()} estimated revenue.` : "CRM and pipeline metrics are not connected in this workspace yet." },
       { label: "Call Tracking", status: analysis.phone ? "Needs Work" as const : "Not Recommended" as const, detail: analysis.phone ? "Phone is detected; confirm tracked numbers and source attribution." : "Add a phone number before campaign launch." },
       { label: "Form Tracking", status: "Needs Work" as const, detail: "Confirm form submissions pass source, campaign, and service intent into CRM." },
       { label: "GBP Linked", status: analysis.aiSeoAnalysis.citationOpportunities.length ? "Needs Work" as const : "Not Recommended" as const, detail: "Link GBP data to validate post, call, direction, and review trends." },
