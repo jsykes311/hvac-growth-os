@@ -46,6 +46,7 @@ type PlatformSection =
   | "seo"
   | "ai-visibility"
   | "connected-apps"
+  | "conversion-tracking"
   | "ai-cmo"
   | "revenue-engine"
   | "marketing-intelligence"
@@ -264,6 +265,15 @@ type HighLevelDataPayload = {
   snapshots: HighLevelSnapshot[];
   syncAlerts: string[];
 };
+type TrackingIssueStatus = "Ready" | "Needs Work" | "Missing";
+type TrackingRecommendation = {
+  title: string;
+  category: "Primary" | "Secondary" | "Diagnostic";
+  status: TrackingIssueStatus;
+  reason: string;
+  importGuidance: string;
+  confidence: number;
+};
 type ImplementationChannel = {
   target: DeploymentTarget;
   status: ChannelStatus;
@@ -289,6 +299,7 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "seo", label: "SEO" },
   { id: "ai-visibility", label: "AI Visibility" },
   { id: "connected-apps", label: "Connected Apps" },
+  { id: "conversion-tracking", label: "Conversion Tracking" },
   { id: "ai-cmo", label: "AI CMO" },
   { id: "revenue-engine", label: "Revenue Engine" },
   { id: "marketing-intelligence", label: "Marketing Intelligence" },
@@ -687,6 +698,7 @@ function ResultsView({
       {activeSection === "seo" && <SeoAnalysisPanel analysis={analysis} />}
       {activeSection === "ai-visibility" && <AiSeoAnalysisPanel analysis={analysis} />}
       {activeSection === "connected-apps" && <ConnectedAppsSection />}
+      {activeSection === "conversion-tracking" && <ConversionTrackingCenter analysis={analysis} />}
 
       {activeSection === "ai-cmo" && (
         <AiCmoSection analysis={analysis} contractorUrl={contractorUrl} ppcPlan={ppcPlan} />
@@ -2155,6 +2167,225 @@ function InfoTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
+  const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
+  const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
+  const [status, setStatus] = useState<ConnectedAppStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  const refreshTrackingData = useCallback(async () => {
+    setIsLoading(true);
+    setMessage("");
+    try {
+      const [googleStatusResponse, highLevelStatusResponse, googleDataResponse, highLevelDataResponse] = await Promise.all([
+        fetch("/api/google-ads/status", { cache: "no-store" }),
+        fetch("/api/highlevel/status", { cache: "no-store" }),
+        fetch("/api/google-ads/data", { cache: "no-store" }),
+        fetch("/api/highlevel/data", { cache: "no-store" }),
+      ]);
+      const googleStatus = googleStatusResponse.ok ? await googleStatusResponse.json() as Pick<ConnectedAppStatus, "googleAds"> : null;
+      const highLevelStatus = highLevelStatusResponse.ok ? await highLevelStatusResponse.json() as Pick<ConnectedAppStatus, "highLevel"> : null;
+      const googlePayload = googleDataResponse.ok ? await googleDataResponse.json() as { data?: GoogleAdsDataPayload } : null;
+      const highLevelPayload = highLevelDataResponse.ok ? await highLevelDataResponse.json() as { data?: HighLevelDataPayload } : null;
+
+      setStatus({
+        googleAds: googleStatus?.googleAds ?? emptyGoogleAdsStatus(),
+        highLevel: highLevelStatus?.highLevel ?? emptyHighLevelStatus(),
+      });
+      setGoogleAdsData(googlePayload?.data ?? null);
+      setHighLevelData(highLevelPayload?.data ?? null);
+    } catch {
+      setMessage("Conversion tracking data could not be loaded. Check Connected Apps, then refresh this screen.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshTrackingData();
+  }, [refreshTrackingData]);
+
+  const funnel = highLevelData?.revenueFunnel;
+  const adsClicks = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "clicks") : 0;
+  const adsCost = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "cost") : 0;
+  const adsConversions = googleAdsData ? sumMetricRows(googleAdsData.conversions, "conversions") : 0;
+  const hasGoogleAds = Boolean(status?.googleAds.connected || googleAdsData);
+  const hasHighLevel = Boolean(status?.highLevel.connected || highLevelData);
+  const hasCalls = Boolean((funnel?.phoneCalls ?? 0) || highLevelData?.calls.length);
+  const hasForms = Boolean((funnel?.formsSubmitted ?? 0) || highLevelData?.formSubmissions.length);
+  const hasOpportunities = Boolean(funnel?.totalOpportunities || highLevelData?.opportunities.length);
+  const hasWonJobs = Boolean(funnel?.wonJobs || funnel?.wonOpportunities || (funnel?.closedWonValue ?? 0) > 0);
+  const hasGclidField = hasTrackingField(highLevelData, ["gclid", "gbraid", "wbraid"]);
+  const hasUtmFields = hasTrackingField(highLevelData, ["utm", "source", "campaign", "medium"]);
+  const trackingScore = clampScore(avg([
+    hasGoogleAds ? 82 : 35,
+    hasHighLevel ? 86 : 40,
+    hasCalls ? 78 : 42,
+    hasForms ? 72 : 44,
+    hasOpportunities ? 82 : 48,
+    hasGclidField ? 86 : 45,
+    googleAdsData?.conversions.length ? 78 : 45,
+    hasWonJobs ? 90 : 56,
+  ]));
+  const recommendations = buildTrackingRecommendations({
+    adsConversions,
+    hasCalls,
+    hasForms,
+    hasGclidField,
+    hasGoogleAds,
+    hasHighLevel,
+    hasOpportunities,
+    hasUtmFields,
+    hasWonJobs,
+  });
+  const blockers = buildTrackingBlockers({
+    hasCalls,
+    hasForms,
+    hasGclidField,
+    hasGoogleAds,
+    hasHighLevel,
+    hasOpportunities,
+    hasUtmFields,
+  });
+  const hasContactPath = Boolean(analysis.phone || hasCalls || hasForms);
+  const gtmStatus: TrackingIssueStatus = hasContactPath && (hasCalls || hasForms) ? "Ready" : hasHighLevel ? "Needs Work" : "Missing";
+
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+          <div>
+            <Eyebrow>Conversion Tracking Center</Eyebrow>
+            <h2 className="mt-2 flex items-center gap-2 text-3xl font-black text-ink">
+              <ChartNoAxesCombined className="size-7" aria-hidden="true" />
+              Prove which marketing creates revenue
+            </h2>
+            <p className="mt-3 max-w-4xl text-base leading-7 text-graphite">
+              This center checks whether Google Ads, HighLevel calls, forms, opportunities, and won jobs can be tied together before budget is scaled. It is read-only and does not change campaigns.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-start gap-3">
+            <ScoreBadge label="Tracking" score={trackingScore} />
+            <Button disabled={isLoading} onClick={refreshTrackingData} variant="secondary">{isLoading ? "Refreshing..." : "Refresh Tracking"}</Button>
+          </div>
+        </div>
+        {message && <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">{message}</p>}
+      </Panel>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <InfoTile label="Google Ads Clicks" value={adsClicks ? adsClicks.toLocaleString() : hasGoogleAds ? "No clicks synced" : "Not connected"} />
+        <InfoTile label="Google Ads Cost" value={adsCost ? `$${Math.round(adsCost).toLocaleString()}` : hasGoogleAds ? "$0 synced" : "Not connected"} />
+        <InfoTile label="HighLevel Calls" value={String(funnel?.phoneCalls ?? highLevelData?.calls.length ?? 0)} />
+        <InfoTile label="Forms Submitted" value={String(funnel?.formsSubmitted ?? highLevelData?.formSubmissions.length ?? 0)} />
+        <InfoTile label="CRM Leads" value={String(funnel?.crmLeads ?? funnel?.leads ?? 0)} />
+        <InfoTile label="Open Opportunities" value={String(funnel?.totalOpportunities ?? highLevelData?.opportunities.length ?? 0)} />
+        <InfoTile label="Closed Won Value" value={`$${Math.round(funnel?.closedWonValue ?? 0).toLocaleString()}`} />
+        <InfoTile label="Google Conversions" value={googleAdsData?.conversions.length ? `${adsConversions.toFixed(1)} synced` : "None synced"} />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <Panel>
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+            <div>
+              <h3 className="text-lg font-black text-ink">Tracking Readiness</h3>
+              <p className="mt-2 text-sm leading-6 text-graphite/70">
+                Use this as the launch checklist before increasing spend or importing CRM conversions back into Google Ads.
+              </p>
+            </div>
+            <TrackingStatusBadge status={blockers.length ? "Needs Work" : "Ready"} />
+          </div>
+          <div className="mt-4 grid gap-3">
+            <TrackingCheck label="Google Ads connected" detail="Campaign performance and conversion actions are available." status={hasGoogleAds ? "Ready" : "Missing"} />
+            <TrackingCheck label="HighLevel connected" detail="Calls, forms, contacts, opportunities, and won jobs can be synced." status={hasHighLevel ? "Ready" : "Missing"} />
+            <TrackingCheck label="GTM / website tracking" detail="Confirm Google Tag Manager, click-to-call, form submits, and thank-you events are installed." status={gtmStatus} />
+            <TrackingCheck label="GCLID / GBRAID capture" detail="Required for offline conversion imports and source-level CRM attribution." status={hasGclidField ? "Ready" : "Needs Work"} />
+            <TrackingCheck label="UTM/source fields" detail="Needed to compare Google Ads, GBP, social, SEO, and direct leads inside HighLevel." status={hasUtmFields ? "Ready" : "Needs Work"} />
+            <TrackingCheck label="CRM opportunity stages" detail="Needed to separate raw leads from estimates, won jobs, and revenue." status={hasOpportunities ? "Ready" : "Needs Work"} />
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Conversion Import Plan</h3>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            These are the conversion actions HVAC Growth OS should treat as primary or secondary once Google Ads write/import workflows are approved.
+          </p>
+          <div className="mt-4 grid gap-3">
+            {recommendations.map((recommendation) => (
+              <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={recommendation.title}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap gap-2">
+                      <TrackingStatusBadge status={recommendation.status} />
+                      <span className="rounded-lg border border-ink/10 bg-white px-2 py-1 text-xs font-black text-copper">{recommendation.category}</span>
+                    </div>
+                    <h4 className="mt-3 text-sm font-black text-ink">{recommendation.title}</h4>
+                  </div>
+                  <ConfidenceBadge score={recommendation.confidence} />
+                </div>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{recommendation.reason}</p>
+                <p className="mt-3 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-bold leading-5 text-graphite/70">{recommendation.importGuidance}</p>
+              </article>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Panel>
+          <h3 className="text-lg font-black text-ink">HighLevel Attribution</h3>
+          <div className="mt-4">
+            <MiniAttributionTable rows={(funnel?.leadSources ?? []).map((row) => [row.source, String(row.count), `$${Math.round(row.value).toLocaleString()}`])} title="Lead Sources" />
+          </div>
+        </Panel>
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Campaign Attribution</h3>
+          <div className="mt-4">
+            <MiniAttributionTable rows={(funnel?.campaignAttribution ?? []).map((row) => [row.campaign, String(row.leads), `$${Math.round(row.value).toLocaleString()}`])} title="Campaigns" />
+          </div>
+        </Panel>
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Fix Before Scaling</h3>
+          <div className="mt-4 grid gap-3">
+            {blockers.length ? blockers.map((blocker) => (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold leading-5 text-amber-900" key={blocker}>
+                {blocker}
+              </div>
+            )) : (
+              <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-bold leading-5 text-teal-800">
+                Core tracking signals are ready for launch review. Keep campaigns paused until the import settings are approved.
+              </div>
+            )}
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function TrackingCheck({ detail, label, status }: { detail: string; label: string; status: TrackingIssueStatus }) {
+  return (
+    <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-black text-ink">{label}</p>
+        <TrackingStatusBadge status={status} />
+      </div>
+      <p className="mt-2 text-sm leading-5 text-graphite/70">{detail}</p>
+    </article>
+  );
+}
+
+function TrackingStatusBadge({ status }: { status: TrackingIssueStatus }) {
+  const className =
+    status === "Ready"
+      ? "border-teal-200 bg-teal-50 text-teal-700"
+      : status === "Needs Work"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-red-200 bg-red-50 text-red-700";
+
+  return <span className={`rounded-lg border px-2 py-1 text-xs font-black ${className}`}>{status}</span>;
+}
+
 function defaultGoogleAdsSetupItems() {
   return [
     { configured: false, detail: "Required to call the Google Ads API.", envVar: "GOOGLE_ADS_DEVELOPER_TOKEN", label: "Google Ads developer token" },
@@ -2175,6 +2406,134 @@ function defaultHighLevelSetupItems() {
     { configured: false, detail: "Required with API key fallback so HVAC Growth OS knows which HighLevel location to sync.", envVar: "HIGHLEVEL_LOCATION_ID", label: "HighLevel location ID" },
     { configured: false, detail: "Required to encrypt the stored HighLevel refresh token. Use a dedicated HighLevel key or the shared Google token key.", envVar: "HIGHLEVEL_TOKEN_ENCRYPTION_KEY", label: "HighLevel token encryption key" },
   ];
+}
+
+function emptyGoogleAdsStatus(): ConnectedAppStatus["googleAds"] {
+  return {
+    activeCustomerId: "",
+    connected: false,
+    configured: false,
+    customerIds: [],
+    lastSyncAt: "",
+    permissionMode: "Read Only",
+    setup: { items: defaultGoogleAdsSetupItems(), missingItems: [], ready: false },
+    tokenStored: false,
+  };
+}
+
+function emptyHighLevelStatus(): ConnectedAppStatus["highLevel"] {
+  return {
+    activeLocationId: "",
+    callsTracked: 0,
+    closedWon: 0,
+    closedWonValue: 0,
+    connected: false,
+    connectedLocation: "",
+    connectionSource: "",
+    configured: false,
+    formsSubmitted: 0,
+    lastSyncAt: "",
+    leadSources: [],
+    missedCalls: 0,
+    openOpportunities: 0,
+    openPipelineValue: 0,
+    permissionMode: "Read Only",
+    pipelineValue: 0,
+    setup: { items: defaultHighLevelSetupItems(), missingItems: [], ready: false },
+    tokenStored: false,
+    totalContacts: 0,
+    totalConversations: 0,
+    totalOpportunities: 0,
+  };
+}
+
+function hasTrackingField(highLevelData: HighLevelDataPayload | null, terms: string[]) {
+  return Boolean(highLevelData?.customFields.some((field) => {
+    const haystack = `${field.name} ${field.status ?? ""} ${field.source ?? ""} ${field.type ?? ""}`.toLowerCase();
+    return terms.some((term) => haystack.includes(term));
+  }));
+}
+
+function buildTrackingRecommendations(signals: {
+  adsConversions: number;
+  hasCalls: boolean;
+  hasForms: boolean;
+  hasGclidField: boolean;
+  hasGoogleAds: boolean;
+  hasHighLevel: boolean;
+  hasOpportunities: boolean;
+  hasUtmFields: boolean;
+  hasWonJobs: boolean;
+}): TrackingRecommendation[] {
+  return [
+    {
+      title: "Qualified HVAC Opportunity",
+      category: "Primary",
+      status: signals.hasOpportunities && signals.hasGclidField ? "Ready" : "Needs Work",
+      reason: "Use the CRM opportunity as the main optimization signal once it can be tied back to the original Google Ads click.",
+      importGuidance: "Import as a primary offline conversion after GCLID/GBRAID/WBRAID capture is confirmed.",
+      confidence: signals.hasOpportunities && signals.hasGclidField ? 88 : 64,
+    },
+    {
+      title: "Estimate Scheduled",
+      category: "Primary",
+      status: signals.hasOpportunities ? "Ready" : "Needs Work",
+      reason: "Estimate intent is stronger than a raw call or form and better reflects revenue potential.",
+      importGuidance: "Map the HighLevel estimate stage to a Google Ads conversion once stages are clean.",
+      confidence: signals.hasOpportunities ? 82 : 58,
+    },
+    {
+      title: "Closed Won HVAC Job",
+      category: "Primary",
+      status: signals.hasWonJobs && signals.hasGclidField ? "Ready" : "Needs Work",
+      reason: "Closed won jobs are the best revenue signal, but volume may be lower and delayed.",
+      importGuidance: "Import as a value-based conversion when won-job value and click IDs are present.",
+      confidence: signals.hasWonJobs && signals.hasGclidField ? 86 : 60,
+    },
+    {
+      title: "Phone Call Lead",
+      category: "Secondary",
+      status: signals.hasCalls ? "Ready" : "Missing",
+      reason: "HVAC customers often call first. Calls should be measured but should not be the only bidding signal.",
+      importGuidance: "Keep as secondary or diagnostic unless calls are consistently qualified inside HighLevel.",
+      confidence: signals.hasCalls ? 80 : 48,
+    },
+    {
+      title: "Form Lead",
+      category: "Secondary",
+      status: signals.hasForms ? "Ready" : "Needs Work",
+      reason: "Forms help catch after-hours and research-stage leads, but need source and quality checks.",
+      importGuidance: "Track form submissions and import only qualified forms as primary later.",
+      confidence: signals.hasForms ? 76 : 52,
+    },
+    {
+      title: "Google Ads Conversion Actions",
+      category: "Diagnostic",
+      status: signals.adsConversions > 0 ? "Ready" : signals.hasGoogleAds ? "Needs Work" : "Missing",
+      reason: "Existing Google conversion actions help compare platform-reported conversions with CRM outcomes.",
+      importGuidance: "Audit existing conversion actions before adding offline imports to avoid double counting.",
+      confidence: signals.adsConversions > 0 ? 78 : 55,
+    },
+  ];
+}
+
+function buildTrackingBlockers(signals: {
+  hasCalls: boolean;
+  hasForms: boolean;
+  hasGclidField: boolean;
+  hasGoogleAds: boolean;
+  hasHighLevel: boolean;
+  hasOpportunities: boolean;
+  hasUtmFields: boolean;
+}) {
+  return [
+    !signals.hasGoogleAds ? "Connect Google Ads in read-only mode so spend, clicks, campaigns, and conversion actions can be compared." : "",
+    !signals.hasHighLevel ? "Connect HighLevel so calls, forms, opportunities, and won jobs can become revenue signals." : "",
+    !signals.hasGclidField ? "Add HighLevel custom fields for GCLID, GBRAID, and WBRAID before importing offline conversions." : "",
+    !signals.hasUtmFields ? "Add or confirm UTM/source fields so leads can be grouped by Google Ads, GBP, social, SEO, and direct." : "",
+    !signals.hasCalls && !signals.hasForms ? "Confirm call tracking and form tracking before scaling paid traffic." : "",
+    !signals.hasOpportunities ? "Clean up opportunity stages so raw leads can be separated from estimates and won jobs." : "",
+  ].filter(Boolean);
 }
 
 function GoogleAdsDataTable({ rows }: { rows: GoogleAdsMetricRow[] }) {
@@ -5618,6 +5977,10 @@ function buildDecisionRecommendations(
     "connected-apps": [
       decision("connected-google-ads", "Google Ads", "Connect Google Ads in read-only mode", "High", "Lets HVAC Growth OS use real spend, search terms, CPC, CTR, and conversion data.", annualHigh, baseConfidence + 4, "Moderate", "30 minutes", ["Google OAuth access", "Google Ads developer token"], "Connected Apps is the bridge from generated recommendations to performance-aware decisions."),
       decision("connected-customer-sync", "CRM", "Select the active Google Ads customer account and refresh data", "High", "Prevents recommendations from using stale or wrong-account performance data.", annualHigh, baseConfidence + 3, "Easy", "10 minutes", ["Connected Google Ads account"], "The platform needs one active customer account before it can compare campaigns, search terms, and deployment readiness."),
+    ],
+    "conversion-tracking": [
+      decision("tracking-click-id", "CRM", "Confirm GCLID, GBRAID, and WBRAID capture in HighLevel", "High", "Enables offline conversion imports and source-level revenue attribution.", annualHigh, baseConfidence + 5, "Moderate", "45 minutes", ["HighLevel custom fields", "Website form tracking"], "Conversion Tracking should prove which clicks turn into qualified opportunities and revenue before spend is increased."),
+      decision("tracking-primary-conversions", "Google Ads", "Define primary conversions as qualified opportunities, estimates, and closed won jobs", "High", "Improves bidding signals by optimizing toward revenue stages instead of raw leads only.", annualHigh, baseConfidence + 4, "Moderate", "1 hour", ["Google Ads access", "HighLevel stages"], "Raw calls and forms matter, but the operating system needs deeper CRM milestones to make better budget decisions."),
     ],
     "ai-cmo": [
       decision("cmo-top-action", "Revenue", `Spend the next hour on ${topCampaign?.campaign || `AC Repair in ${city}`}`, "High", "Focuses the day on the highest-ROI decision.", annualHigh, baseConfidence + 6, "Moderate", "1 hour", ["Decision approval"], "AI CMO should turn daily signals into one concrete operating move."),
