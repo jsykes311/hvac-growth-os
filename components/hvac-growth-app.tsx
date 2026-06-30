@@ -56,6 +56,13 @@ type PlatformSection =
   | "reports"
   | "settings";
 type ApiError = { error?: string };
+type SavedClientWorkspace = {
+  clientId: string;
+  profile: BusinessProfile;
+  scrapedPages: AnalyzedPage[];
+  updatedAt: string;
+  websiteUrl: string;
+};
 type ReadinessItem = {
   complete: boolean;
   detail: string;
@@ -313,11 +320,13 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
 ];
 
 export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
-  const [contractorUrl, setContractorUrl] = useState("");
+  const [contractorUrl, setContractorUrl] = useState("https://comfortguardianshvac.com");
   const [view, setView] = useState<View>("home");
   const [activeSection, setActiveSection] = useState<PlatformSection>("dashboard");
   const [analysis, setAnalysis] = useState<BusinessProfile | null>(null);
   const [scrapedPages, setScrapedPages] = useState<AnalyzedPage[]>([]);
+  const [savedWorkspace, setSavedWorkspace] = useState<SavedClientWorkspace | null>(null);
+  const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true);
   const [campaign, setCampaign] = useState<CampaignOutput | null>(null);
   const [campaignImage, setCampaignImage] = useState<CampaignImage | null>(null);
   const [ppcPlan, setPpcPlan] = useState<PpcPlan | null>(null);
@@ -339,10 +348,69 @@ export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
 
   const isReady = contractorUrl.trim().length > 3;
 
-  async function handleAnalyze(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!isReady || isAnalyzing) return;
+  useEffect(() => {
+    void loadSavedWorkspace();
+  }, []);
 
+  async function loadSavedWorkspace() {
+    setIsLoadingWorkspace(true);
+    try {
+      const response = await fetch("/api/client-workspace", { cache: "no-store" });
+      const payload = (await response.json()) as { defaultUrl?: string; workspace?: SavedClientWorkspace | null } & ApiError;
+      if (payload.defaultUrl) setContractorUrl(payload.defaultUrl);
+      setSavedWorkspace(payload.workspace ?? null);
+    } catch {
+      setSavedWorkspace(null);
+    } finally {
+      setIsLoadingWorkspace(false);
+    }
+  }
+
+  function applyWorkspace(workspace: SavedClientWorkspace) {
+    setContractorUrl(workspace.websiteUrl);
+    setAnalysis(workspace.profile);
+    setScrapedPages(workspace.scrapedPages);
+    setCampaign(null);
+    setCampaignImage(null);
+    setPpcPlan(null);
+    hydratePpcOverrides(workspace.profile);
+    setActiveSection("dashboard");
+    setView("results");
+  }
+
+  function hydratePpcOverrides(profile: BusinessProfile) {
+    setPpcOverrides({
+      businessName: profile.companyName,
+      phoneNumber: profile.phone,
+      serviceCities: profile.serviceAreas,
+      monthlyBudget: 3000,
+      averageRepairTicket: 750,
+      averageReplacementTicket: 9500,
+      estimatedCloseRate: 35,
+      estimatedLeadToEstimateRate: 65,
+      servicesToPrioritize: [],
+      emergencyService: profile.emergencyServiceMentioned,
+      financing: profile.financingMentioned,
+    });
+  }
+
+  async function saveWorkspace(profile: BusinessProfile, pages: AnalyzedPage[], websiteUrl: string) {
+    if (!/comfortguardianshvac\.com/i.test(websiteUrl)) return;
+    try {
+      const response = await fetch("/api/client-workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile, scrapedPages: pages, websiteUrl }),
+      });
+      const payload = (await response.json().catch(() => null)) as { workspace?: SavedClientWorkspace } | null;
+      if (payload?.workspace) setSavedWorkspace(payload.workspace);
+    } catch {
+      // The workspace cache is a convenience; analysis should still open if caching fails.
+    }
+  }
+
+  async function analyzeUrl(url: string) {
+    if (!url.trim() || isAnalyzing) return;
     setIsAnalyzing(true);
     setError("");
     setScrapedPages([]);
@@ -354,7 +422,7 @@ export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: contractorUrl }),
+        body: JSON.stringify({ url }),
       });
       const payload = (await response.json()) as { profile?: BusinessProfile; scrapedPages?: AnalyzedPage[] } & ApiError;
 
@@ -363,20 +431,10 @@ export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
       }
 
       setAnalysis(payload.profile);
-      setScrapedPages(payload.scrapedPages ?? []);
-      setPpcOverrides({
-        businessName: payload.profile.companyName,
-        phoneNumber: payload.profile.phone,
-        serviceCities: payload.profile.serviceAreas,
-        monthlyBudget: 3000,
-        averageRepairTicket: 750,
-        averageReplacementTicket: 9500,
-        estimatedCloseRate: 35,
-        estimatedLeadToEstimateRate: 65,
-        servicesToPrioritize: [],
-        emergencyService: payload.profile.emergencyServiceMentioned,
-        financing: payload.profile.financingMentioned,
-      });
+      const pages = payload.scrapedPages ?? [];
+      setScrapedPages(pages);
+      hydratePpcOverrides(payload.profile);
+      await saveWorkspace(payload.profile, pages, url);
       setActiveSection("dashboard");
       setView("results");
     } catch (caughtError) {
@@ -384,6 +442,24 @@ export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
     } finally {
       setIsAnalyzing(false);
     }
+  }
+
+  async function handleAnalyze(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isReady || isAnalyzing) return;
+    await analyzeUrl(contractorUrl);
+  }
+
+  async function openComfortGuardiansWorkspace() {
+    if (savedWorkspace) {
+      applyWorkspace(savedWorkspace);
+      return;
+    }
+    await analyzeUrl("https://comfortguardianshvac.com");
+  }
+
+  async function refreshComfortGuardiansWorkspace() {
+    await analyzeUrl("https://comfortguardianshvac.com");
   }
 
   async function handleCreateCampaign(event: FormEvent<HTMLFormElement>) {
@@ -465,8 +541,12 @@ export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
             contractorUrl={contractorUrl}
             error={error}
             isAnalyzing={isAnalyzing}
+            isLoadingWorkspace={isLoadingWorkspace}
             isReady={isReady}
+            onOpenComfortGuardians={openComfortGuardiansWorkspace}
+            onRefreshComfortGuardians={refreshComfortGuardiansWorkspace}
             onSubmit={handleAnalyze}
+            savedWorkspace={savedWorkspace}
             setContractorUrl={setContractorUrl}
           />
         ) : (
@@ -498,6 +578,7 @@ export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
                 setCampaign(null);
                 setCampaignImage(null);
                 setPpcPlan(null);
+                void saveWorkspace(nextAnalysis, scrapedPages, contractorUrl);
               }}
               setGoal={setGoal}
               setOffer={setOffer}
@@ -549,15 +630,23 @@ function HomeView({
   contractorUrl,
   error,
   isAnalyzing,
+  isLoadingWorkspace,
   isReady,
+  onOpenComfortGuardians,
+  onRefreshComfortGuardians,
   onSubmit,
+  savedWorkspace,
   setContractorUrl,
 }: {
   contractorUrl: string;
   error: string;
   isAnalyzing: boolean;
+  isLoadingWorkspace: boolean;
   isReady: boolean;
+  onOpenComfortGuardians: () => void;
+  onRefreshComfortGuardians: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  savedWorkspace: SavedClientWorkspace | null;
   setContractorUrl: (value: string) => void;
 }) {
   return (
@@ -575,11 +664,35 @@ function HomeView({
       </section>
 
       <Panel className="w-full">
+        <div className="mb-5 rounded-2xl border border-teal-200 bg-teal-50 p-5">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+            <div>
+              <Eyebrow>Saved Client</Eyebrow>
+              <h2 className="text-xl font-black text-ink">Comfort Guardians Workspace</h2>
+              <p className="mt-2 text-sm font-bold leading-6 text-teal-950">
+                {savedWorkspace
+                  ? `Saved ${new Date(savedWorkspace.updatedAt).toLocaleString()}. Open it instantly without scraping again.`
+                  : isLoadingWorkspace
+                    ? "Checking for a saved Comfort Guardians workspace."
+                    : "No saved workspace yet. Run the first scan once, then it will open from cache."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={isAnalyzing || isLoadingWorkspace} onClick={onOpenComfortGuardians} type="button">
+                {isAnalyzing ? "Loading..." : savedWorkspace ? "Open Workspace" : "Run First Scan"}
+              </Button>
+              <Button disabled={isAnalyzing} onClick={onRefreshComfortGuardians} type="button" variant="secondary">
+                Refresh Scan
+              </Button>
+            </div>
+          </div>
+        </div>
+
         <form className="space-y-5" onSubmit={onSubmit}>
           <div className="space-y-2">
             <FieldLabel>Contractor website URL</FieldLabel>
             <input
-            className="h-14 w-full rounded-lg border border-ink/15 bg-white px-4 text-base text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+              className="h-14 w-full rounded-lg border border-ink/15 bg-white px-4 text-base text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
               onChange={(event) => setContractorUrl(event.target.value)}
               onInput={(event) => setContractorUrl(event.currentTarget.value)}
               placeholder="https://examplehvac.com"
