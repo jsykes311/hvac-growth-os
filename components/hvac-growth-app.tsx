@@ -1827,6 +1827,32 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
   const ready = Boolean(googleAds?.setup.ready);
   const connected = Boolean(googleAds?.connected);
   const temporaryCredentialStore = googleAds?.credentialStorage === "In-app temporary token store";
+  const [origin, setOrigin] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") setOrigin(window.location.origin);
+  }, []);
+
+  const redirectUri = origin ? `${origin}/api/google-ads/callback` : "https://app.talltwin.com/api/google-ads/callback";
+  const envTemplate = [
+    "GOOGLE_ADS_DEVELOPER_TOKEN=",
+    "GOOGLE_CLIENT_ID=",
+    "GOOGLE_CLIENT_SECRET=",
+    "GOOGLE_ADS_LOGIN_CUSTOMER_ID=",
+    `GOOGLE_OAUTH_REDIRECT_URI=${redirectUri}`,
+    "GOOGLE_TOKEN_ENCRYPTION_KEY=",
+    "DATABASE_URL=",
+  ].join("\n");
+
+  async function copyGoogleAdsTemplate() {
+    try {
+      await navigator.clipboard.writeText(envTemplate);
+      setCopyMessage("Copied Google Ads Render env template.");
+    } catch {
+      setCopyMessage("Copy failed. Select the template text and copy it manually.");
+    }
+  }
 
   return (
     <Panel className="scroll-mt-28" id="google-ads-setup">
@@ -1845,6 +1871,20 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
         <div className="grid gap-3">
+          <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-[0.12em] text-teal-800">What to do now</h4>
+                <p className="mt-2 text-sm font-bold leading-6 text-teal-950">
+                  Add the missing Google Ads values in Render, redeploy, then return here. Once every required item is configured, the Connect Google Ads button will turn on.
+                </p>
+              </div>
+              <Button onClick={copyGoogleAdsTemplate} type="button" variant="secondary">Copy Env Template</Button>
+            </div>
+            <pre className="mt-4 overflow-x-auto rounded-xl border border-teal-200 bg-white p-4 text-xs font-bold leading-6 text-ink">{envTemplate}</pre>
+            {copyMessage && <p className="mt-3 text-xs font-black text-teal-800">{copyMessage}</p>}
+          </div>
+
           {temporaryCredentialStore && (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
               Google Ads is connected through a temporary file-backed token store. On Render, add <span className="font-mono">DATABASE_URL</span> so OAuth tokens are saved in the encrypted database credential store before relying on it long term.
@@ -1870,12 +1910,23 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
         <div className="rounded-2xl border border-ink/10 bg-ink p-5 text-white">
           <h4 className="text-lg font-black">Connection checklist</h4>
           <div className="mt-4 grid gap-3 text-sm leading-6 text-white/75">
-            <p>1. Add the required values in Render environment settings.</p>
-            <p>2. Make sure the redirect URI matches Google Cloud exactly.</p>
-            <p>3. For durable OAuth, add DATABASE_URL for encrypted database token storage.</p>
-            <p>4. Redeploy the service after changing environment variables.</p>
-            <p>5. Return here, connect Google Ads, and select the active customer ID.</p>
+            <p>1. Open Render → HVAC Growth OS → Environment.</p>
+            <p>2. Add the missing Google Ads env vars shown on the left.</p>
+            <p>3. In Google Cloud, add this authorized redirect URI: <span className="font-mono text-white">{redirectUri}</span></p>
+            <p>4. Add DATABASE_URL for encrypted database token storage.</p>
+            <p>5. Redeploy the service after changing environment variables.</p>
+            <p>6. Return here, connect Google Ads, and select the active customer ID.</p>
           </div>
+          {missingItems.length ? (
+            <div className="mt-5 rounded-xl bg-white/8 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-white/55">Still missing</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {missingItems.map((item) => (
+                  <span className="rounded-md bg-white/10 px-2 py-1 font-mono text-xs font-bold text-white/80" key={item}>{item}</span>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="mt-5 rounded-xl bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.12em] text-white/55">Current mode</p>
             <p className="mt-1 text-sm font-black">Read Only</p>
@@ -1885,8 +1936,8 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
             {ready ? (
               <a className="inline-flex h-11 items-center justify-center rounded-full bg-white px-4 text-sm font-black text-ink" href="/api/google-ads/connect" rel="noreferrer" target="_blank">Connect Google Ads</a>
             ) : (
-              <button className="inline-flex h-11 cursor-not-allowed items-center justify-center rounded-full bg-white/15 px-4 text-sm font-black text-white/65" disabled type="button">
-                Complete setup to connect
+              <button className="inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-full bg-white/15 px-4 py-2 text-left text-sm font-black text-white/65" disabled type="button">
+                Add missing Render env vars first
               </button>
             )}
           </div>
