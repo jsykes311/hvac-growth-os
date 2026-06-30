@@ -151,6 +151,7 @@ type ConnectedAppStatus = {
     connected: boolean;
     connectedLocation: string;
     connectionSource: string;
+    credentialStorage: string;
     configured: boolean;
     formsSubmitted: number;
     lastSyncAt: string;
@@ -1716,9 +1717,10 @@ function ConnectedAppsSection() {
             </p>
           ) : null}
         </div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-5">
+        <div className="mt-5 grid gap-4 lg:grid-cols-6">
           <InfoTile label="Connection" value={highLevel?.connected ? "Connected" : highLevel?.configured ? "Not connected" : "Needs setup"} />
           <InfoTile label="Connection type" value={highLevel?.connectionSource || "Not selected"} />
+          <InfoTile label="Credential storage" value={highLevel?.credentialStorage || "Not connected"} />
           <InfoTile label="Last sync" value={highLevel?.lastSyncAt ? new Date(highLevel.lastSyncAt).toLocaleString() : "Never synced"} />
           <InfoTile label="Connected location" value={highLevel?.connectedLocation || highLevel?.activeLocationId || "None selected"} />
           <InfoTile label="Location ID" value={highLevel?.activeLocationId || highLevelData?.activeLocationId || "Not synced"} />
@@ -1891,6 +1893,7 @@ function HighLevelSetupWizard({ highLevel, onConfigured }: { highLevel?: Connect
   const missingItems = highLevel?.setup.missingItems ?? [];
   const ready = Boolean(highLevel?.setup.ready);
   const connected = Boolean(highLevel?.connected);
+  const temporaryCredentialStore = highLevel?.credentialStorage === "In-app temporary token store";
   const [locationId, setLocationId] = useState(highLevel?.activeLocationId ?? "");
   const [privateIntegrationToken, setPrivateIntegrationToken] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -1936,7 +1939,7 @@ function HighLevelSetupWizard({ highLevel, onConfigured }: { highLevel?: Connect
           <Eyebrow>HighLevel Setup</Eyebrow>
           <h3 className="text-xl font-black text-ink">Connect the Comfort Guardians HighLevel location safely in read-only mode.</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
-            Complete OAuth setup or add a location-level private integration token. HVAC Growth OS will read CRM performance data for recommendations, funnel reporting, and attribution analysis only.
+            For production on Render, store the location-level private integration token in Render environment variables. The in-app form is useful for testing, but file-backed credentials may be lost on redeploy.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-2 text-xs font-black ${connected ? "border-green-200 bg-green-50 text-green-700" : ready ? "border-teal-200 bg-teal-50 text-teal-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
@@ -1950,9 +1953,14 @@ function HighLevelSetupWizard({ highLevel, onConfigured }: { highLevel?: Connect
             <div>
               <h4 className="text-lg font-black text-ink">Private token setup</h4>
               <p className="mt-2 text-sm leading-6 text-graphite/70">
-                Enter the Comfort Guardians HighLevel location ID and private integration token. HVAC Growth OS stores the token encrypted and uses it for read-only syncs.
+                Best for Render: add <span className="font-mono font-bold">HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN</span> and <span className="font-mono font-bold">HIGHLEVEL_LOCATION_ID</span> in Render, then redeploy. Use this form only for a temporary test connection.
               </p>
             </div>
+            {temporaryCredentialStore && (
+              <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
+                This HighLevel credential was saved through the app. On Render, move it into environment variables so it survives deploys and service restarts.
+              </p>
+            )}
             <div className="mt-5 grid gap-4">
               <label className="space-y-2">
                 <FieldLabel>HighLevel Location ID</FieldLabel>
@@ -1984,6 +1992,17 @@ function HighLevelSetupWizard({ highLevel, onConfigured }: { highLevel?: Connect
               )}
             </div>
           </form>
+
+          <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
+            <h4 className="text-sm font-black uppercase tracking-[0.12em] text-teal-800">Render durable setup</h4>
+            <div className="mt-3 grid gap-2 text-sm font-bold leading-6 text-teal-900">
+              <p>1. Open the HVAC Growth OS service in Render.</p>
+              <p>2. Add or update <span className="font-mono">HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN</span>.</p>
+              <p>3. Add or update <span className="font-mono">HIGHLEVEL_LOCATION_ID</span>.</p>
+              <p>4. Confirm <span className="font-mono">HIGHLEVEL_TOKEN_ENCRYPTION_KEY</span> or <span className="font-mono">HVAC_GROWTH_OS_AUTH_SECRET</span> exists.</p>
+              <p>5. Redeploy, then refresh HighLevel data here.</p>
+            </div>
+          </div>
 
           <div className="grid gap-3">
             {(setupItems.length ? setupItems : defaultHighLevelSetupItems()).map((item) => (
@@ -2430,6 +2449,7 @@ function emptyHighLevelStatus(): ConnectedAppStatus["highLevel"] {
     connected: false,
     connectedLocation: "",
     connectionSource: "",
+    credentialStorage: "Not connected",
     configured: false,
     formsSubmitted: 0,
     lastSyncAt: "",

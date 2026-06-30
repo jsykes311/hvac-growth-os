@@ -173,13 +173,13 @@ export function highLevelSetupStatus(store?: HighLevelStore) {
       label: "HighLevel OAuth redirect URI",
     },
     {
-      configured: Boolean(config.apiKey) || oauthReady,
+      configured: Boolean(config.apiKey || savedApiKey) || oauthReady,
       detail: "Fallback read-only connection when OAuth is not available for this location-level account.",
       envVar: "HIGHLEVEL_API_KEY or HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN",
       label: "HighLevel private integration token",
     },
     {
-      configured: Boolean(config.locationId) || oauthReady,
+      configured: Boolean(config.locationId || savedLocationId) || oauthReady,
       detail: "Required with API key fallback so HVAC Growth OS knows which HighLevel location to sync.",
       envVar: "HIGHLEVEL_LOCATION_ID",
       label: "HighLevel location ID",
@@ -275,7 +275,9 @@ export async function getHighLevelConnectionStatus() {
   const store = await loadHighLevelStore();
   const setup = highLevelSetupStatus(store);
   const config = highLevelConfig();
-  const hasApiKeyFallback = Boolean((config.apiKey || store.setupConfig?.privateIntegrationToken) && (config.locationId || store.setupConfig?.locationId || store.activeLocationId));
+  const hasEnvApiKeyFallback = Boolean(config.apiKey && config.locationId);
+  const hasSavedApiKeyFallback = Boolean(store.setupConfig?.privateIntegrationToken && (store.setupConfig?.locationId || store.activeLocationId));
+  const hasApiKeyFallback = hasEnvApiKeyFallback || hasSavedApiKeyFallback;
   const connected = Boolean(store.tokenSet?.refreshToken || hasApiKeyFallback);
   const data = store.data;
   return {
@@ -287,6 +289,13 @@ export async function getHighLevelConnectionStatus() {
       connected,
       connectedLocation: store.connectedLocation,
       connectionSource: store.tokenSet?.refreshToken ? "OAuth" : hasApiKeyFallback ? "API Key" : "",
+      credentialStorage: store.tokenSet?.refreshToken
+        ? "Encrypted OAuth token store"
+        : hasEnvApiKeyFallback
+          ? "Render environment variables"
+          : hasSavedApiKeyFallback
+            ? "In-app temporary token store"
+            : "Not connected",
       configured: setup.ready,
       lastSyncAt: store.lastSyncAt,
       leadSources: data?.revenueFunnel.leadSources ?? [],
