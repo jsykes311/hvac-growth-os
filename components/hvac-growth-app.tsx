@@ -243,6 +243,10 @@ type HighLevelDataPayload = {
   activeLocationId: string;
   connectedLocation: string;
   lastSyncAt: string;
+  syncRange: {
+    endDate: string;
+    startDate: string;
+  };
   locations: HighLevelRecord[];
   contacts: HighLevelRecord[];
   opportunities: HighLevelRecord[];
@@ -1365,6 +1369,8 @@ function ConnectedAppsSection() {
   const [status, setStatus] = useState<ConnectedAppStatus | null>(null);
   const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
   const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
+  const [highLevelEndDate, setHighLevelEndDate] = useState(todayInputValue());
+  const [highLevelStartDate, setHighLevelStartDate] = useState(daysAgoInputValue(30));
   const [activeTable, setActiveTable] = useState<keyof Pick<GoogleAdsDataPayload, "campaigns" | "adGroups" | "keywords" | "searchTerms" | "ads" | "assets" | "conversions">>("campaigns");
   const [activeHighLevelTable, setActiveHighLevelTable] = useState<keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "formSubmissions" | "tags" | "workflows" | "customFields">>("contacts");
   const [isLoading, setIsLoading] = useState(true);
@@ -1383,6 +1389,10 @@ function ConnectedAppsSection() {
     const response = await fetch("/api/highlevel/data", { cache: "no-store" });
     const payload = (await response.json()) as { data?: HighLevelDataPayload } & ApiError;
     if (!response.ok) throw new Error(payload.error || "Unable to load HighLevel data.");
+    if (payload.data?.syncRange) {
+      setHighLevelEndDate(payload.data.syncRange.endDate);
+      setHighLevelStartDate(payload.data.syncRange.startDate);
+    }
     setHighLevelData(payload.data ?? null);
   }, []);
 
@@ -1434,7 +1444,11 @@ function ConnectedAppsSection() {
     setIsSyncingHighLevel(true);
     setMessage("");
     try {
-      const response = await fetch("/api/highlevel/sync", { method: "POST" });
+      const response = await fetch("/api/highlevel/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endDate: highLevelEndDate, startDate: highLevelStartDate }),
+      });
       const payload = (await response.json()) as { data?: HighLevelDataPayload } & ApiError;
       if (!response.ok) throw new Error(payload.error || "HighLevel is not ready to sync yet. Review the setup checklist below, then try again.");
       setHighLevelData(payload.data ?? null);
@@ -1468,6 +1482,11 @@ function ConnectedAppsSection() {
   const tableRows = googleAdsData?.[activeTable] ?? [];
   const highLevelRows = highLevelData?.[activeHighLevelTable] ?? [];
   const syncedGoogleAdsClicks = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "clicks") : 0;
+
+  function setHighLevelPreset(days: number) {
+    setHighLevelEndDate(todayInputValue());
+    setHighLevelStartDate(daysAgoInputValue(days));
+  }
 
   return (
     <div className="grid gap-5">
@@ -1627,6 +1646,63 @@ function ConnectedAppsSection() {
             </p>
           </div>
           <PermissionModePills activeMode={highLevel?.permissionMode ?? "Read Only"} />
+        </div>
+        <div className="mt-5 rounded-2xl border border-ink/10 bg-[#fbfbfa] p-4">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">HighLevel Sync Range</h4>
+              <p className="mt-2 text-sm leading-6 text-graphite/70">
+                Metrics and CRM rows below use this selected date range. Default is the last 30 days.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                ["Today", 0],
+                ["7 days", 7],
+                ["30 days", 30],
+                ["90 days", 90],
+              ].map(([label, days]) => (
+                <button
+                  className="rounded-full border border-ink/10 bg-white px-3 py-2 text-xs font-black text-ink transition hover:border-flame/40"
+                  key={label}
+                  onClick={() => setHighLevelPreset(Number(days))}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+            <label className="space-y-2">
+              <FieldLabel>Start Date</FieldLabel>
+              <input
+                className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition focus:border-flame focus:ring-4 focus:ring-flame/15"
+                onChange={(event) => setHighLevelStartDate(event.target.value)}
+                type="date"
+                value={highLevelStartDate}
+              />
+            </label>
+            <label className="space-y-2">
+              <FieldLabel>End Date</FieldLabel>
+              <input
+                className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition focus:border-flame focus:ring-4 focus:ring-flame/15"
+                onChange={(event) => setHighLevelEndDate(event.target.value)}
+                type="date"
+                value={highLevelEndDate}
+              />
+            </label>
+            <div className="flex items-end">
+              <Button disabled={!highLevel?.connected || isSyncingHighLevel} onClick={syncHighLevel} variant="secondary">
+                {isSyncingHighLevel ? "Syncing..." : "Refresh Range"}
+              </Button>
+            </div>
+          </div>
+          {highLevelData?.syncRange ? (
+            <p className="mt-3 text-xs font-bold text-graphite/55">
+              Current synced range: {highLevelData.syncRange.startDate} to {highLevelData.syncRange.endDate}
+            </p>
+          ) : null}
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-5">
           <InfoTile label="Connection" value={highLevel?.connected ? "Connected" : highLevel?.configured ? "Not connected" : "Needs setup"} />
@@ -2195,6 +2271,16 @@ function tableLabel(table: keyof Pick<GoogleAdsDataPayload, "campaigns" | "adGro
   return table
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function todayInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysAgoInputValue(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
 }
 
 function highLevelTableLabel(table: keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "formSubmissions" | "tags" | "workflows" | "customFields">) {

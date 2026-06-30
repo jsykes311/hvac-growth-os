@@ -75,6 +75,10 @@ export type HighLevelDataPayload = {
   activeLocationId: string;
   connectedLocation: string;
   lastSyncAt: string;
+  syncRange: {
+    endDate: string;
+    startDate: string;
+  };
   locations: HighLevelRecord[];
   contacts: HighLevelRecord[];
   opportunities: HighLevelRecord[];
@@ -107,6 +111,11 @@ type HighLevelStore = {
   snapshots: HighLevelSnapshot[];
   tokenSet?: HighLevelTokenSet;
   data?: HighLevelDataPayload;
+};
+
+type HighLevelDateRange = {
+  endDate?: string;
+  startDate?: string;
 };
 
 const HIGHLEVEL_BASE_URL = "https://services.leadconnectorhq.com";
@@ -330,7 +339,7 @@ export async function getStoredHighLevelData() {
   return store.data ?? emptyHighLevelData(store.activeLocationId, store.connectedLocation, store.lastSyncAt, store.snapshots);
 }
 
-export async function syncHighLevelData() {
+export async function syncHighLevelData(range: HighLevelDateRange = {}) {
   const store = await loadHighLevelStore();
   const config = highLevelConfig();
   const apiKey = config.apiKey || store.setupConfig?.privateIntegrationToken || "";
@@ -344,7 +353,8 @@ export async function syncHighLevelData() {
   if (!locationId) throw new Error("HighLevel did not return a connected location. Reconnect and choose a location.");
 
   const previousSnapshots = store.snapshots || store.data?.snapshots || [];
-  const data = await fetchHighLevelData(accessToken, locationId, previousSnapshots);
+  const syncRange = normalizeHighLevelDateRange(range);
+  const data = await fetchHighLevelData(accessToken, locationId, previousSnapshots, syncRange);
   const nextStore: HighLevelStore = {
     ...store,
     activeLocationId: locationId,
@@ -358,7 +368,13 @@ export async function syncHighLevelData() {
   return data;
 }
 
-async function fetchHighLevelData(accessToken: string, locationId: string, previousSnapshots: HighLevelSnapshot[]): Promise<HighLevelDataPayload> {
+async function fetchHighLevelData(
+  accessToken: string,
+  locationId: string,
+  previousSnapshots: HighLevelSnapshot[],
+  syncRange: Required<HighLevelDateRange>,
+): Promise<HighLevelDataPayload> {
+  const dateQuery = highLevelDateQuery(syncRange);
   const [
     location,
     contacts,
@@ -374,29 +390,29 @@ async function fetchHighLevelData(accessToken: string, locationId: string, previ
     customFields,
   ] = await Promise.all([
     highLevelGet(accessToken, `/locations/${locationId}`),
-    highLevelGet(accessToken, `/contacts/?locationId=${encodeURIComponent(locationId)}`),
-    highLevelGet(accessToken, `/opportunities/search?location_id=${encodeURIComponent(locationId)}`),
+    highLevelGet(accessToken, `/contacts/?locationId=${encodeURIComponent(locationId)}${dateQuery}`),
+    highLevelGet(accessToken, `/opportunities/search?location_id=${encodeURIComponent(locationId)}${dateQuery}`),
     highLevelGet(accessToken, `/opportunities/pipelines?locationId=${encodeURIComponent(locationId)}`),
-    highLevelGet(accessToken, `/conversations/search?locationId=${encodeURIComponent(locationId)}`),
-    highLevelGet(accessToken, `/conversations/search?locationId=${encodeURIComponent(locationId)}&type=CALL`),
+    highLevelGet(accessToken, `/conversations/search?locationId=${encodeURIComponent(locationId)}${dateQuery}`),
+    highLevelGet(accessToken, `/conversations/search?locationId=${encodeURIComponent(locationId)}&type=CALL${dateQuery}`),
     highLevelGet(accessToken, `/calendars/?locationId=${encodeURIComponent(locationId)}`),
     highLevelGet(accessToken, `/forms/?locationId=${encodeURIComponent(locationId)}`),
-    highLevelGet(accessToken, `/forms/submissions?locationId=${encodeURIComponent(locationId)}`),
+    highLevelGet(accessToken, `/forms/submissions?locationId=${encodeURIComponent(locationId)}${dateQuery}`),
     highLevelGet(accessToken, `/locations/${locationId}/tags`),
     highLevelGet(accessToken, `/workflows/?locationId=${encodeURIComponent(locationId)}`),
     highLevelGet(accessToken, `/locations/${locationId}/customFields`),
   ]);
 
   const locationRecord = normalizeRecords(location, ["location", "locations"])[0] ?? { id: locationId, name: locationId };
-  const normalizedContacts = normalizeRecords(contacts, ["contacts"]);
-  const normalizedOpportunities = normalizeRecords(opportunities, ["opportunities"]);
+  const normalizedContacts = filterRecordsByDateRange(normalizeRecords(contacts, ["contacts"]), syncRange);
+  const normalizedOpportunities = filterRecordsByDateRange(normalizeRecords(opportunities, ["opportunities"]), syncRange);
   const normalizedPipelines = normalizeRecords(pipelines, ["pipelines"]);
-  const normalizedConversations = normalizeRecords(conversations, ["conversations"]);
-  const normalizedCallSearchResults = normalizeRecords(calls, ["conversations", "calls", "messages"]).filter(isCallRecord);
-  const messageCalls = normalizedCallSearchResults.length ? [] : await fetchConversationCallMessages(accessToken, normalizedConversations);
-  const normalizedCalls = uniqueRecords([...normalizedCallSearchResults, ...messageCalls]);
+  const normalizedConversations = filterRecordsByDateRange(normalizeRecords(conversations, ["conversations"]), syncRange);
+  const normalizedCallSearchResults = filterRecordsByDateRange(normalizeRecords(calls, ["conversations", "calls", "messages"]).filter(isCallRecord), syncRange);
+  const messageCalls = normalizedCallSearchResults.length ? [] : await fetchConversationCallMessages(accessToken, normalizedConversations, syncRange);
+  const normalizedCalls = filterRecordsByDateRange(uniqueRecords([...normalizedCallSearchResults, ...messageCalls]), syncRange);
   const normalizedForms = normalizeRecords(forms, ["forms"]);
-  const normalizedFormSubmissions = normalizeRecords(formSubmissions, ["submissions", "formSubmissions", "forms"]);
+  const normalizedFormSubmissions = filterRecordsByDateRange(normalizeRecords(formSubmissions, ["submissions", "formSubmissions", "forms"]), syncRange);
   const normalizedOpportunityStages = normalizeOpportunityStages(pipelines);
   const syncAlerts = [
     ...(normalizedCalls.length ? [] : [`No call data found. HVAC Growth OS read ${normalizedConversations.length} conversations, but HighLevel did not expose call-type events from conversation search or message history.`]),
@@ -430,16 +446,17 @@ async function fetchHighLevelData(accessToken: string, locationId: string, previ
     pipelines: normalizedPipelines,
     revenueFunnel,
     snapshots,
+    syncRange,
     syncAlerts,
     tags: normalizeRecords(tags, ["tags"]),
     workflows: normalizeRecords(workflows, ["workflows"]),
   };
 }
 
-async function fetchConversationCallMessages(accessToken: string, conversations: HighLevelRecord[]) {
+async function fetchConversationCallMessages(accessToken: string, conversations: HighLevelRecord[], syncRange: Required<HighLevelDateRange>) {
   const limitedConversations = conversations.slice(0, 50);
   const messagePayloads = await Promise.all(limitedConversations.map((conversation) => (
-    highLevelGet(accessToken, `/conversations/${encodeURIComponent(conversation.id)}/messages`)
+    highLevelGet(accessToken, `/conversations/${encodeURIComponent(conversation.id)}/messages${highLevelDateQuery(syncRange, "?")}`)
   )));
   return uniqueRecords(messagePayloads.flatMap((payload, index) => (
     normalizeRecords(payload, ["messages", "conversationMessages", "data"])
@@ -450,6 +467,49 @@ async function fetchConversationCallMessages(accessToken: string, conversations:
         stage: message.stage || limitedConversations[index]?.name || "",
       }))
   )));
+}
+
+function normalizeHighLevelDateRange(range: HighLevelDateRange): Required<HighLevelDateRange> {
+  const today = new Date();
+  const end = parseDateInput(range.endDate) ?? today;
+  const start = parseDateInput(range.startDate) ?? addDays(end, -30);
+  return {
+    endDate: toDateInput(end),
+    startDate: toDateInput(start),
+  };
+}
+
+function highLevelDateQuery(range: Required<HighLevelDateRange>, prefix = "&") {
+  const start = new Date(`${range.startDate}T00:00:00.000Z`).getTime();
+  const end = new Date(`${range.endDate}T23:59:59.999Z`).getTime();
+  return `${prefix}startDate=${start}&endDate=${end}&dateStart=${range.startDate}&dateEnd=${range.endDate}`;
+}
+
+function filterRecordsByDateRange(records: HighLevelRecord[], range: Required<HighLevelDateRange>) {
+  const start = new Date(`${range.startDate}T00:00:00.000Z`).getTime();
+  const end = new Date(`${range.endDate}T23:59:59.999Z`).getTime();
+  return records.filter((record) => {
+    if (!record.createdAt) return true;
+    const timestamp = Date.parse(record.createdAt);
+    if (Number.isNaN(timestamp)) return true;
+    return timestamp >= start && timestamp <= end;
+  });
+}
+
+function parseDateInput(value?: string) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function toDateInput(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
 async function highLevelGet(accessToken: string, endpoint: string) {
@@ -718,6 +778,7 @@ function defaultStore(): HighLevelStore {
 }
 
 function emptyHighLevelData(activeLocationId: string, connectedLocation: string, lastSyncAt: string, snapshots: HighLevelSnapshot[] = []): HighLevelDataPayload {
+  const syncRange = normalizeHighLevelDateRange({});
   return {
     activeLocationId,
     calendars: [],
@@ -735,6 +796,7 @@ function emptyHighLevelData(activeLocationId: string, connectedLocation: string,
     pipelines: [],
     revenueFunnel: buildRevenueFunnel([], [], [], [], []),
     snapshots,
+    syncRange,
     syncAlerts: [],
     tags: [],
     workflows: [],

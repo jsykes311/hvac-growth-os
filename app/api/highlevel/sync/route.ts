@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { HighLevelSyncError, syncHighLevelData } from "@/lib/server/highlevel";
 
 export const runtime = "nodejs";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const data = await syncHighLevelData();
+    const body = (await request.json().catch(() => null)) as { endDate?: unknown; startDate?: unknown } | null;
+    const startDate = typeof body?.startDate === "string" ? body.startDate : undefined;
+    const endDate = typeof body?.endDate === "string" ? body.endDate : undefined;
+    const data = await syncHighLevelData({ endDate, startDate });
     return NextResponse.json({ data });
   } catch (error) {
     console.error("HighLevel sync failed", error);
