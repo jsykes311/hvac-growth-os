@@ -98,6 +98,11 @@ type HighLevelStore = {
   connectionSource: "OAuth" | "API Key" | "";
   lastSyncAt: string;
   permissionMode: PermissionMode;
+  setupConfig?: {
+    privateIntegrationToken?: string;
+    locationId?: string;
+    savedAt: string;
+  };
   snapshots: HighLevelSnapshot[];
   tokenSet?: HighLevelTokenSet;
   data?: HighLevelDataPayload;
@@ -124,7 +129,7 @@ export function highLevelConfig() {
     apiKey: process.env.HIGHLEVEL_API_KEY || process.env.HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN || "",
     clientId: process.env.HIGHLEVEL_CLIENT_ID || "",
     clientSecret: process.env.HIGHLEVEL_CLIENT_SECRET || "",
-    encryptionKey: process.env.HIGHLEVEL_TOKEN_ENCRYPTION_KEY || process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || "",
+    encryptionKey: process.env.HIGHLEVEL_TOKEN_ENCRYPTION_KEY || process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || process.env.HVAC_GROWTH_OS_AUTH_SECRET || "",
     locationId: process.env.HIGHLEVEL_LOCATION_ID || "",
     redirectUri: process.env.HIGHLEVEL_REDIRECT_URI || process.env.HIGHLEVEL_OAUTH_REDIRECT_URI || "",
     scopes: process.env.HIGHLEVEL_OAUTH_SCOPES || DEFAULT_SCOPES,
@@ -132,10 +137,12 @@ export function highLevelConfig() {
   };
 }
 
-export function highLevelSetupStatus() {
+export function highLevelSetupStatus(store?: HighLevelStore) {
   const config = highLevelConfig();
   const oauthReady = Boolean(config.clientId && config.clientSecret && config.redirectUri);
-  const apiKeyReady = Boolean(config.apiKey && config.locationId);
+  const savedApiKey = store?.setupConfig?.privateIntegrationToken || "";
+  const savedLocationId = store?.setupConfig?.locationId || store?.activeLocationId || "";
+  const apiKeyReady = Boolean((config.apiKey || savedApiKey) && (config.locationId || savedLocationId));
   const items = [
     {
       configured: Boolean(config.clientId) || apiKeyReady,
@@ -256,14 +263,14 @@ export async function exchangeHighLevelCode({ code, origin }: { code: string; or
 
 export async function getHighLevelConnectionStatus() {
   const store = await loadHighLevelStore();
-  const setup = highLevelSetupStatus();
+  const setup = highLevelSetupStatus(store);
   const config = highLevelConfig();
-  const hasApiKeyFallback = Boolean(config.apiKey && config.locationId);
+  const hasApiKeyFallback = Boolean((config.apiKey || store.setupConfig?.privateIntegrationToken) && (config.locationId || store.setupConfig?.locationId || store.activeLocationId));
   const connected = Boolean(store.tokenSet?.refreshToken || hasApiKeyFallback);
   const data = store.data;
   return {
     highLevel: {
-      activeLocationId: store.activeLocationId || config.locationId,
+      activeLocationId: store.activeLocationId || store.setupConfig?.locationId || config.locationId,
       callsTracked: data?.revenueFunnel.phoneCalls ?? 0,
       closedWon: data?.revenueFunnel.wonOpportunities ?? 0,
       closedWonValue: data?.revenueFunnel.closedWonValue ?? 0,
@@ -288,6 +295,35 @@ export async function getHighLevelConnectionStatus() {
   };
 }
 
+export async function saveHighLevelPrivateIntegrationConfig({
+  locationId,
+  privateIntegrationToken,
+}: {
+  locationId: string;
+  privateIntegrationToken: string;
+}) {
+  const cleanedLocationId = locationId.trim();
+  const cleanedToken = privateIntegrationToken.trim();
+  if (!cleanedLocationId) throw new HighLevelSyncError("Location ID is required.", 400);
+  if (!cleanedToken) throw new HighLevelSyncError("Private integration token is required.", 400);
+  if (!highLevelConfig().encryptionKey) throw new HighLevelSyncError("Connector encryption is not available. Set HVAC_GROWTH_OS_AUTH_SECRET or HIGHLEVEL_TOKEN_ENCRYPTION_KEY first.", 500);
+
+  const store = await loadHighLevelStore();
+  const nextStore: HighLevelStore = {
+    ...store,
+    activeLocationId: cleanedLocationId,
+    connectionSource: "API Key",
+    permissionMode: "Read Only",
+    setupConfig: {
+      locationId: cleanedLocationId,
+      privateIntegrationToken: cleanedToken,
+      savedAt: new Date().toISOString(),
+    },
+  };
+  await saveHighLevelStore(nextStore);
+  return getHighLevelConnectionStatus();
+}
+
 export async function getStoredHighLevelData() {
   const store = await loadHighLevelStore();
   return store.data ?? emptyHighLevelData(store.activeLocationId, store.connectedLocation, store.lastSyncAt, store.snapshots);
@@ -296,12 +332,14 @@ export async function getStoredHighLevelData() {
 export async function syncHighLevelData() {
   const store = await loadHighLevelStore();
   const config = highLevelConfig();
-  const apiKeyFallbackReady = Boolean(config.apiKey && config.locationId);
+  const apiKey = config.apiKey || store.setupConfig?.privateIntegrationToken || "";
+  const configuredLocationId = config.locationId || store.setupConfig?.locationId || "";
+  const apiKeyFallbackReady = Boolean(apiKey && configuredLocationId);
   if (!store.tokenSet?.refreshToken && !apiKeyFallbackReady) throw new HighLevelSyncError("Not connected. Connect HighLevel with OAuth or configure the location-level private integration token before syncing data.", 409);
-  if (!isHighLevelConfigured()) throw new HighLevelSyncError("Not connected. HighLevel OAuth or private integration token settings are incomplete.", 409);
+  if (!highLevelSetupStatus(store).ready) throw new HighLevelSyncError("Not connected. HighLevel OAuth or private integration token settings are incomplete.", 409);
 
-  const accessToken = apiKeyFallbackReady && !store.tokenSet?.refreshToken ? config.apiKey : await getFreshHighLevelAccessToken(store);
-  const locationId = store.activeLocationId || store.tokenSet?.locationId || config.locationId;
+  const accessToken = apiKeyFallbackReady && !store.tokenSet?.refreshToken ? apiKey : await getFreshHighLevelAccessToken(store);
+  const locationId = store.activeLocationId || store.tokenSet?.locationId || configuredLocationId;
   if (!locationId) throw new Error("HighLevel did not return a connected location. Reconnect and choose a location.");
 
   const previousSnapshots = store.snapshots || store.data?.snapshots || [];

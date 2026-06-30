@@ -75,6 +75,8 @@ HIGHLEVEL_TOKEN_STORE_PATH=/tmp/hvac-growth-os-highlevel-store.json
 
 OAuth is preferred. If OAuth is not available for the account yet, configure `HIGHLEVEL_API_KEY` and `HIGHLEVEL_LOCATION_ID` as the read-only fallback path.
 
+HighLevel can also be configured inside HVAC Growth OS without changing Render environment variables. In `Connected Apps -> HighLevel Setup`, enter the Comfort Guardians location ID and private integration token, then click `Save & Connect HighLevel`. HVAC Growth OS stores the private token encrypted in the connector store and immediately attempts a read-only sync.
+
 The HighLevel connector is read-only in this phase. It syncs locations, contacts, opportunities, pipelines, opportunity stages, conversations, calls, calendars, forms, tags, workflows, and custom fields, then feeds Revenue Engine and AI CMO with funnel metrics: CRM leads, phone calls, estimates, won jobs, pipeline value, lead sources, opportunity stages, campaign attribution, estimated revenue, and ROI planning signals.
 
 Each sync stores a compact historical snapshot with contacts, open opportunities, closed won, phone calls, pipeline value, won jobs, and estimated revenue so future recommendations can compare CRM movement over time.

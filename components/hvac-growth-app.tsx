@@ -1542,7 +1542,7 @@ function ConnectedAppsSection() {
       </div>
 
       <GoogleAdsSetupWizard googleAds={googleAds} />
-      <HighLevelSetupWizard highLevel={highLevel} />
+      <HighLevelSetupWizard highLevel={highLevel} onConfigured={refreshConnectedApps} />
 
       <Panel>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
@@ -1797,11 +1797,48 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
   );
 }
 
-function HighLevelSetupWizard({ highLevel }: { highLevel?: ConnectedAppStatus["highLevel"] }) {
+function HighLevelSetupWizard({ highLevel, onConfigured }: { highLevel?: ConnectedAppStatus["highLevel"]; onConfigured: () => Promise<void> }) {
   const setupItems = highLevel?.setup.items ?? [];
   const missingItems = highLevel?.setup.missingItems ?? [];
   const ready = Boolean(highLevel?.setup.ready);
   const connected = Boolean(highLevel?.connected);
+  const [locationId, setLocationId] = useState(highLevel?.activeLocationId ?? "");
+  const [privateIntegrationToken, setPrivateIntegrationToken] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [setupMessage, setSetupMessage] = useState("");
+
+  useEffect(() => {
+    if (highLevel?.activeLocationId) setLocationId(highLevel.activeLocationId);
+  }, [highLevel?.activeLocationId]);
+
+  async function savePrivateToken(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSaving(true);
+    setSetupMessage("");
+    try {
+      const response = await fetch("/api/highlevel/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locationId, privateIntegrationToken }),
+      });
+      const payload = (await response.json()) as ApiError;
+      if (!response.ok) throw new Error(payload.error || "HighLevel setup could not be saved.");
+
+      const syncResponse = await fetch("/api/highlevel/sync", { method: "POST" });
+      const syncPayload = (await syncResponse.json()) as ApiError;
+      if (!syncResponse.ok) {
+        setSetupMessage(syncPayload.error || "Saved the HighLevel token, but the first sync needs review.");
+      } else {
+        setSetupMessage("HighLevel private token saved and read-only data synced.");
+        setPrivateIntegrationToken("");
+      }
+      await onConfigured();
+    } catch (caughtError) {
+      setSetupMessage(caughtError instanceof Error ? caughtError.message : "HighLevel setup could not be saved.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <Panel className="scroll-mt-28" id="highlevel-setup">
@@ -1819,22 +1856,63 @@ function HighLevelSetupWizard({ highLevel }: { highLevel?: ConnectedAppStatus["h
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
-        <div className="grid gap-3">
-          {(setupItems.length ? setupItems : defaultHighLevelSetupItems()).map((item) => (
-            <div className="flex gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={item.envVar}>
-              <CheckCircle2 className={`mt-0.5 size-5 shrink-0 ${item.configured ? "text-green-600" : "text-copper"}`} aria-hidden="true" />
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-black text-ink">{item.label}</p>
-                  <span className={`rounded-full px-2 py-1 text-[11px] font-black ${item.configured ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
-                    {item.configured ? "Configured" : "Missing"}
-                  </span>
-                </div>
-                <p className="mt-1 font-mono text-xs font-bold text-graphite/60">{item.envVar}</p>
-                <p className="mt-2 text-sm leading-5 text-graphite/70">{item.detail}</p>
-              </div>
+        <div className="grid gap-4">
+          <form className="rounded-2xl border border-ink/10 bg-[#fbfbfa] p-5" onSubmit={savePrivateToken}>
+            <div>
+              <h4 className="text-lg font-black text-ink">Private token setup</h4>
+              <p className="mt-2 text-sm leading-6 text-graphite/70">
+                Enter the Comfort Guardians HighLevel location ID and private integration token. HVAC Growth OS stores the token encrypted and uses it for read-only syncs.
+              </p>
             </div>
-          ))}
+            <div className="mt-5 grid gap-4">
+              <label className="space-y-2">
+                <FieldLabel>HighLevel Location ID</FieldLabel>
+                <input
+                  className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+                  onChange={(event) => setLocationId(event.target.value)}
+                  placeholder="Comfort Guardians location ID"
+                  value={locationId}
+                />
+              </label>
+              <label className="space-y-2">
+                <FieldLabel>Private Integration Token</FieldLabel>
+                <input
+                  className="h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm text-ink outline-none transition placeholder:text-graphite/40 focus:border-flame focus:ring-4 focus:ring-flame/15"
+                  onChange={(event) => setPrivateIntegrationToken(event.target.value)}
+                  placeholder="Paste token once, then save"
+                  type="password"
+                  value={privateIntegrationToken}
+                />
+              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button disabled={isSaving || !locationId.trim() || !privateIntegrationToken.trim()} type="submit">
+                  {isSaving ? "Saving..." : "Save & Connect HighLevel"}
+                </Button>
+                <span className="text-xs font-bold text-graphite/55">Read only. No contacts, workflows, or automations are created.</span>
+              </div>
+              {setupMessage && (
+                <p className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-bold text-graphite/75">{setupMessage}</p>
+              )}
+            </div>
+          </form>
+
+          <div className="grid gap-3">
+            {(setupItems.length ? setupItems : defaultHighLevelSetupItems()).map((item) => (
+              <div className="flex gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={item.envVar}>
+                <CheckCircle2 className={`mt-0.5 size-5 shrink-0 ${item.configured ? "text-green-600" : "text-copper"}`} aria-hidden="true" />
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-black text-ink">{item.label}</p>
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-black ${item.configured ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+                      {item.configured ? "Configured" : "Missing"}
+                    </span>
+                  </div>
+                  <p className="mt-1 font-mono text-xs font-bold text-graphite/60">{item.envVar}</p>
+                  <p className="mt-2 text-sm leading-5 text-graphite/70">{item.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="rounded-2xl border border-ink/10 bg-ink p-5 text-white">
