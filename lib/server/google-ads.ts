@@ -51,6 +51,7 @@ const GOOGLE_ADS_SCOPE = "https://www.googleapis.com/auth/adwords";
 const DEFAULT_API_VERSION = "v19";
 
 export function googleAdsConfig() {
+  const defaultTokenStorePath = path.join(os.tmpdir(), "hvac-growth-os-google-ads-store.json");
   return {
     apiVersion: process.env.GOOGLE_ADS_API_VERSION || DEFAULT_API_VERSION,
     clientId: process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID || "",
@@ -59,7 +60,8 @@ export function googleAdsConfig() {
     encryptionKey: process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || "",
     loginCustomerId: cleanCustomerId(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || ""),
     redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || "",
-    tokenStorePath: process.env.GOOGLE_ADS_TOKEN_STORE_PATH || path.join(os.tmpdir(), "hvac-growth-os-google-ads-store.json"),
+    tokenStorePath: process.env.GOOGLE_ADS_TOKEN_STORE_PATH || defaultTokenStorePath,
+    tokenStoreIsTemporary: !process.env.GOOGLE_ADS_TOKEN_STORE_PATH,
   };
 }
 
@@ -182,11 +184,17 @@ export async function exchangeGoogleCode({ code, origin }: { code: string; origi
 export async function getGoogleAdsConnectionStatus() {
   const store = await loadGoogleAdsStore();
   const setup = googleAdsSetupStatus();
+  const config = googleAdsConfig();
   return {
     googleAds: {
       activeCustomerId: store.activeCustomerId,
       connected: Boolean(store.tokenSet?.refreshToken),
       configured: setup.ready,
+      credentialStorage: store.tokenSet?.refreshToken
+        ? config.tokenStoreIsTemporary
+          ? "In-app temporary token store"
+          : "Configured token store path"
+        : "Not connected",
       customerIds: store.customerIds,
       lastSyncAt: store.lastSyncAt,
       permissionMode: store.permissionMode,

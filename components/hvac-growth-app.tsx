@@ -133,6 +133,7 @@ type ConnectedAppStatus = {
     activeCustomerId: string;
     connected: boolean;
     configured: boolean;
+    credentialStorage: string;
     customerIds: string[];
     lastSyncAt: string;
     permissionMode: PermissionMode;
@@ -1587,8 +1588,9 @@ function ConnectedAppsSection() {
           </div>
           <PermissionModePills activeMode={googleAds?.permissionMode ?? "Read Only"} />
         </div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+        <div className="mt-5 grid gap-4 lg:grid-cols-4">
           <InfoTile label="Connection" value={googleAds?.connected ? "Connected" : googleAds?.configured ? "Not connected" : "Needs setup"} />
+          <InfoTile label="Credential storage" value={googleAds?.credentialStorage || "Not connected"} />
           <InfoTile label="Last sync" value={googleAds?.lastSyncAt ? new Date(googleAds.lastSyncAt).toLocaleString() : "Never synced"} />
           <InfoTile label="Active customer" value={googleAds?.activeCustomerId || "None selected"} />
         </div>
@@ -1824,6 +1826,7 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
   const missingItems = googleAds?.setup.missingItems ?? [];
   const ready = Boolean(googleAds?.setup.ready);
   const connected = Boolean(googleAds?.connected);
+  const temporaryCredentialStore = googleAds?.credentialStorage === "In-app temporary token store";
 
   return (
     <Panel className="scroll-mt-28" id="google-ads-setup">
@@ -1832,7 +1835,7 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
           <Eyebrow>Google Ads Setup</Eyebrow>
           <h3 className="text-xl font-black text-ink">Connect Google Ads safely in read-only mode.</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
-            Complete these setup steps before OAuth is enabled. HVAC Growth OS will only read account data in this version.
+            Complete these setup steps before OAuth is enabled. Google Ads uses OAuth refresh tokens, so production needs a durable token store path or database-backed token storage.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-2 text-xs font-black ${connected ? "border-green-200 bg-green-50 text-green-700" : ready ? "border-teal-200 bg-teal-50 text-teal-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
@@ -1842,6 +1845,11 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
         <div className="grid gap-3">
+          {temporaryCredentialStore && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
+              Google Ads is connected through a temporary file-backed token store. On Render, set a durable <span className="font-mono">GOOGLE_ADS_TOKEN_STORE_PATH</span> on persistent storage or move token storage into the app database before relying on it long term.
+            </p>
+          )}
           {(setupItems.length ? setupItems : defaultGoogleAdsSetupItems()).map((item) => (
             <div className="flex gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={item.envVar}>
               <CheckCircle2 className={`mt-0.5 size-5 shrink-0 ${item.configured ? "text-green-600" : "text-copper"}`} aria-hidden="true" />
@@ -1864,9 +1872,9 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
           <div className="mt-4 grid gap-3 text-sm leading-6 text-white/75">
             <p>1. Add the required values in Render environment settings.</p>
             <p>2. Make sure the redirect URI matches Google Cloud exactly.</p>
-            <p>3. Redeploy the service after changing environment variables.</p>
-            <p>4. Return here and refresh status.</p>
-            <p>5. Connect Google Ads and select the active customer ID.</p>
+            <p>3. For durable OAuth, set GOOGLE_ADS_TOKEN_STORE_PATH to persistent storage or use database token storage.</p>
+            <p>4. Redeploy the service after changing environment variables.</p>
+            <p>5. Return here, connect Google Ads, and select the active customer ID.</p>
           </div>
           <div className="mt-5 rounded-xl bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.12em] text-white/55">Current mode</p>
@@ -2432,6 +2440,7 @@ function emptyGoogleAdsStatus(): ConnectedAppStatus["googleAds"] {
     activeCustomerId: "",
     connected: false,
     configured: false,
+    credentialStorage: "Not connected",
     customerIds: [],
     lastSyncAt: "",
     permissionMode: "Read Only",
