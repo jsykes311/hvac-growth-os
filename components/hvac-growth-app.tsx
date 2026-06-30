@@ -1847,7 +1847,7 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
         <div className="grid gap-3">
           {temporaryCredentialStore && (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
-              Google Ads is connected through a temporary file-backed token store. On Render, set a durable <span className="font-mono">GOOGLE_ADS_TOKEN_STORE_PATH</span> on persistent storage or move token storage into the app database before relying on it long term.
+              Google Ads is connected through a temporary file-backed token store. On Render, add <span className="font-mono">DATABASE_URL</span> so OAuth tokens are saved in the encrypted database credential store before relying on it long term.
             </p>
           )}
           {(setupItems.length ? setupItems : defaultGoogleAdsSetupItems()).map((item) => (
@@ -1872,7 +1872,7 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
           <div className="mt-4 grid gap-3 text-sm leading-6 text-white/75">
             <p>1. Add the required values in Render environment settings.</p>
             <p>2. Make sure the redirect URI matches Google Cloud exactly.</p>
-            <p>3. For durable OAuth, set GOOGLE_ADS_TOKEN_STORE_PATH to persistent storage or use database token storage.</p>
+            <p>3. For durable OAuth, add DATABASE_URL for encrypted database token storage.</p>
             <p>4. Redeploy the service after changing environment variables.</p>
             <p>5. Return here, connect Google Ads, and select the active customer ID.</p>
           </div>
@@ -2007,8 +2007,9 @@ function HighLevelSetupWizard({ highLevel, onConfigured }: { highLevel?: Connect
               <p>1. Open the HVAC Growth OS service in Render.</p>
               <p>2. Add or update <span className="font-mono">HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN</span>.</p>
               <p>3. Add or update <span className="font-mono">HIGHLEVEL_LOCATION_ID</span>.</p>
-              <p>4. Confirm <span className="font-mono">HIGHLEVEL_TOKEN_ENCRYPTION_KEY</span> or <span className="font-mono">HVAC_GROWTH_OS_AUTH_SECRET</span> exists.</p>
-              <p>5. Redeploy, then refresh HighLevel data here.</p>
+              <p>4. Add <span className="font-mono">DATABASE_URL</span> if you want in-app OAuth/private-token setup saved durably.</p>
+              <p>5. Confirm <span className="font-mono">HIGHLEVEL_TOKEN_ENCRYPTION_KEY</span> or <span className="font-mono">HVAC_GROWTH_OS_AUTH_SECRET</span> exists.</p>
+              <p>6. Redeploy, then refresh HighLevel data here.</p>
             </div>
           </div>
 

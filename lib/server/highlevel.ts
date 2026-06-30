@@ -2,6 +2,12 @@ import crypto from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
+import {
+  credentialStorageLabel,
+  isDatabaseCredentialStoreConfigured,
+  loadEncryptedCredentialStore,
+  saveEncryptedCredentialStore,
+} from "@/lib/server/credential-store";
 
 type PermissionMode = "Read Only" | "Draft Mode" | "Agency Mode" | "Owner Mode";
 
@@ -280,6 +286,7 @@ export async function getHighLevelConnectionStatus() {
   const hasApiKeyFallback = hasEnvApiKeyFallback || hasSavedApiKeyFallback;
   const connected = Boolean(store.tokenSet?.refreshToken || hasApiKeyFallback);
   const data = store.data;
+  const fileStoreConfigured = Boolean(process.env.HIGHLEVEL_TOKEN_STORE_PATH);
   return {
     highLevel: {
       activeLocationId: store.activeLocationId || store.setupConfig?.locationId || config.locationId,
@@ -290,11 +297,11 @@ export async function getHighLevelConnectionStatus() {
       connectedLocation: store.connectedLocation,
       connectionSource: store.tokenSet?.refreshToken ? "OAuth" : hasApiKeyFallback ? "API Key" : "",
       credentialStorage: store.tokenSet?.refreshToken
-        ? "Encrypted OAuth token store"
+        ? credentialStorageLabel({ connected: true, fileStoreConfigured })
         : hasEnvApiKeyFallback
           ? "Render environment variables"
           : hasSavedApiKeyFallback
-            ? "In-app temporary token store"
+            ? credentialStorageLabel({ connected: true, fileStoreConfigured })
             : "Not connected",
       configured: setup.ready,
       lastSyncAt: store.lastSyncAt,
@@ -735,10 +742,18 @@ function groupRecords(records: HighLevelRecord[], field: "source" | "stage") {
 
 async function loadHighLevelStore(): Promise<HighLevelStore> {
   const config = highLevelConfig();
+  if (isDatabaseCredentialStoreConfigured()) {
+    const encrypted = await loadEncryptedCredentialStore("highlevel");
+    if (encrypted) return { ...defaultStore(), ...JSON.parse(decrypt(encrypted)) };
+  }
+
   try {
     const raw = await readFile(config.tokenStorePath, "utf8");
     const parsed = JSON.parse(raw) as { encrypted?: string };
     if (!parsed.encrypted) return defaultStore();
+    if (isDatabaseCredentialStoreConfigured()) {
+      await saveEncryptedCredentialStore("highlevel", parsed.encrypted);
+    }
     return { ...defaultStore(), ...JSON.parse(decrypt(parsed.encrypted)) };
   } catch {
     return defaultStore();
@@ -748,8 +763,10 @@ async function loadHighLevelStore(): Promise<HighLevelStore> {
 async function saveHighLevelStore(store: HighLevelStore) {
   const config = highLevelConfig();
   if (!config.encryptionKey) throw new Error("HIGHLEVEL_TOKEN_ENCRYPTION_KEY is required before storing HighLevel OAuth tokens.");
+  const encrypted = encrypt(JSON.stringify(store));
+  if (await saveEncryptedCredentialStore("highlevel", encrypted)) return;
   await mkdir(path.dirname(config.tokenStorePath), { recursive: true });
-  await writeFile(config.tokenStorePath, JSON.stringify({ encrypted: encrypt(JSON.stringify(store)) }, null, 2), "utf8");
+  await writeFile(config.tokenStorePath, JSON.stringify({ encrypted }, null, 2), "utf8");
 }
 
 function encrypt(value: string) {

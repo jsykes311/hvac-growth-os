@@ -2,6 +2,12 @@ import crypto from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
+import {
+  credentialStorageLabel,
+  isDatabaseCredentialStoreConfigured,
+  loadEncryptedCredentialStore,
+  saveEncryptedCredentialStore,
+} from "@/lib/server/credential-store";
 
 type PermissionMode = "Read Only" | "Draft Mode" | "Agency Mode" | "Owner Mode";
 
@@ -185,16 +191,16 @@ export async function getGoogleAdsConnectionStatus() {
   const store = await loadGoogleAdsStore();
   const setup = googleAdsSetupStatus();
   const config = googleAdsConfig();
+  const connected = Boolean(store.tokenSet?.refreshToken);
   return {
     googleAds: {
       activeCustomerId: store.activeCustomerId,
-      connected: Boolean(store.tokenSet?.refreshToken),
+      connected,
       configured: setup.ready,
-      credentialStorage: store.tokenSet?.refreshToken
-        ? config.tokenStoreIsTemporary
-          ? "In-app temporary token store"
-          : "Configured token store path"
-        : "Not connected",
+      credentialStorage: credentialStorageLabel({
+        connected,
+        fileStoreConfigured: !config.tokenStoreIsTemporary,
+      }),
       customerIds: store.customerIds,
       lastSyncAt: store.lastSyncAt,
       permissionMode: store.permissionMode,
@@ -346,10 +352,18 @@ function googleHeaders(accessToken: string) {
 
 async function loadGoogleAdsStore(): Promise<GoogleAdsStore> {
   const config = googleAdsConfig();
+  if (isDatabaseCredentialStoreConfigured()) {
+    const encrypted = await loadEncryptedCredentialStore("google_ads");
+    if (encrypted) return { ...defaultStore(), ...JSON.parse(decrypt(encrypted)) };
+  }
+
   try {
     const raw = await readFile(config.tokenStorePath, "utf8");
     const parsed = JSON.parse(raw) as { encrypted?: string };
     if (!parsed.encrypted) return defaultStore();
+    if (isDatabaseCredentialStoreConfigured()) {
+      await saveEncryptedCredentialStore("google_ads", parsed.encrypted);
+    }
     return { ...defaultStore(), ...JSON.parse(decrypt(parsed.encrypted)) };
   } catch {
     return defaultStore();
@@ -359,8 +373,10 @@ async function loadGoogleAdsStore(): Promise<GoogleAdsStore> {
 async function saveGoogleAdsStore(store: GoogleAdsStore) {
   const config = googleAdsConfig();
   if (!config.encryptionKey) throw new Error("GOOGLE_TOKEN_ENCRYPTION_KEY is required before storing Google OAuth tokens.");
+  const encrypted = encrypt(JSON.stringify(store));
+  if (await saveEncryptedCredentialStore("google_ads", encrypted)) return;
   await mkdir(path.dirname(config.tokenStorePath), { recursive: true });
-  await writeFile(config.tokenStorePath, JSON.stringify({ encrypted: encrypt(JSON.stringify(store)) }, null, 2), "utf8");
+  await writeFile(config.tokenStorePath, JSON.stringify({ encrypted }, null, 2), "utf8");
 }
 
 function encrypt(value: string) {
