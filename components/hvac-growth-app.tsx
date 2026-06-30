@@ -200,6 +200,7 @@ type HighLevelRecord = {
   status?: string;
   source?: string;
   stage?: string;
+  type?: string;
   value?: number;
   createdAt?: string;
 };
@@ -2164,6 +2165,7 @@ function HighLevelDataTable({ rows }: { rows: HighLevelRecord[] }) {
         <thead className="bg-[#fbfbfa] text-xs uppercase tracking-[0.12em] text-graphite/55">
           <tr>
             <th className="px-4 py-3">Name</th>
+            <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3">Source</th>
             <th className="px-4 py-3">Stage</th>
@@ -2175,6 +2177,7 @@ function HighLevelDataTable({ rows }: { rows: HighLevelRecord[] }) {
           {rows.slice(0, 100).map((row) => (
             <tr key={row.id}>
               <td className="px-4 py-3 font-bold text-ink">{row.name}</td>
+              <td className="px-4 py-3 text-graphite/70">{row.type || "-"}</td>
               <td className="px-4 py-3 text-graphite/70">{row.status || "-"}</td>
               <td className="px-4 py-3 text-graphite/70">{row.source || "-"}</td>
               <td className="px-4 py-3 text-graphite/70">{row.stage || "-"}</td>

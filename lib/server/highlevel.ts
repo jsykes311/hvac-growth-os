@@ -31,6 +31,7 @@ export type HighLevelRecord = {
   stage?: string;
   value?: number;
   createdAt?: string;
+  type?: string;
 };
 
 export type RevenueFunnelPayload = {
@@ -391,12 +392,14 @@ async function fetchHighLevelData(accessToken: string, locationId: string, previ
   const normalizedOpportunities = normalizeRecords(opportunities, ["opportunities"]);
   const normalizedPipelines = normalizeRecords(pipelines, ["pipelines"]);
   const normalizedConversations = normalizeRecords(conversations, ["conversations"]);
-  const normalizedCalls = normalizeRecords(calls, ["conversations", "calls"]).filter((item) => /call|phone/i.test(`${item.status} ${item.name} ${item.source}`));
+  const normalizedCallSearchResults = normalizeRecords(calls, ["conversations", "calls", "messages"]).filter(isCallRecord);
+  const messageCalls = normalizedCallSearchResults.length ? [] : await fetchConversationCallMessages(accessToken, normalizedConversations);
+  const normalizedCalls = uniqueRecords([...normalizedCallSearchResults, ...messageCalls]);
   const normalizedForms = normalizeRecords(forms, ["forms"]);
   const normalizedFormSubmissions = normalizeRecords(formSubmissions, ["submissions", "formSubmissions", "forms"]);
   const normalizedOpportunityStages = normalizeOpportunityStages(pipelines);
   const syncAlerts = [
-    ...(normalizedCalls.length ? [] : ["No call data found for this HighLevel location. Confirm call tracking is enabled and the connected user has conversation access."]),
+    ...(normalizedCalls.length ? [] : [`No call data found. HVAC Growth OS read ${normalizedConversations.length} conversations, but HighLevel did not expose call-type events from conversation search or message history.`]),
     ...(normalizedFormSubmissions.length ? [] : ["No form submission data found. Confirm forms are connected to this location or that form-submission access is available."]),
   ];
   const revenueFunnel = buildRevenueFunnel(normalizedContacts, normalizedOpportunities, normalizedCalls, normalizedFormSubmissions, normalizedConversations);
@@ -431,6 +434,22 @@ async function fetchHighLevelData(accessToken: string, locationId: string, previ
     tags: normalizeRecords(tags, ["tags"]),
     workflows: normalizeRecords(workflows, ["workflows"]),
   };
+}
+
+async function fetchConversationCallMessages(accessToken: string, conversations: HighLevelRecord[]) {
+  const limitedConversations = conversations.slice(0, 50);
+  const messagePayloads = await Promise.all(limitedConversations.map((conversation) => (
+    highLevelGet(accessToken, `/conversations/${encodeURIComponent(conversation.id)}/messages`)
+  )));
+  return uniqueRecords(messagePayloads.flatMap((payload, index) => (
+    normalizeRecords(payload, ["messages", "conversationMessages", "data"])
+      .filter(isCallRecord)
+      .map((message) => ({
+        ...message,
+        source: message.source || "HighLevel conversation message",
+        stage: message.stage || limitedConversations[index]?.name || "",
+      }))
+  )));
 }
 
 async function highLevelGet(accessToken: string, endpoint: string) {
@@ -532,16 +551,32 @@ function firstArray(payload: any, keys: string[]) {
 function normalizeRecord(item: any): HighLevelRecord {
   const firstName = item.firstName || item.first_name || "";
   const lastName = item.lastName || item.last_name || "";
-  const name = item.name || item.fullName || item.title || [firstName, lastName].filter(Boolean).join(" ") || item.email || item.phone || item.id || item._id || "Unnamed";
+  const type = item.type || item.messageType || item.message_type || item.eventType || item.callStatus || item.call_status || item.direction || "";
+  const name = item.name || item.fullName || item.title || item.body || item.subject || [firstName, lastName].filter(Boolean).join(" ") || item.email || item.phone || item.id || item._id || "Unnamed";
   return {
     createdAt: item.createdAt || item.dateAdded || item.created_at || item.updatedAt || "",
-    id: String(item.id || item._id || item.locationId || item.pipelineId || item.name || crypto.randomUUID()),
+    id: String(item.id || item._id || item.messageId || item.conversationId || item.locationId || item.pipelineId || item.name || crypto.randomUUID()),
     name: String(name),
     source: item.source || item.contactSource || item.attributionSource || item.campaignName || item.campaign || "",
     stage: item.pipelineStageId || item.stageId || item.status || item.stage || item.pipelineStageName || "",
-    status: item.status || item.type || item.eventType || "",
+    status: item.status || item.callStatus || item.call_status || item.messageStatus || item.message_status || item.type || item.eventType || "",
+    type: String(type),
     value: Number(item.monetaryValue ?? item.value ?? item.pipelineValue ?? item.opportunityValue ?? 0),
   };
+}
+
+function isCallRecord(record: HighLevelRecord) {
+  return /call|phone|voicemail|missed/i.test(`${record.type} ${record.status} ${record.name} ${record.source}`);
+}
+
+function uniqueRecords(records: HighLevelRecord[]) {
+  const seen = new Set<string>();
+  return records.filter((record) => {
+    const key = record.id || `${record.name}-${record.createdAt}-${record.status}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function buildRevenueFunnel(
@@ -587,7 +622,7 @@ function buildRevenueFunnel(
 }
 
 function countMissedCalls(calls: HighLevelRecord[]) {
-  return calls.filter((item) => /missed|no answer|unanswered/i.test(`${item.status} ${item.name} ${item.source}`)).length;
+  return calls.filter((item) => /missed|no answer|unanswered/i.test(`${item.type} ${item.status} ${item.name} ${item.source}`)).length;
 }
 
 function buildSnapshots(
