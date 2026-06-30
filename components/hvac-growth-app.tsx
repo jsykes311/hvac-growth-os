@@ -476,6 +476,7 @@ export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
               campaign={campaign}
               campaignImage={campaignImage}
               contractorUrl={contractorUrl}
+              currentUser={currentUser}
               error={error}
               goal={goal}
               isCreatingCampaign={isCreatingCampaign}
@@ -601,6 +602,7 @@ function ResultsView({
   campaign,
   campaignImage,
   contractorUrl,
+  currentUser,
   error,
   goal,
   isCreatingCampaign,
@@ -623,6 +625,7 @@ function ResultsView({
   campaign: CampaignOutput | null;
   campaignImage: CampaignImage | null;
   contractorUrl: string;
+  currentUser: AuthSession;
   error: string;
   goal: string;
   isCreatingCampaign: boolean;
@@ -699,7 +702,7 @@ function ResultsView({
 
       {activeSection === "seo" && <SeoAnalysisPanel analysis={analysis} />}
       {activeSection === "ai-visibility" && <AiSeoAnalysisPanel analysis={analysis} />}
-      {activeSection === "connected-apps" && <ConnectedAppsSection />}
+      {activeSection === "connected-apps" && <ConnectedAppsSection currentUser={currentUser} />}
       {activeSection === "conversion-tracking" && <ConversionTrackingCenter analysis={analysis} />}
 
       {activeSection === "ai-cmo" && (
@@ -1379,7 +1382,7 @@ function DeployCenter({
   );
 }
 
-function ConnectedAppsSection() {
+function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
   const [status, setStatus] = useState<ConnectedAppStatus | null>(null);
   const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
   const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
@@ -1493,6 +1496,7 @@ function ConnectedAppsSection() {
 
   const googleAds = status?.googleAds;
   const highLevel = status?.highLevel;
+  const canManageSetup = canManageConnectedApps(currentUser);
   const tableRows = googleAdsData?.[activeTable] ?? [];
   const highLevelRows = highLevelData?.[activeHighLevelTable] ?? [];
   const syncedGoogleAdsClicks = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "clicks") : 0;
@@ -1532,7 +1536,9 @@ function ConnectedAppsSection() {
           connected={Boolean(googleAds?.connected)}
           description="Read campaigns, ad groups, keywords, search terms, ads, assets, budgets, and conversions."
           mode={googleAds?.permissionMode ?? "Read Only"}
-          primaryAction={googleAds?.configured ? (
+          primaryAction={!canManageSetup && !googleAds?.connected ? (
+            <ConnectionRequestButton appName="Google Ads" currentUser={currentUser} />
+          ) : googleAds?.configured ? (
             <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-4 text-sm font-black text-white" href="/api/google-ads/connect" rel="noreferrer" target="_blank">Connect Google Ads</a>
           ) : (
             <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink/10 px-4 text-sm font-black text-ink" href="#google-ads-setup">Open Setup</a>
@@ -1545,7 +1551,9 @@ function ConnectedAppsSection() {
           connected={Boolean(highLevel?.connected)}
           description="Read locations, contacts, opportunities, pipelines, conversations, calendars, forms, tags, workflows, custom fields, and revenue funnel metrics."
           mode={highLevel?.permissionMode ?? "Read Only"}
-          primaryAction={highLevel?.connectionSource === "API Key" ? (
+          primaryAction={!canManageSetup && !highLevel?.connected ? (
+            <ConnectionRequestButton appName="HighLevel" currentUser={currentUser} />
+          ) : highLevel?.connectionSource === "API Key" ? (
             <Button disabled variant="secondary">API Key Active</Button>
           ) : highLevel?.configured ? (
             <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-4 text-sm font-black text-white" href="/api/highlevel/connect" rel="noreferrer" target="_blank">Connect HighLevel</a>
@@ -1575,8 +1583,14 @@ function ConnectedAppsSection() {
         ))}
       </div>
 
-      <GoogleAdsSetupWizard googleAds={googleAds} />
-      <HighLevelSetupWizard highLevel={highLevel} onConfigured={refreshConnectedApps} />
+      {canManageSetup ? (
+        <>
+          <GoogleAdsSetupWizard googleAds={googleAds} />
+          <HighLevelSetupWizard highLevel={highLevel} onConfigured={refreshConnectedApps} />
+        </>
+      ) : (
+        <ClientConnectionSetupPanel currentUser={currentUser} googleAds={googleAds} highLevel={highLevel} />
+      )}
 
       <Panel>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
@@ -1779,6 +1793,107 @@ function ConnectedAppsSection() {
         <HighLevelDataTable rows={highLevelRows} />
       </Panel>
     </div>
+  );
+}
+
+function canManageConnectedApps(currentUser: AuthSession) {
+  return currentUser.role === "Admin" || currentUser.role === "TallTwin Team";
+}
+
+function ConnectionRequestButton({ appName, currentUser }: { appName: string; currentUser: AuthSession }) {
+  const subject = encodeURIComponent(`Connect ${appName} for HVAC Growth OS`);
+  const body = encodeURIComponent([
+    `Please connect ${appName} for my HVAC Growth OS workspace.`,
+    "",
+    `Requested by: ${currentUser.name} <${currentUser.email}>`,
+    "",
+    "I understand TallTwin will handle the secure setup and will only request approved read-only access for this version.",
+  ].join("\n"));
+
+  return (
+    <a
+      className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-4 text-sm font-black text-white"
+      href={`mailto:admin@talltwin.com?subject=${subject}&body=${body}`}
+    >
+      Request Setup
+    </a>
+  );
+}
+
+function ClientConnectionSetupPanel({
+  currentUser,
+  googleAds,
+  highLevel,
+}: {
+  currentUser: AuthSession;
+  googleAds?: ConnectedAppStatus["googleAds"];
+  highLevel?: ConnectedAppStatus["highLevel"];
+}) {
+  const requestedSubject = encodeURIComponent("Set up my HVAC Growth OS connected apps");
+  const requestedBody = encodeURIComponent([
+    "Please help connect my marketing accounts to HVAC Growth OS.",
+    "",
+    `Requested by: ${currentUser.name} <${currentUser.email}>`,
+    "",
+    "Apps needed:",
+    `- Google Ads: ${googleAds?.connected ? "already connected" : "needs setup"}`,
+    `- HighLevel: ${highLevel?.connected ? "already connected" : "needs setup"}`,
+    "",
+    "I want TallTwin to handle the secure backend setup and tell me what access invitations are needed.",
+  ].join("\n"));
+
+  return (
+    <Panel>
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <Eyebrow>Account Connections</Eyebrow>
+          <h3 className="text-xl font-black text-ink">TallTwin handles secure setup for you.</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+            You do not need API keys, environment variables, or developer settings. Request setup, then TallTwin will connect approved accounts in read-only mode.
+          </p>
+        </div>
+        <a className="inline-flex h-11 items-center justify-center rounded-full bg-ink px-4 text-sm font-black text-white" href={`mailto:admin@talltwin.com?subject=${requestedSubject}&body=${requestedBody}`}>
+          Request Account Setup
+        </a>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <EndUserConnectionCard
+          detail={googleAds?.connected ? "Google Ads performance can be used in recommendations." : "TallTwin needs approved Google Ads access before this data can sync."}
+          status={googleAds?.connected ? "Connected" : "Setup Needed"}
+          title="Google Ads"
+        />
+        <EndUserConnectionCard
+          detail={highLevel?.connected ? "CRM calls, leads, and opportunities can be used in recommendations." : "TallTwin needs approved HighLevel location access before this data can sync."}
+          status={highLevel?.connected ? "Connected" : "Setup Needed"}
+          title="HighLevel"
+        />
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-ink/10 bg-[#fbfbfa] p-5">
+        <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">What you may be asked for</h4>
+        <div className="mt-3 grid gap-3 text-sm font-bold leading-6 text-graphite/75">
+          <p>1. Invite TallTwin to the correct Google Ads account or manager account.</p>
+          <p>2. Confirm the HighLevel location/sub-account for this business.</p>
+          <p>3. Approve read-only access so HVAC Growth OS can sync performance data.</p>
+          <p>4. Return here and click Refresh Status after TallTwin confirms setup.</p>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function EndUserConnectionCard({ detail, status, title }: { detail: string; status: "Connected" | "Setup Needed"; title: string }) {
+  return (
+    <article className="rounded-2xl border border-ink/10 bg-white p-5 shadow-[0_10px_28px_rgba(7,27,51,0.035)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h4 className="text-lg font-black text-ink">{title}</h4>
+        <span className={`rounded-full border px-3 py-1 text-xs font-black ${status === "Connected" ? "border-teal-200 bg-teal-50 text-teal-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+          {status}
+        </span>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-graphite/70">{detail}</p>
+    </article>
   );
 }
 
