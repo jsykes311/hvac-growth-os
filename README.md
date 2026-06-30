@@ -63,8 +63,9 @@ HighLevel read-only Connected Apps variables:
 ```bash
 HIGHLEVEL_CLIENT_ID=...
 HIGHLEVEL_CLIENT_SECRET=...
-HIGHLEVEL_OAUTH_REDIRECT_URI=https://your-render-domain.onrender.com/api/highlevel/callback
+HIGHLEVEL_REDIRECT_URI=https://your-render-domain.onrender.com/api/highlevel/callback
 HIGHLEVEL_API_KEY=optional-read-only-fallback
+HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN=optional-read-only-fallback-alias
 HIGHLEVEL_LOCATION_ID=required-with-api-key-fallback
 HIGHLEVEL_TOKEN_ENCRYPTION_KEY=use-a-long-random-secret
 HIGHLEVEL_OAUTH_SCOPES="locations.readonly contacts.readonly opportunities.readonly conversations.readonly calendars.readonly forms.readonly tags.readonly workflows.readonly custom-fields.readonly"
@@ -94,7 +95,7 @@ Render settings:
 - Required secret env vars: `OPENAI_API_KEY`, `FIRECRAWL_API_KEY`, `HVAC_GROWTH_OS_AUTH_SECRET`, `HVAC_GROWTH_OS_USERS`
 - Optional env vars: `OPENAI_MODEL`, `OPENAI_IMAGE_MODEL`
 - Google Ads read-only connector env vars: `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID`, `GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, optional `GOOGLE_ADS_API_VERSION`
-- HighLevel read-only connector env vars: OAuth path: `HIGHLEVEL_CLIENT_ID`, `HIGHLEVEL_CLIENT_SECRET`, `HIGHLEVEL_OAUTH_REDIRECT_URI`, `HIGHLEVEL_TOKEN_ENCRYPTION_KEY`; API key fallback path: `HIGHLEVEL_API_KEY`, `HIGHLEVEL_LOCATION_ID`, `HIGHLEVEL_TOKEN_ENCRYPTION_KEY`; optional `HIGHLEVEL_OAUTH_SCOPES`, optional `HIGHLEVEL_API_VERSION`
+- HighLevel read-only connector env vars: OAuth path: `HIGHLEVEL_CLIENT_ID`, `HIGHLEVEL_CLIENT_SECRET`, `HIGHLEVEL_REDIRECT_URI`, `HIGHLEVEL_TOKEN_ENCRYPTION_KEY`; API key fallback path: `HIGHLEVEL_API_KEY` or `HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN`, `HIGHLEVEL_LOCATION_ID`, `HIGHLEVEL_TOKEN_ENCRYPTION_KEY`; optional `HIGHLEVEL_OAUTH_SCOPES`, optional `HIGHLEVEL_API_VERSION`
 
 Deploy flow:
 

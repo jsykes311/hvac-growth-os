@@ -1,12 +1,12 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { buildHighLevelOAuthUrl, isHighLevelConfigured } from "@/lib/server/highlevel";
+import { buildHighLevelOAuthUrl, isHighLevelOAuthConfigured } from "@/lib/server/highlevel";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   try {
-    if (!isHighLevelConfigured()) {
+    if (!isHighLevelOAuthConfigured()) {
       return NextResponse.redirect(new URL("/?connectedApps=highlevel-setup#highlevel-setup", request.nextUrl.origin));
     }
 

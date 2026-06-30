@@ -13,6 +13,16 @@ type HighLevelTokenSet = {
   scope: string;
 };
 
+export class HighLevelSyncError extends Error {
+  status: number;
+
+  constructor(message: string, status = 500) {
+    super(message);
+    this.name = "HighLevelSyncError";
+    this.status = status;
+  }
+}
+
 export type HighLevelRecord = {
   id: string;
   name: string;
@@ -28,10 +38,16 @@ export type RevenueFunnelPayload = {
   googleAdsSpend: number;
   crmLeads: number;
   phoneCalls: number;
+  missedCalls: number;
+  formsSubmitted: number;
+  totalConversations: number;
+  totalOpportunities: number;
   leads: number;
   estimates: number;
   wonOpportunities: number;
   wonJobs: number;
+  openPipelineValue: number;
+  closedWonValue: number;
   pipelineValue: number;
   revenue: number;
   estimatedRevenue: number;
@@ -47,6 +63,8 @@ export type HighLevelSnapshot = {
   estimatedRevenue: number;
   openOpportunities: number;
   phoneCalls: number;
+  missedCalls: number;
+  formsSubmitted: number;
   pipelineValue: number;
   syncedAt: string;
   wonJobs: number;
@@ -65,11 +83,13 @@ export type HighLevelDataPayload = {
   calls: HighLevelRecord[];
   calendars: HighLevelRecord[];
   forms: HighLevelRecord[];
+  formSubmissions: HighLevelRecord[];
   tags: HighLevelRecord[];
   workflows: HighLevelRecord[];
   customFields: HighLevelRecord[];
   revenueFunnel: RevenueFunnelPayload;
   snapshots: HighLevelSnapshot[];
+  syncAlerts: string[];
 };
 
 type HighLevelStore = {
@@ -101,12 +121,12 @@ const DEFAULT_SCOPES = [
 export function highLevelConfig() {
   return {
     apiVersion: process.env.HIGHLEVEL_API_VERSION || DEFAULT_VERSION,
-    apiKey: process.env.HIGHLEVEL_API_KEY || "",
+    apiKey: process.env.HIGHLEVEL_API_KEY || process.env.HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN || "",
     clientId: process.env.HIGHLEVEL_CLIENT_ID || "",
     clientSecret: process.env.HIGHLEVEL_CLIENT_SECRET || "",
     encryptionKey: process.env.HIGHLEVEL_TOKEN_ENCRYPTION_KEY || process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || "",
     locationId: process.env.HIGHLEVEL_LOCATION_ID || "",
-    redirectUri: process.env.HIGHLEVEL_OAUTH_REDIRECT_URI || "",
+    redirectUri: process.env.HIGHLEVEL_REDIRECT_URI || process.env.HIGHLEVEL_OAUTH_REDIRECT_URI || "",
     scopes: process.env.HIGHLEVEL_OAUTH_SCOPES || DEFAULT_SCOPES,
     tokenStorePath: process.env.HIGHLEVEL_TOKEN_STORE_PATH || path.join(os.tmpdir(), "hvac-growth-os-highlevel-store.json"),
   };
@@ -132,14 +152,14 @@ export function highLevelSetupStatus() {
     {
       configured: Boolean(config.redirectUri) || apiKeyReady,
       detail: "Must match the redirect URI configured in the HighLevel marketplace app. Optional when API key fallback is configured.",
-      envVar: "HIGHLEVEL_OAUTH_REDIRECT_URI",
+      envVar: "HIGHLEVEL_REDIRECT_URI",
       label: "HighLevel OAuth redirect URI",
     },
     {
       configured: Boolean(config.apiKey) || oauthReady,
-      detail: "Fallback read-only connection when OAuth is not available for the account.",
-      envVar: "HIGHLEVEL_API_KEY",
-      label: "HighLevel API key fallback",
+      detail: "Fallback read-only connection when OAuth is not available for this location-level account.",
+      envVar: "HIGHLEVEL_API_KEY or HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN",
+      label: "HighLevel private integration token",
     },
     {
       configured: Boolean(config.locationId) || oauthReady,
@@ -164,6 +184,11 @@ export function highLevelSetupStatus() {
 
 export function isHighLevelConfigured() {
   return highLevelSetupStatus().ready;
+}
+
+export function isHighLevelOAuthConfigured() {
+  const config = highLevelConfig();
+  return Boolean(config.clientId && config.clientSecret && config.redirectUri && config.encryptionKey);
 }
 
 export function buildHighLevelOAuthUrl({ origin, state }: { origin: string; state: string }) {
@@ -239,19 +264,26 @@ export async function getHighLevelConnectionStatus() {
   return {
     highLevel: {
       activeLocationId: store.activeLocationId || config.locationId,
+      callsTracked: data?.revenueFunnel.phoneCalls ?? 0,
       closedWon: data?.revenueFunnel.wonOpportunities ?? 0,
+      closedWonValue: data?.revenueFunnel.closedWonValue ?? 0,
       connected,
       connectedLocation: store.connectedLocation,
       connectionSource: store.tokenSet?.refreshToken ? "OAuth" : hasApiKeyFallback ? "API Key" : "",
       configured: setup.ready,
       lastSyncAt: store.lastSyncAt,
       leadSources: data?.revenueFunnel.leadSources ?? [],
+      formsSubmitted: data?.revenueFunnel.formsSubmitted ?? 0,
+      missedCalls: data?.revenueFunnel.missedCalls ?? 0,
       openOpportunities: data ? Math.max(data.opportunities.length - data.revenueFunnel.wonOpportunities, 0) : 0,
+      openPipelineValue: data?.revenueFunnel.openPipelineValue ?? 0,
       permissionMode: store.permissionMode,
       pipelineValue: data?.revenueFunnel.pipelineValue ?? 0,
       setup,
       tokenStored: Boolean(store.tokenSet?.refreshToken || hasApiKeyFallback),
       totalContacts: data?.contacts.length ?? 0,
+      totalConversations: data?.conversations.length ?? 0,
+      totalOpportunities: data?.opportunities.length ?? 0,
     },
   };
 }
@@ -265,8 +297,8 @@ export async function syncHighLevelData() {
   const store = await loadHighLevelStore();
   const config = highLevelConfig();
   const apiKeyFallbackReady = Boolean(config.apiKey && config.locationId);
-  if (!store.tokenSet?.refreshToken && !apiKeyFallbackReady) throw new Error("Connect HighLevel with OAuth or configure the read-only API key fallback before syncing data.");
-  if (!isHighLevelConfigured()) throw new Error("HighLevel OAuth or API key env vars and token encryption are required.");
+  if (!store.tokenSet?.refreshToken && !apiKeyFallbackReady) throw new HighLevelSyncError("Not connected. Connect HighLevel with OAuth or configure the location-level private integration token before syncing data.", 409);
+  if (!isHighLevelConfigured()) throw new HighLevelSyncError("Not connected. HighLevel OAuth or private integration token settings are incomplete.", 409);
 
   const accessToken = apiKeyFallbackReady && !store.tokenSet?.refreshToken ? config.apiKey : await getFreshHighLevelAccessToken(store);
   const locationId = store.activeLocationId || store.tokenSet?.locationId || config.locationId;
@@ -297,6 +329,7 @@ async function fetchHighLevelData(accessToken: string, locationId: string, previ
     calls,
     calendars,
     forms,
+    formSubmissions,
     tags,
     workflows,
     customFields,
@@ -309,6 +342,7 @@ async function fetchHighLevelData(accessToken: string, locationId: string, previ
     highLevelGet(accessToken, `/conversations/search?locationId=${encodeURIComponent(locationId)}&type=CALL`),
     highLevelGet(accessToken, `/calendars/?locationId=${encodeURIComponent(locationId)}`),
     highLevelGet(accessToken, `/forms/?locationId=${encodeURIComponent(locationId)}`),
+    highLevelGet(accessToken, `/forms/submissions?locationId=${encodeURIComponent(locationId)}`),
     highLevelGet(accessToken, `/locations/${locationId}/tags`),
     highLevelGet(accessToken, `/workflows/?locationId=${encodeURIComponent(locationId)}`),
     highLevelGet(accessToken, `/locations/${locationId}/customFields`),
@@ -318,14 +352,23 @@ async function fetchHighLevelData(accessToken: string, locationId: string, previ
   const normalizedContacts = normalizeRecords(contacts, ["contacts"]);
   const normalizedOpportunities = normalizeRecords(opportunities, ["opportunities"]);
   const normalizedPipelines = normalizeRecords(pipelines, ["pipelines"]);
+  const normalizedConversations = normalizeRecords(conversations, ["conversations"]);
   const normalizedCalls = normalizeRecords(calls, ["conversations", "calls"]).filter((item) => /call|phone/i.test(`${item.status} ${item.name} ${item.source}`));
+  const normalizedForms = normalizeRecords(forms, ["forms"]);
+  const normalizedFormSubmissions = normalizeRecords(formSubmissions, ["submissions", "formSubmissions", "forms"]);
   const normalizedOpportunityStages = normalizeOpportunityStages(pipelines);
-  const revenueFunnel = buildRevenueFunnel(normalizedContacts, normalizedOpportunities, normalizedCalls);
+  const syncAlerts = [
+    ...(normalizedCalls.length ? [] : ["No call data found for this HighLevel location. Confirm call tracking is enabled and the connected user has conversation access."]),
+    ...(normalizedFormSubmissions.length ? [] : ["No form submission data found. Confirm forms are connected to this location or that form-submission access is available."]),
+  ];
+  const revenueFunnel = buildRevenueFunnel(normalizedContacts, normalizedOpportunities, normalizedCalls, normalizedFormSubmissions, normalizedConversations);
   const lastSyncAt = new Date().toISOString();
   const snapshots = buildSnapshots(previousSnapshots, lastSyncAt, {
     contacts: normalizedContacts,
+    formsSubmitted: normalizedFormSubmissions.length,
     opportunities: normalizedOpportunities,
     phoneCalls: normalizedCalls.length,
+    missedCalls: countMissedCalls(normalizedCalls),
     revenueFunnel,
   });
 
@@ -335,9 +378,10 @@ async function fetchHighLevelData(accessToken: string, locationId: string, previ
     calls: normalizedCalls,
     connectedLocation: locationRecord.name || locationId,
     contacts: normalizedContacts,
-    conversations: normalizeRecords(conversations, ["conversations"]),
+    conversations: normalizedConversations,
     customFields: normalizeRecords(customFields, ["customFields", "custom_fields"]),
-    forms: normalizeRecords(forms, ["forms"]),
+    forms: normalizedForms,
+    formSubmissions: normalizedFormSubmissions,
     lastSyncAt,
     locations: [locationRecord],
     opportunities: normalizedOpportunities,
@@ -345,6 +389,7 @@ async function fetchHighLevelData(accessToken: string, locationId: string, previ
     pipelines: normalizedPipelines,
     revenueFunnel,
     snapshots,
+    syncAlerts,
     tags: normalizeRecords(tags, ["tags"]),
     workflows: normalizeRecords(workflows, ["workflows"]),
   };
@@ -358,10 +403,15 @@ async function highLevelGet(accessToken: string, endpoint: string) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       console.error("HighLevel read failed", endpoint, payload);
+      if (response.status === 401) throw new HighLevelSyncError("Token expired. Reconnect HighLevel or refresh the private integration token.", 401);
+      if (response.status === 403) throw new HighLevelSyncError("Missing location access. The connected HighLevel user or token cannot read this Comfort Guardians location.", 403);
+      if (response.status === 404 && endpoint.startsWith("/locations/")) throw new HighLevelSyncError("Missing location access. The configured HighLevel location ID was not found for this token.", 404);
+      if (response.status === 429) throw new HighLevelSyncError("API rate limited. HighLevel asked HVAC Growth OS to slow down. Wait a few minutes, then refresh data again.", 429);
       return {};
     }
     return payload;
   } catch (error) {
+    if (error instanceof HighLevelSyncError) throw error;
     console.error("HighLevel read failed", endpoint, error);
     return {};
   }
@@ -390,7 +440,7 @@ async function getFreshHighLevelAccessToken(store: HighLevelStore) {
     refresh_token?: string;
     scope?: string;
   };
-  if (!response.ok || !payload.access_token) throw new Error(payload.error || "Unable to refresh HighLevel access token.");
+  if (!response.ok || !payload.access_token) throw new HighLevelSyncError("Token expired. Reconnect HighLevel to refresh location-level access.", 401);
 
   store.tokenSet = {
     accessToken: payload.access_token,
@@ -456,31 +506,50 @@ function normalizeRecord(item: any): HighLevelRecord {
   };
 }
 
-function buildRevenueFunnel(contacts: HighLevelRecord[], opportunities: HighLevelRecord[], calls: HighLevelRecord[]): RevenueFunnelPayload {
+function buildRevenueFunnel(
+  contacts: HighLevelRecord[],
+  opportunities: HighLevelRecord[],
+  calls: HighLevelRecord[],
+  formSubmissions: HighLevelRecord[],
+  conversations: HighLevelRecord[],
+): RevenueFunnelPayload {
   const estimates = opportunities.filter((item) => /estimate|proposal|quoted|sent/i.test(`${item.stage} ${item.status} ${item.name}`));
   const won = opportunities.filter((item) => /won|closed won|sold/i.test(`${item.stage} ${item.status}`));
+  const openOpportunities = opportunities.filter((item) => !/won|closed won|lost|abandoned|sold/i.test(`${item.stage} ${item.status}`));
   const revenue = sum(won.map((item) => item.value || 0));
   const pipelineValue = sum(opportunities.map((item) => item.value || 0));
+  const openPipelineValue = sum(openOpportunities.map((item) => item.value || 0));
   const estimatedRevenue = revenue || sum([...won, ...estimates].map((item) => item.value || 0));
   const googleAdsSpend = 0;
+  const missedCalls = countMissedCalls(calls);
 
   return {
+    closedWonValue: revenue,
     campaignAttribution: groupRecords([...contacts, ...opportunities], "source").slice(0, 8).map((row) => ({ campaign: row.label, leads: row.count, value: row.value })),
     crmLeads: contacts.length,
     estimates: estimates.length,
     estimatedRevenue,
+    formsSubmitted: formSubmissions.length,
     googleAdsClicks: 0,
     googleAdsSpend,
     leadSources: groupRecords([...contacts, ...opportunities], "source").slice(0, 8).map((row) => ({ source: row.label, count: row.count, value: row.value })),
     leads: contacts.length,
+    missedCalls,
+    openPipelineValue,
     opportunityStages: groupRecords(opportunities, "stage").slice(0, 10).map((row) => ({ stage: row.label, count: row.count, value: row.value })),
     phoneCalls: calls.length,
     pipelineValue,
     revenue,
     roi: googleAdsSpend ? Number((revenue / googleAdsSpend).toFixed(2)) : 0,
+    totalConversations: conversations.length,
+    totalOpportunities: opportunities.length,
     wonJobs: won.length,
     wonOpportunities: won.length,
   };
+}
+
+function countMissedCalls(calls: HighLevelRecord[]) {
+  return calls.filter((item) => /missed|no answer|unanswered/i.test(`${item.status} ${item.name} ${item.source}`)).length;
 }
 
 function buildSnapshots(
@@ -488,8 +557,10 @@ function buildSnapshots(
   syncedAt: string,
   data: {
     contacts: HighLevelRecord[];
+    formsSubmitted: number;
     opportunities: HighLevelRecord[];
     phoneCalls: number;
+    missedCalls: number;
     revenueFunnel: RevenueFunnelPayload;
   },
 ) {
@@ -497,6 +568,8 @@ function buildSnapshots(
     closedWon: data.revenueFunnel.wonOpportunities,
     contacts: data.contacts.length,
     estimatedRevenue: data.revenueFunnel.estimatedRevenue,
+    formsSubmitted: data.formsSubmitted,
+    missedCalls: data.missedCalls,
     openOpportunities: Math.max(data.opportunities.length - data.revenueFunnel.wonOpportunities, 0),
     phoneCalls: data.phoneCalls,
     pipelineValue: data.revenueFunnel.pipelineValue,
@@ -581,13 +654,15 @@ function emptyHighLevelData(activeLocationId: string, connectedLocation: string,
     conversations: [],
     customFields: [],
     forms: [],
+    formSubmissions: [],
     lastSyncAt,
     locations: [],
     opportunities: [],
     opportunityStages: [],
     pipelines: [],
-    revenueFunnel: buildRevenueFunnel([], [], []),
+    revenueFunnel: buildRevenueFunnel([], [], [], [], []),
     snapshots,
+    syncAlerts: [],
     tags: [],
     workflows: [],
   };

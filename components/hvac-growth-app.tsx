@@ -144,14 +144,19 @@ type ConnectedAppStatus = {
   };
   highLevel: {
     activeLocationId: string;
+    callsTracked: number;
     closedWon: number;
+    closedWonValue: number;
     connected: boolean;
     connectedLocation: string;
     connectionSource: string;
     configured: boolean;
+    formsSubmitted: number;
     lastSyncAt: string;
     leadSources: Array<{ source: string; count: number; value: number }>;
+    missedCalls: number;
     openOpportunities: number;
+    openPipelineValue: number;
     permissionMode: PermissionMode;
     pipelineValue: number;
     setup: {
@@ -161,6 +166,8 @@ type ConnectedAppStatus = {
     };
     tokenStored: boolean;
     totalContacts: number;
+    totalConversations: number;
+    totalOpportunities: number;
   };
 };
 type GoogleAdsMetricRow = {
@@ -201,10 +208,16 @@ type RevenueFunnelPayload = {
   googleAdsSpend: number;
   crmLeads: number;
   phoneCalls: number;
+  missedCalls: number;
+  formsSubmitted: number;
+  totalConversations: number;
+  totalOpportunities: number;
   leads: number;
   estimates: number;
   wonOpportunities: number;
   wonJobs: number;
+  openPipelineValue: number;
+  closedWonValue: number;
   pipelineValue: number;
   revenue: number;
   estimatedRevenue: number;
@@ -217,6 +230,8 @@ type HighLevelSnapshot = {
   closedWon: number;
   contacts: number;
   estimatedRevenue: number;
+  formsSubmitted: number;
+  missedCalls: number;
   openOpportunities: number;
   phoneCalls: number;
   pipelineValue: number;
@@ -236,11 +251,13 @@ type HighLevelDataPayload = {
   calls: HighLevelRecord[];
   calendars: HighLevelRecord[];
   forms: HighLevelRecord[];
+  formSubmissions: HighLevelRecord[];
   tags: HighLevelRecord[];
   workflows: HighLevelRecord[];
   customFields: HighLevelRecord[];
   revenueFunnel: RevenueFunnelPayload;
   snapshots: HighLevelSnapshot[];
+  syncAlerts: string[];
 };
 type ImplementationChannel = {
   target: DeploymentTarget;
@@ -1348,7 +1365,7 @@ function ConnectedAppsSection() {
   const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
   const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
   const [activeTable, setActiveTable] = useState<keyof Pick<GoogleAdsDataPayload, "campaigns" | "adGroups" | "keywords" | "searchTerms" | "ads" | "assets" | "conversions">>("campaigns");
-  const [activeHighLevelTable, setActiveHighLevelTable] = useState<keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "tags" | "workflows" | "customFields">>("contacts");
+  const [activeHighLevelTable, setActiveHighLevelTable] = useState<keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "formSubmissions" | "tags" | "workflows" | "customFields">>("contacts");
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSyncingHighLevel, setIsSyncingHighLevel] = useState(false);
@@ -1418,7 +1435,7 @@ function ConnectedAppsSection() {
     try {
       const response = await fetch("/api/highlevel/sync", { method: "POST" });
       const payload = (await response.json()) as { data?: HighLevelDataPayload } & ApiError;
-      if (!response.ok) throw new Error("HighLevel is not ready to sync yet. Review the setup checklist below, then try again.");
+      if (!response.ok) throw new Error(payload.error || "HighLevel is not ready to sync yet. Review the setup checklist below, then try again.");
       setHighLevelData(payload.data ?? null);
       await refreshConnectedApps();
       setMessage("HighLevel data refreshed in read-only mode.");
@@ -1449,6 +1466,7 @@ function ConnectedAppsSection() {
   const highLevel = status?.highLevel;
   const tableRows = googleAdsData?.[activeTable] ?? [];
   const highLevelRows = highLevelData?.[activeHighLevelTable] ?? [];
+  const syncedGoogleAdsClicks = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "clicks") : 0;
 
   return (
     <div className="grid gap-5">
@@ -1609,25 +1627,40 @@ function ConnectedAppsSection() {
           </div>
           <PermissionModePills activeMode={highLevel?.permissionMode ?? "Read Only"} />
         </div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-4">
+        <div className="mt-5 grid gap-4 lg:grid-cols-5">
           <InfoTile label="Connection" value={highLevel?.connected ? "Connected" : highLevel?.configured ? "Not connected" : "Needs setup"} />
           <InfoTile label="Connection type" value={highLevel?.connectionSource || "Not selected"} />
           <InfoTile label="Last sync" value={highLevel?.lastSyncAt ? new Date(highLevel.lastSyncAt).toLocaleString() : "Never synced"} />
           <InfoTile label="Connected location" value={highLevel?.connectedLocation || highLevel?.activeLocationId || "None selected"} />
+          <InfoTile label="Location ID" value={highLevel?.activeLocationId || highLevelData?.activeLocationId || "Not synced"} />
         </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-4">
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <InfoTile label="Total contacts" value={String(highLevel?.totalContacts ?? highLevelData?.contacts.length ?? 0)} />
+          <InfoTile label="Total conversations" value={String(highLevel?.totalConversations ?? highLevelData?.conversations.length ?? 0)} />
+          <InfoTile label="Total opportunities" value={String(highLevel?.totalOpportunities ?? highLevelData?.opportunities.length ?? 0)} />
           <InfoTile label="Open opportunities" value={String(highLevel?.openOpportunities ?? 0)} />
+          <InfoTile label="Open pipeline value" value={`$${Math.round(highLevel?.openPipelineValue ?? highLevelData?.revenueFunnel.openPipelineValue ?? 0).toLocaleString()}`} />
           <InfoTile label="Closed won" value={String(highLevel?.closedWon ?? 0)} />
+          <InfoTile label="Closed won value" value={`$${Math.round(highLevel?.closedWonValue ?? highLevelData?.revenueFunnel.closedWonValue ?? 0).toLocaleString()}`} />
+          <InfoTile label="Calls tracked" value={String(highLevel?.callsTracked ?? highLevelData?.calls.length ?? 0)} />
+          <InfoTile label="Missed calls" value={String(highLevel?.missedCalls ?? highLevelData?.revenueFunnel.missedCalls ?? 0)} />
+          <InfoTile label="Forms submitted" value={String(highLevel?.formsSubmitted ?? highLevelData?.formSubmissions.length ?? 0)} />
           <InfoTile label="Pipeline value" value={`$${Math.round(highLevel?.pipelineValue ?? highLevelData?.revenueFunnel.pipelineValue ?? 0).toLocaleString()}`} />
         </div>
+        {highLevelData?.syncAlerts.length ? (
+          <div className="mt-5 grid gap-2">
+            {highLevelData.syncAlerts.map((alert) => (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800" key={alert}>{alert}</p>
+            ))}
+          </div>
+        ) : null}
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <MiniAttributionTable rows={(highLevel?.leadSources ?? highLevelData?.revenueFunnel.leadSources ?? []).map((row) => [row.source, String(row.count), `$${Math.round(row.value).toLocaleString()}`])} title="Lead Sources" />
           <MiniSnapshotTable snapshots={highLevelData?.snapshots ?? []} />
         </div>
       </Panel>
 
-      <RevenueFunnelPanel funnel={highLevelData?.revenueFunnel} highLevelConnected={Boolean(highLevel?.connected)} />
+      <RevenueFunnelPanel funnel={highLevelData?.revenueFunnel} googleAdsClicks={syncedGoogleAdsClicks} highLevelConnected={Boolean(highLevel?.connected)} />
 
       <Panel>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
@@ -1638,7 +1671,7 @@ function ConnectedAppsSection() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(["contacts", "opportunities", "opportunityStages", "pipelines", "conversations", "calls", "calendars", "forms", "tags", "workflows", "customFields"] as const).map((table) => (
+            {(["contacts", "opportunities", "opportunityStages", "pipelines", "conversations", "calls", "calendars", "forms", "formSubmissions", "tags", "workflows", "customFields"] as const).map((table) => (
               <button
                 className={`rounded-full px-3 py-2 text-xs font-black transition ${activeHighLevelTable === table ? "bg-ink text-white" : "border border-ink/10 bg-white text-ink hover:border-flame/40"}`}
                 key={table}
@@ -1775,9 +1808,9 @@ function HighLevelSetupWizard({ highLevel }: { highLevel?: ConnectedAppStatus["h
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <Eyebrow>HighLevel Setup</Eyebrow>
-          <h3 className="text-xl font-black text-ink">Connect HighLevel safely in read-only mode.</h3>
+          <h3 className="text-xl font-black text-ink">Connect the Comfort Guardians HighLevel location safely in read-only mode.</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
-            Complete these setup steps before OAuth is enabled. HVAC Growth OS will read CRM performance data for recommendations, funnel reporting, and attribution analysis only.
+            Complete OAuth setup or add a location-level private integration token. HVAC Growth OS will read CRM performance data for recommendations, funnel reporting, and attribution analysis only.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-2 text-xs font-black ${connected ? "border-green-200 bg-green-50 text-green-700" : ready ? "border-teal-200 bg-teal-50 text-teal-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
@@ -1807,11 +1840,11 @@ function HighLevelSetupWizard({ highLevel }: { highLevel?: ConnectedAppStatus["h
         <div className="rounded-2xl border border-ink/10 bg-ink p-5 text-white">
           <h4 className="text-lg font-black">Read-only CRM checklist</h4>
           <div className="mt-4 grid gap-3 text-sm leading-6 text-white/75">
-            <p>1. Create or update a HighLevel marketplace app.</p>
-            <p>2. Add the OAuth redirect URI in HighLevel and Render.</p>
-            <p>3. Include read-only scopes for contacts, opportunities, conversations, calendars, forms, tags, workflows, and custom fields.</p>
+            <p>1. Use OAuth for the Comfort Guardians location when available.</p>
+            <p>2. If OAuth is not available, add a location-level private integration token and location ID in Render.</p>
+            <p>3. Include read-only access for contacts, opportunities, conversations, calls, calendars, forms, tags, and custom fields.</p>
             <p>4. Redeploy the service after changing environment variables.</p>
-            <p>5. Connect HighLevel and choose the correct location.</p>
+            <p>5. Refresh HighLevel Data and confirm the connected location name and location ID.</p>
           </div>
           <div className="mt-5 rounded-xl bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.12em] text-white/55">Current mode</p>
@@ -1853,32 +1886,38 @@ function PermissionModePills({ activeMode }: { activeMode: PermissionMode }) {
   );
 }
 
-function RevenueFunnelPanel({ funnel, highLevelConnected }: { funnel?: RevenueFunnelPayload; highLevelConnected: boolean }) {
+function RevenueFunnelPanel({ funnel, googleAdsClicks = 0, highLevelConnected }: { funnel?: RevenueFunnelPayload; googleAdsClicks?: number; highLevelConnected: boolean }) {
   const fallback: RevenueFunnelPayload = {
     campaignAttribution: [],
+    closedWonValue: 0,
     crmLeads: 0,
     estimates: 0,
     estimatedRevenue: 0,
+    formsSubmitted: 0,
     googleAdsClicks: 0,
     googleAdsSpend: 0,
     leadSources: [],
     leads: 0,
+    missedCalls: 0,
+    openPipelineValue: 0,
     opportunityStages: [],
     phoneCalls: 0,
     pipelineValue: 0,
     revenue: 0,
     roi: 0,
+    totalConversations: 0,
+    totalOpportunities: 0,
     wonJobs: 0,
     wonOpportunities: 0,
   };
-  const data = funnel ?? fallback;
+  const data = { ...(funnel ?? fallback), googleAdsClicks: googleAdsClicks || funnel?.googleAdsClicks || 0 };
 
   return (
     <Panel>
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <Eyebrow>Revenue Funnel</Eyebrow>
-          <h3 className="text-xl font-black text-ink">Google Ads → Clicks → CRM Leads → Phone Calls → Estimates → Won Jobs → Estimated Revenue</h3>
+          <h3 className="text-xl font-black text-ink">Google Ads clicks → HighLevel calls → CRM leads → Estimates → Won jobs → Estimated revenue</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
             HighLevel data gives Revenue Engine a real CRM funnel. These are planning metrics from synced CRM records, not financial guarantees.
           </p>
@@ -1887,14 +1926,13 @@ function RevenueFunnelPanel({ funnel, highLevelConnected }: { funnel?: RevenueFu
           {highLevelConnected ? "CRM data available" : "Connect HighLevel"}
         </span>
       </div>
-      <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-7">
+      <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <FunnelMetric label="Google Ads Clicks" value={data.googleAdsClicks ? String(data.googleAdsClicks) : "Pending"} />
+        <FunnelMetric label="HighLevel Calls" value={String(data.phoneCalls)} />
         <FunnelMetric label="CRM Leads" value={String(data.crmLeads || data.leads)} />
-        <FunnelMetric label="Phone Calls" value={String(data.phoneCalls)} />
         <FunnelMetric label="Estimates" value={String(data.estimates)} />
         <FunnelMetric label="Won Jobs" value={String(data.wonJobs || data.wonOpportunities)} />
         <FunnelMetric label="Estimated Revenue" value={`$${Math.round(data.estimatedRevenue || data.revenue).toLocaleString()}`} />
-        <FunnelMetric label="ROI" value={data.roi ? `${data.roi}x` : "Pending"} />
       </div>
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <MiniAttributionTable rows={data.leadSources.map((row) => [row.source, String(row.count), `$${Math.round(row.value).toLocaleString()}`])} title="Lead Sources" />
@@ -1977,8 +2015,8 @@ function defaultHighLevelSetupItems() {
   return [
     { configured: false, detail: "Preferred path for sending users to HighLevel OAuth consent. Optional when API key fallback is configured.", envVar: "HIGHLEVEL_CLIENT_ID", label: "HighLevel OAuth client ID" },
     { configured: false, detail: "Preferred path for exchanging OAuth authorization codes. Optional when API key fallback is configured.", envVar: "HIGHLEVEL_CLIENT_SECRET", label: "HighLevel OAuth client secret" },
-    { configured: false, detail: "Must match the redirect URI in the HighLevel marketplace app. Optional when API key fallback is configured.", envVar: "HIGHLEVEL_OAUTH_REDIRECT_URI", label: "HighLevel OAuth redirect URI" },
-    { configured: false, detail: "Fallback read-only connection when OAuth is not available for the account.", envVar: "HIGHLEVEL_API_KEY", label: "HighLevel API key fallback" },
+    { configured: false, detail: "Must match the redirect URI in the HighLevel OAuth app. Optional when private token fallback is configured.", envVar: "HIGHLEVEL_REDIRECT_URI", label: "HighLevel OAuth redirect URI" },
+    { configured: false, detail: "Fallback read-only connection when OAuth is not available for the location-level account.", envVar: "HIGHLEVEL_API_KEY or HIGHLEVEL_PRIVATE_INTEGRATION_TOKEN", label: "HighLevel private integration token" },
     { configured: false, detail: "Required with API key fallback so HVAC Growth OS knows which HighLevel location to sync.", envVar: "HIGHLEVEL_LOCATION_ID", label: "HighLevel location ID" },
     { configured: false, detail: "Required to encrypt the stored HighLevel refresh token. Use a dedicated HighLevel key or the shared Google token key.", envVar: "HIGHLEVEL_TOKEN_ENCRYPTION_KEY", label: "HighLevel token encryption key" },
   ];
@@ -2029,6 +2067,10 @@ function GoogleAdsDataTable({ rows }: { rows: GoogleAdsMetricRow[] }) {
   );
 }
 
+function sumMetricRows(rows: GoogleAdsMetricRow[], field: keyof Pick<GoogleAdsMetricRow, "clicks" | "impressions" | "cost" | "conversions">) {
+  return rows.reduce((total, row) => total + Number(row[field] || 0), 0);
+}
+
 function HighLevelDataTable({ rows }: { rows: HighLevelRecord[] }) {
   if (!rows.length) {
     return (
@@ -2074,7 +2116,7 @@ function tableLabel(table: keyof Pick<GoogleAdsDataPayload, "campaigns" | "adGro
     .replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function highLevelTableLabel(table: keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "tags" | "workflows" | "customFields">) {
+function highLevelTableLabel(table: keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "formSubmissions" | "tags" | "workflows" | "customFields">) {
   return table
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (letter) => letter.toUpperCase());
@@ -2093,8 +2135,9 @@ function AiCmoSection({
   const [memory, setMemory] = useState<IntelligenceSnapshot[]>([]);
   const [clientNotes, setClientNotes] = useState("");
   const [crmFunnel, setCrmFunnel] = useState<RevenueFunnelPayload | null>(null);
+  const [googleAdsClicks, setGoogleAdsClicks] = useState(0);
   const hasCrmFunnelData = Boolean(crmFunnel && (crmFunnel.leads || crmFunnel.pipelineValue || crmFunnel.revenue));
-  const brief = buildAiCmoBrief(analysis, contractorUrl, ppcPlan, memory, crmFunnel ?? undefined);
+  const brief = buildAiCmoBrief(analysis, contractorUrl, ppcPlan, memory, crmFunnel ?? undefined, googleAdsClicks);
   const currentSnapshot = createIntelligenceSnapshot(analysis, ppcPlan, brief, clientNotes);
   const htmlReport = buildAiCmoHtmlReport(analysis, contractorUrl, brief, memory);
   const summary = buildAiCmoClientSummary(analysis, brief);
@@ -2112,12 +2155,20 @@ function AiCmoSection({
   }, [analysis, contractorUrl, memoryKey, ppcPlan]);
 
   useEffect(() => {
-    fetch("/api/highlevel/data", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload: { data?: HighLevelDataPayload } | null) => {
-        setCrmFunnel(payload?.data?.revenueFunnel ?? null);
-      })
-      .catch(() => setCrmFunnel(null));
+    void Promise.all([
+      fetch("/api/highlevel/data", { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload: { data?: HighLevelDataPayload } | null) => {
+          setCrmFunnel(payload?.data?.revenueFunnel ?? null);
+        })
+        .catch(() => setCrmFunnel(null)),
+      fetch("/api/google-ads/data", { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload: { data?: GoogleAdsDataPayload } | null) => {
+          setGoogleAdsClicks(payload?.data?.campaigns ? sumMetricRows(payload.data.campaigns, "clicks") : 0);
+        })
+        .catch(() => setGoogleAdsClicks(0)),
+    ]);
   }, []);
 
   function saveSnapshot() {
@@ -3132,15 +3183,24 @@ function PpcPlannerPanel({
   setOverrides: (value: PpcManualOverrides) => void;
 }) {
   const [crmFunnel, setCrmFunnel] = useState<RevenueFunnelPayload | null>(null);
+  const [googleAdsClicks, setGoogleAdsClicks] = useState(0);
   const hasCrmFunnelData = Boolean(crmFunnel && (crmFunnel.leads || crmFunnel.pipelineValue || crmFunnel.revenue));
 
   useEffect(() => {
-    fetch("/api/highlevel/data", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload: { data?: HighLevelDataPayload } | null) => {
-        setCrmFunnel(payload?.data?.revenueFunnel ?? null);
-      })
-      .catch(() => setCrmFunnel(null));
+    void Promise.all([
+      fetch("/api/highlevel/data", { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload: { data?: HighLevelDataPayload } | null) => {
+          setCrmFunnel(payload?.data?.revenueFunnel ?? null);
+        })
+        .catch(() => setCrmFunnel(null)),
+      fetch("/api/google-ads/data", { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload: { data?: GoogleAdsDataPayload } | null) => {
+          setGoogleAdsClicks(payload?.data?.campaigns ? sumMetricRows(payload.data.campaigns, "clicks") : 0);
+        })
+        .catch(() => setGoogleAdsClicks(0)),
+    ]);
   }, []);
 
   function updateOverride<K extends keyof PpcManualOverrides>(field: K, value: PpcManualOverrides[K]) {
@@ -3279,7 +3339,7 @@ function PpcPlannerPanel({
       </form>
 
       <div className="mt-6">
-        <RevenueFunnelPanel funnel={crmFunnel ?? undefined} highLevelConnected={hasCrmFunnelData} />
+        <RevenueFunnelPanel funnel={crmFunnel ?? undefined} googleAdsClicks={googleAdsClicks} highLevelConnected={hasCrmFunnelData} />
       </div>
 
       {ppcPlan && <PpcPlanResults plan={ppcPlan} />}
@@ -4611,6 +4671,7 @@ function buildAiCmoBrief(
   ppcPlan: PpcPlan | null,
   memory: IntelligenceSnapshot[],
   crmFunnel?: RevenueFunnelPayload,
+  googleAdsClicks = 0,
 ) {
   const marketing = buildMarketingIntelligence(analysis, ppcPlan, defaultMarketingSignals(analysis, ppcPlan));
   const market = buildMarketIntelligence(analysis, contractorUrl, ppcPlan, {
@@ -4647,6 +4708,7 @@ function buildAiCmoBrief(
   const missingPage = ppcPlan?.report.missingLandingPages.find((item) => !item.startsWith("No major"));
   const campaignToPromote = ppcPlan?.recommendedLaunchPlan[0]?.campaign || `Search | ${topService} | ${topCity}`;
   const actionConfidence = (offset = 0) => clampScore(baseConfidence + offset);
+  const crmAction = buildHighLevelCmoAction(crmFunnel, googleAdsClicks, actionConfidence);
   const actions = [
     {
       priority: "High",
@@ -4673,12 +4735,12 @@ function buildAiCmoBrief(
       relatedModule: "Marketing Intelligence",
     },
     {
-      priority: "Medium",
-      action: hasCrmData ? "Review HighLevel lead sources before shifting budget" : analysis.maintenancePlanMentioned ? "Send maintenance email to existing customers" : "Draft maintenance offer before emailing customers",
-      reason: hasCrmData ? `CRM attribution is available. Compare lead sources and opportunity stages before changing spend.` : "Maintenance messaging works best when the offer is clear and the CRM list is segmented.",
-      impact: hasCrmData ? "Cleaner source-level ROI" : "Repeat lead volume",
-      confidence: actionConfidence(hasCrmData ? 5 : -3),
-      relatedModule: "HighLevel / CRM",
+      priority: crmAction.priority,
+      action: crmAction.action,
+      reason: crmAction.reason,
+      impact: crmAction.impact,
+      confidence: crmAction.confidence,
+      relatedModule: crmAction.relatedModule,
     },
     {
       priority: missingPage ? "High" : "Medium",
@@ -4702,6 +4764,7 @@ function buildAiCmoBrief(
       { label: "Seasonality", value: currentHvacSeason() },
       { label: "HVAC Demand Level", value: `${marketing.hvacDemandIndex}/100` },
       { label: "Most Likely To Convert", value: `${topService} in ${topCity}` },
+      { label: "Google Ads Clicks", value: googleAdsClicks ? `${googleAdsClicks} synced clicks` : "Waiting on Google Ads sync" },
       { label: "CRM Leads", value: hasCrmData ? `${crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0} synced leads` : "HighLevel not connected" },
       { label: "Phone Calls", value: hasCrmData ? `${crmFunnel?.phoneCalls ?? 0} synced calls` : "Waiting on CRM sync" },
       { label: "Pipeline Value", value: hasCrmData ? `$${Math.round(crmFunnel?.pipelineValue ?? 0).toLocaleString()}` : "Waiting on CRM sync" },
@@ -4733,6 +4796,82 @@ function buildAiCmoBrief(
     ],
     lessonsLearned: buildLessonsLearned(memory, analysis, marketing.hvacDemandIndex, previous, older),
     predictions: buildPredictions(memory, topService, topCity, marketing.hvacDemandIndex, baseConfidence),
+  };
+}
+
+function buildHighLevelCmoAction(
+  crmFunnel: RevenueFunnelPayload | undefined,
+  googleAdsClicks: number,
+  actionConfidence: (offset?: number) => number,
+) {
+  const calls = crmFunnel?.phoneCalls ?? 0;
+  const crmLeads = crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0;
+  const opportunities = crmFunnel?.totalOpportunities ?? 0;
+  const wonJobs = crmFunnel?.wonJobs ?? crmFunnel?.wonOpportunities ?? 0;
+  const missedCalls = crmFunnel?.missedCalls ?? 0;
+
+  if (!crmFunnel) {
+    return {
+      action: "Connect HighLevel call tracking before scaling spend",
+      confidence: actionConfidence(-8),
+      impact: "Cleaner attribution",
+      priority: "High",
+      reason: "CRM calls, opportunities, and won jobs are not connected yet, so budget recommendations are intentionally conservative.",
+      relatedModule: "HighLevel / CRM",
+    };
+  }
+
+  if (missedCalls >= 3 || (calls > 0 && missedCalls / calls >= 0.2)) {
+    return {
+      action: "Review missed-call handling before increasing budget",
+      confidence: actionConfidence(8),
+      impact: "Recover lost leads",
+      priority: "High",
+      reason: `${missedCalls} missed calls are synced from HighLevel. Missed-call text automation should be reviewed, but not deployed automatically.`,
+      relatedModule: "HighLevel / CRM",
+    };
+  }
+
+  if (calls > 0 && opportunities === 0) {
+    return {
+      action: "Fix CRM intake so calls become opportunities",
+      confidence: actionConfidence(6),
+      impact: "Better lead-to-estimate tracking",
+      priority: "High",
+      reason: "HighLevel shows calls, but no synced opportunities. The intake process may not be creating pipeline records consistently.",
+      relatedModule: "HighLevel / CRM",
+    };
+  }
+
+  if (googleAdsClicks >= 30 && calls === 0) {
+    return {
+      action: "Review landing page call CTA and tracking numbers",
+      confidence: actionConfidence(3),
+      impact: "Improve click-to-call conversion",
+      priority: "High",
+      reason: `Google Ads has ${googleAdsClicks} synced clicks while HighLevel call volume is flat. Confirm phone CTAs and call tracking before adding budget.`,
+      relatedModule: "Revenue Engine",
+    };
+  }
+
+  if (wonJobs > 0) {
+    return {
+      action: "Review budget increase for campaigns producing won jobs",
+      confidence: actionConfidence(9),
+      impact: "Scale proven demand",
+      priority: "High",
+      reason: `HighLevel shows ${wonJobs} won job${wonJobs === 1 ? "" : "s"}. Use source and campaign attribution before approving any budget change.`,
+      relatedModule: "Revenue Engine",
+    };
+  }
+
+  return {
+    action: "Review HighLevel lead sources before shifting budget",
+    confidence: actionConfidence(5),
+    impact: "Cleaner source-level ROI",
+    priority: "Medium",
+    reason: "CRM attribution is available. Compare calls, lead sources, and opportunity stages before changing spend.",
+    relatedModule: "HighLevel / CRM",
   };
 }
 
