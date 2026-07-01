@@ -49,6 +49,7 @@ type PlatformSection =
   | "conversion-tracking"
   | "ai-cmo"
   | "revenue-engine"
+  | "google-ads-deployment"
   | "marketing-intelligence"
   | "market-intelligence"
   | "deploy-center"
@@ -283,6 +284,27 @@ type TrackingRecommendation = {
   importGuidance: string;
   confidence: number;
 };
+type GoogleAdsEditorExportFile = {
+  fileName: string;
+  label: string;
+  rows: number;
+  csv: string;
+};
+type GoogleAdsDeploymentProject = {
+  status: "Ready" | "Needs Review" | "Missing Information" | "Blocked";
+  preview: {
+    adCount: number;
+    adGroupCount: number;
+    assetCount: number;
+    campaignCount: number;
+    estimatedMonthlySpend: number;
+    keywordCount: number;
+    negativeKeywordCount: number;
+  };
+  validation: Array<{ label: string; status: "Ready" | "Needs Review" | "Blocked"; detail: string }>;
+  files: GoogleAdsEditorExportFile[];
+  notes: string[];
+};
 type ImplementationChannel = {
   target: DeploymentTarget;
   status: ChannelStatus;
@@ -311,6 +333,7 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "conversion-tracking", label: "Conversion Tracking" },
   { id: "ai-cmo", label: "AI CMO" },
   { id: "revenue-engine", label: "Revenue Engine" },
+  { id: "google-ads-deployment", label: "Google Ads Deployment" },
   { id: "marketing-intelligence", label: "Marketing Intelligence" },
   { id: "market-intelligence", label: "Market Intelligence" },
   { id: "deploy-center", label: "Deploy Center" },
@@ -830,6 +853,15 @@ function ResultsView({
           overrides={ppcOverrides}
           ppcPlan={ppcPlan}
           setOverrides={setPpcOverrides}
+        />
+      )}
+
+      {activeSection === "google-ads-deployment" && (
+        <GoogleAdsDeploymentEngine
+          analysis={analysis}
+          contractorUrl={contractorUrl}
+          ppcPlan={ppcPlan}
+          setActiveSection={setActiveSection}
         />
       )}
 
@@ -4329,6 +4361,500 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
   );
 }
 
+function GoogleAdsDeploymentEngine({
+  analysis,
+  contractorUrl,
+  ppcPlan,
+  setActiveSection,
+}: {
+  analysis: BusinessProfile;
+  contractorUrl: string;
+  ppcPlan: PpcPlan | null;
+  setActiveSection: (section: PlatformSection) => void;
+}) {
+  const project = ppcPlan ? buildGoogleAdsEditorProject(analysis, contractorUrl, ppcPlan) : null;
+
+  if (!ppcPlan || !project) {
+    return (
+      <div className="grid gap-5">
+        <Panel>
+          <Eyebrow>Google Ads Deployment Engine</Eyebrow>
+          <h2 className="mt-2 flex items-center gap-2 text-3xl font-black text-ink">
+            <Rocket className="size-7" aria-hidden="true" />
+            Build a Google Ads Editor project
+          </h2>
+          <p className="mt-3 max-w-3xl text-base leading-7 text-graphite">
+            Run the Revenue Engine first. The Deployment Engine turns approved campaigns, keywords, ads, assets, budgets, and landing pages into Google Ads Editor import files.
+          </p>
+          <div className="mt-5">
+            <Button onClick={() => setActiveSection("revenue-engine")} type="button">Open Revenue Engine</Button>
+          </div>
+        </Panel>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+          <div>
+            <Eyebrow>Google Ads Deployment Engine</Eyebrow>
+            <h2 className="mt-2 flex items-center gap-2 text-3xl font-black text-ink">
+              <Rocket className="size-7" aria-hidden="true" />
+              Google Ads Editor Project
+            </h2>
+            <p className="mt-3 max-w-4xl text-base leading-7 text-graphite">
+              HVAC Growth OS has assembled a complete Editor import package from the Revenue Engine. Import, review inside Google Ads Editor, then post when approved.
+            </p>
+          </div>
+          <DeploymentProjectStatus status={project.status} />
+        </div>
+      </Panel>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+        <MetricCard label="Campaigns" value={project.preview.campaignCount} />
+        <MetricCard label="Ad Groups" value={project.preview.adGroupCount} />
+        <MetricCard label="Keywords" value={project.preview.keywordCount} />
+        <MetricCard label="Negatives" value={project.preview.negativeKeywordCount} />
+        <MetricCard label="Ads" value={project.preview.adCount} />
+        <MetricCard label="Monthly Spend" value={`$${Math.round(project.preview.estimatedMonthlySpend).toLocaleString()}`} />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Validation</h3>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            V1 exports Google Ads Editor files. V2 can reuse the same project to create paused campaigns through the Google Ads API after approval.
+          </p>
+          <div className="mt-4 grid gap-3">
+            {project.validation.map((item) => (
+              <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={item.label}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-black text-ink">{item.label}</p>
+                  <DeploymentValidationBadge status={item.status} />
+                </div>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{item.detail}</p>
+              </article>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Export Package</h3>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            Files are organized by Google Ads Editor import convention, not generic spreadsheet reports.
+          </p>
+          <div className="mt-4 grid gap-3">
+            {project.files.map((file) => (
+              <div className="flex flex-col justify-between gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 sm:flex-row sm:items-center" key={file.fileName}>
+                <div>
+                  <p className="text-sm font-black text-ink">{file.label}</p>
+                  <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-graphite/55">{file.rows} rows</p>
+                </div>
+                <a
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-ink/15 bg-white px-3 text-sm font-semibold text-ink shadow-sm transition hover:bg-flame/5"
+                  download={file.fileName}
+                  href={textDataUrl(file.csv, "text/csv")}
+                >
+                  <Download className="size-4" aria-hidden="true" />
+                  Download
+                </a>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel>
+        <h3 className="text-lg font-black text-ink">Campaign Build Preview</h3>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {ppcPlan.recommendedLaunchPlan.map((campaign) => (
+            <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={campaign.campaign}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h4 className="text-sm font-black text-ink">{campaign.campaign}</h4>
+                <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">${campaign.recommendedDailyBudget}/day</span>
+              </div>
+              <p className="mt-2 text-sm leading-5 text-graphite/70">{campaign.whyLaunchNow}</p>
+            </article>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel>
+        <h3 className="text-lg font-black text-ink">Deployment Notes</h3>
+        <BulletList emptyText="No deployment notes." values={project.notes} />
+      </Panel>
+    </div>
+  );
+}
+
+function DeploymentProjectStatus({ status }: { status: GoogleAdsDeploymentProject["status"] }) {
+  const className =
+    status === "Ready"
+      ? "border-teal-200 bg-teal-50 text-teal-700"
+      : status === "Needs Review"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : status === "Missing Information"
+          ? "border-orange-200 bg-orange-50 text-orange-700"
+          : "border-red-200 bg-red-50 text-red-700";
+
+  return (
+    <div className={`rounded-xl border px-4 py-3 text-center ${className}`}>
+      <p className="text-sm font-black">{status}</p>
+      <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] opacity-70">Status</p>
+    </div>
+  );
+}
+
+function DeploymentValidationBadge({ status }: { status: "Ready" | "Needs Review" | "Blocked" }) {
+  const className =
+    status === "Ready"
+      ? "border-teal-200 bg-teal-50 text-teal-700"
+      : status === "Needs Review"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-red-200 bg-red-50 text-red-700";
+
+  return <span className={`rounded-lg border px-2 py-1 text-xs font-black ${className}`}>{status}</span>;
+}
+
+function buildGoogleAdsEditorProject(
+  analysis: BusinessProfile,
+  contractorUrl: string,
+  plan: PpcPlan,
+): GoogleAdsDeploymentProject {
+  const businessName = plan.detected.businessName || analysis.companyName;
+  const phoneNumber = plan.detected.phoneNumber || analysis.phone;
+  const serviceCities = uniqueStrings([...plan.detected.serviceCities, ...analysis.serviceAreas]);
+  const launchCampaignNames = new Set(plan.recommendedLaunchPlan.map((item) => item.campaign));
+  const launchCampaigns = plan.campaigns.filter((campaign) => launchCampaignNames.has(campaign.campaign));
+  const campaignNames = launchCampaigns.length ? launchCampaigns.map((campaign) => campaign.campaign) : plan.campaigns.map((campaign) => campaign.campaign);
+  const campaignNameSet = new Set(campaignNames);
+  const launchAdGroups = plan.adGroups.filter((adGroup) => campaignNameSet.has(adGroup.campaign));
+  const landingPagesByGroup = new Map(
+    plan.landingPageRecommendations.map((page) => [`${page.campaign}::${page.adGroup}`, page]),
+  );
+  const landingUrl = (campaign: string, adGroup: string) => {
+    const recommendation = landingPagesByGroup.get(`${campaign}::${adGroup}`);
+    const bestExisting = recommendation?.bestExistingLandingPage || "";
+    if (bestExisting.startsWith("http")) return bestExisting;
+    const existingPage = plan.detected.existingLandingPages.find((page) => page.url.startsWith("http"));
+    if (existingPage) return existingPage.url;
+    return contractorUrl;
+  };
+  const campaignDailyBudget = (campaignName: string) => {
+    const launch = plan.recommendedLaunchPlan.find((item) => item.campaign === campaignName);
+    const strategy = plan.campaigns.find((campaign) => campaign.campaign === campaignName);
+    return Math.max(10, Math.round(launch?.recommendedDailyBudget ?? strategy?.dailyBudget ?? 35));
+  };
+  const campaignsRows = campaignNames.map((campaign) => ({
+    Campaign: campaign,
+    "Campaign type": "Search",
+    "Campaign status": "Paused",
+    Budget: `${campaign} Budget`,
+    "Budget type": "Daily",
+    "Bid strategy type": "Maximize conversions",
+    Networks: "Google search; Search partners",
+    Comment: campaignReason(plan, campaign),
+  }));
+  const adGroupRows = launchAdGroups.map((adGroup) => ({
+    Campaign: adGroup.campaign,
+    "Ad group": adGroup.adGroup,
+    "Ad group status": "Enabled",
+    "Max CPC": "",
+    Comment: "Generated from Revenue Engine campaign readiness.",
+  }));
+  const keywordRows = plan.keywords
+    .filter((keyword) => campaignNameSet.has(keyword.campaign) && keyword.matchType !== "Broad")
+    .map((keyword) => ({
+      Campaign: keyword.campaign,
+      "Ad group": keyword.adGroup,
+      Keyword: formatGoogleAdsKeyword(keyword.keyword, keyword.matchType),
+      "Match type": keyword.matchType,
+      Status: "Enabled",
+      "Final URL": landingUrl(keyword.campaign, keyword.adGroup),
+      "Intent level": keyword.intentLevel,
+      Priority: keyword.intentLevel === "High" ? "High" : keyword.intentLevel === "Medium" ? "Medium" : "Low",
+      Comment: keyword.notes,
+    }));
+  const negativeKeywordRows = campaignNames.flatMap((campaign) =>
+    plan.negativeKeywords.map((negative) => ({
+      Campaign: campaign,
+      "Negative keyword": negative.negativeKeyword,
+      "Match type": negative.matchType,
+      Comment: "Starter HVAC negative keyword.",
+    })),
+  );
+  const adsByGroup = new Map<string, PpcPlan["responsiveSearchAds"]>();
+  plan.responsiveSearchAds
+    .filter((asset) => campaignNameSet.has(asset.campaign))
+    .forEach((asset) => {
+      const key = `${asset.campaign}::${asset.adGroup}`;
+      adsByGroup.set(key, [...(adsByGroup.get(key) ?? []), asset]);
+    });
+  const rsaRows = Array.from(adsByGroup.entries()).map(([key, assets]) => {
+    const [campaign, adGroup] = key.split("::");
+    const headlines = assets.filter((asset) => asset.assetType === "Headline").slice(0, 15);
+    const descriptions = assets.filter((asset) => asset.assetType === "Description").slice(0, 4);
+    const paths = plan.assets.displayPaths.find((path) => path.campaign === campaign && path.adGroup === adGroup);
+    const row: Record<string, string | number> = {
+      Campaign: campaign,
+      "Ad group": adGroup,
+      "Ad type": "Responsive search ad",
+      "Ad status": "Enabled",
+      "Path 1": paths?.path1 ?? slugify(adGroup).slice(0, 15),
+      "Path 2": paths?.path2 ?? slugify(serviceCities[0] ?? "service").slice(0, 15),
+      "Final URL": landingUrl(campaign, adGroup),
+    };
+    for (let index = 0; index < 15; index += 1) row[`Headline ${index + 1}`] = headlines[index]?.text ?? "";
+    for (let index = 0; index < 4; index += 1) row[`Description ${index + 1}`] = descriptions[index]?.text ?? "";
+    return row;
+  });
+  const calloutRows = plan.assets.callouts
+    .filter((asset) => campaignNameSet.has(asset.campaign))
+    .map((asset) => ({
+      Campaign: asset.campaign,
+      "Asset type": "Callout",
+      "Callout text": asset.callout,
+      Status: "Enabled",
+    }));
+  const structuredSnippetRows = plan.assets.structuredSnippets
+    .filter((asset) => campaignNameSet.has(asset.campaign))
+    .map((asset) => ({
+      Campaign: asset.campaign,
+      "Asset type": "Structured snippet",
+      "Structured snippet header": asset.header,
+      "Structured snippet values": asset.values,
+      Status: "Enabled",
+    }));
+  const sitelinkRows = plan.assets.sitelinks
+    .filter((asset) => campaignNameSet.has(asset.campaign))
+    .map((asset) => ({
+      Campaign: asset.campaign,
+      "Asset type": "Sitelink",
+      "Sitelink text": asset.sitelinkText,
+      "Description line 1": asset.description1,
+      "Description line 2": asset.description2,
+      "Final URL": asset.finalUrl || contractorUrl,
+      Status: "Enabled",
+    }));
+  const budgetRows = campaignNames.map((campaign) => ({
+    Campaign: campaign,
+    Budget: `${campaign} Budget`,
+    "Budget type": "Daily",
+    Amount: campaignDailyBudget(campaign),
+  }));
+  const locationRows = campaignNames.flatMap((campaign) =>
+    (serviceCities.length ? serviceCities : ["Primary service area"]).map((city) => ({
+      Campaign: campaign,
+      Location: city,
+      "Targeting setting": "Presence: People in or regularly in targeted locations",
+    })),
+  );
+  const adScheduleRows = campaignNames.flatMap((campaign) => [
+    { Campaign: campaign, "Day of week": "Monday", "Start time": "08:00", "End time": "18:00" },
+    { Campaign: campaign, "Day of week": "Tuesday", "Start time": "08:00", "End time": "18:00" },
+    { Campaign: campaign, "Day of week": "Wednesday", "Start time": "08:00", "End time": "18:00" },
+    { Campaign: campaign, "Day of week": "Thursday", "Start time": "08:00", "End time": "18:00" },
+    { Campaign: campaign, "Day of week": "Friday", "Start time": "08:00", "End time": "18:00" },
+    { Campaign: campaign, "Day of week": "Saturday", "Start time": "08:00", "End time": "14:00" },
+  ]);
+  const audienceRows = campaignNames.map((campaign) => ({
+    Campaign: campaign,
+    "Audience targeting setting": "Observation",
+    "Audience exclusions": "",
+    Comment: "Readiness export only. Review audiences inside Google Ads Editor before posting.",
+  }));
+  const notesRows = campaignNames.map((campaign) => ({
+    Campaign: campaign,
+    Comment: [
+      campaignReason(plan, campaign),
+      `Business: ${businessName || "Needs verification"}.`,
+      `Phone: ${phoneNumber || "Needs verification"}.`,
+      "Import in paused/review state and confirm conversion tracking before posting.",
+    ].join(" "),
+  }));
+  const imageRows = campaignNames.map((campaign) => ({
+    Campaign: campaign,
+    "Asset type": "Image",
+    Image: analysis.heroImageUrl || "",
+    "Final URL": contractorUrl,
+    Status: analysis.heroImageUrl ? "Needs Review" : "Missing Information",
+    Comment: analysis.heroImageUrl
+      ? "Hero image detected. Verify dimensions and rights before attaching image assets."
+      : "No image asset detected. Add approved image files before importing image assets.",
+  }));
+  const landingRows = plan.landingPageRecommendations
+    .filter((page) => campaignNameSet.has(page.campaign))
+    .map((page) => ({
+      Campaign: page.campaign,
+      "Ad group": page.adGroup,
+      "Existing landing page": page.bestExistingLandingPage,
+      "Readiness score": page.landingPageReadinessScore,
+      Recommendation: page.recommendation,
+      "Suggested page title": page.suggestedPageTitle,
+      "Suggested H1": page.suggestedH1,
+      CTA: page.suggestedCta,
+      "Meta description": page.metaDescription,
+    }));
+  const validation = buildGoogleAdsDeploymentValidation({
+    businessName,
+    campaignNames,
+    keywordRows,
+    landingRows,
+    phoneNumber,
+    plan,
+    serviceCities,
+  });
+  const blocked = validation.some((item) => item.status === "Blocked");
+  const needsReview = validation.some((item) => item.status === "Needs Review");
+  const missingInfo = validation.some((item) => item.status === "Blocked" && /missing|not detected/i.test(item.detail));
+  const files = [
+    editorFile("Campaigns", "google_ads_editor_campaigns.csv", campaignsRows),
+    editorFile("Ad Groups", "google_ads_editor_ad_groups.csv", adGroupRows),
+    editorFile("Keywords", "google_ads_editor_keywords.csv", keywordRows),
+    editorFile("Negative Keywords", "google_ads_editor_negative_keywords.csv", negativeKeywordRows),
+    editorFile("Responsive Search Ads", "google_ads_editor_responsive_search_ads.csv", rsaRows),
+    editorFile("Callouts", "google_ads_editor_callouts.csv", calloutRows),
+    editorFile("Structured Snippets", "google_ads_editor_structured_snippets.csv", structuredSnippetRows),
+    editorFile("Sitelinks", "google_ads_editor_sitelinks.csv", sitelinkRows),
+    editorFile("Image Assets", "google_ads_editor_image_assets.csv", imageRows),
+    editorFile("Budgets", "google_ads_editor_budgets.csv", budgetRows),
+    editorFile("Locations", "google_ads_editor_locations.csv", locationRows),
+    editorFile("Ad Schedule", "google_ads_editor_ad_schedule.csv", adScheduleRows),
+    editorFile("Audience Settings", "google_ads_editor_audience_settings.csv", audienceRows),
+    editorFile("Campaign Notes", "google_ads_editor_campaign_notes.csv", notesRows),
+    editorFile("Landing Page Mapping", "google_ads_editor_landing_page_mapping.csv", landingRows),
+  ];
+
+  return {
+    status: blocked ? (missingInfo ? "Missing Information" : "Blocked") : needsReview ? "Needs Review" : "Ready",
+    preview: {
+      adCount: rsaRows.length,
+      adGroupCount: adGroupRows.length,
+      assetCount: calloutRows.length + structuredSnippetRows.length + sitelinkRows.length + imageRows.length,
+      campaignCount: campaignsRows.length,
+      estimatedMonthlySpend: budgetRows.reduce((total, row) => total + Number(row.Amount) * 30.4, 0),
+      keywordCount: keywordRows.length,
+      negativeKeywordCount: negativeKeywordRows.length,
+    },
+    validation,
+    files,
+    notes: [
+      "All campaigns are exported in a paused/review-oriented workflow. Review inside Google Ads Editor before posting.",
+      "Broad match is excluded by default. Exact and phrase match are used for higher-control launch testing.",
+      "Google Ads API deployment can reuse this project model later to create paused campaigns after human approval.",
+      imageRows.some((row) => row.Status === "Missing Information")
+        ? "Image assets need approved local files before import."
+        : "Image assets are included as detected references and should be verified for size, crop, and usage rights.",
+    ],
+  };
+}
+
+function buildGoogleAdsDeploymentValidation({
+  businessName,
+  campaignNames,
+  keywordRows,
+  landingRows,
+  phoneNumber,
+  plan,
+  serviceCities,
+}: {
+  businessName: string;
+  campaignNames: string[];
+  keywordRows: Array<Record<string, string | number>>;
+  landingRows: Array<Record<string, string | number>>;
+  phoneNumber: string;
+  plan: PpcPlan;
+  serviceCities: string[];
+}) {
+  const duplicateCampaigns = campaignNames.length - new Set(campaignNames).size;
+  const keywordKeys = keywordRows.map((row) => `${row.Campaign}::${row["Ad group"]}::${row.Keyword}::${row["Match type"]}`);
+  const duplicateKeywords = keywordKeys.length - new Set(keywordKeys).size;
+  const missingLandingPages = landingRows.filter((row) => !String(row["Existing landing page"]).startsWith("http"));
+
+  return [
+    {
+      label: "Business Name",
+      status: businessName ? "Ready" as const : "Blocked" as const,
+      detail: businessName ? `${businessName} will be used in campaign notes and brand ads.` : "Business name was not detected. Add it before export.",
+    },
+    {
+      label: "Phone Number",
+      status: phoneNumber ? "Ready" as const : "Blocked" as const,
+      detail: phoneNumber ? `${phoneNumber} detected. Confirm it is a tracked number before launch.` : "Phone number is missing. Add a tracked phone number before launch.",
+    },
+    {
+      label: "Service Area",
+      status: serviceCities.length ? "Ready" as const : "Blocked" as const,
+      detail: serviceCities.length ? `${serviceCities.slice(0, 5).join(", ")} targeted in location exports.` : "No service cities were detected. Add at least one launch market.",
+    },
+    {
+      label: "Landing Pages",
+      status: missingLandingPages.length ? "Needs Review" as const : "Ready" as const,
+      detail: missingLandingPages.length
+        ? `${missingLandingPages.length} ad groups need a new or confirmed landing page before launch.`
+        : "Every exported ad group maps to an existing URL.",
+    },
+    {
+      label: "CTA",
+      status: plan.detected.ctas.length || phoneNumber ? "Ready" as const : "Needs Review" as const,
+      detail: plan.detected.ctas.length ? `${plan.detected.ctas.slice(0, 3).join(", ")} detected.` : "Confirm a call or form CTA on launch landing pages.",
+    },
+    {
+      label: "Tracking",
+      status: "Needs Review" as const,
+      detail: "Confirm Google Ads conversions, call tracking, form tracking, and HighLevel attribution before posting campaigns.",
+    },
+    {
+      label: "Duplicate Campaigns",
+      status: duplicateCampaigns ? "Blocked" as const : "Ready" as const,
+      detail: duplicateCampaigns ? `${duplicateCampaigns} duplicate campaign names found.` : "No duplicate campaign names detected.",
+    },
+    {
+      label: "Duplicate Keywords",
+      status: duplicateKeywords ? "Blocked" as const : "Ready" as const,
+      detail: duplicateKeywords ? `${duplicateKeywords} duplicate keyword rows found.` : "No duplicate campaign/ad group/keyword/match rows detected.",
+    },
+  ];
+}
+
+function campaignReason(plan: PpcPlan, campaignName: string) {
+  return (
+    plan.recommendedLaunchPlan.find((item) => item.campaign === campaignName)?.whyLaunchNow ||
+    plan.campaignReadiness.find((item) => item.campaignName === campaignName)?.reasoning ||
+    plan.campaigns.find((campaign) => campaign.campaign === campaignName)?.whyRecommended ||
+    "Recommended by Revenue Engine."
+  );
+}
+
+function formatGoogleAdsKeyword(keyword: string, matchType: PpcPlan["keywords"][number]["matchType"]) {
+  if (matchType === "Exact") return `[${keyword.replace(/^\[|\]$/g, "")}]`;
+  if (matchType === "Phrase") return `"${keyword.replace(/^"|"$/g, "")}"`;
+  return keyword;
+}
+
+function editorFile(label: string, fileName: string, rows: Array<Record<string, string | number>>): GoogleAdsEditorExportFile {
+  return {
+    fileName,
+    label,
+    rows: rows.length,
+    csv: editorCsv(rows),
+  };
+}
+
+function editorCsv(rows: Array<Record<string, string | number>>) {
+  const columns = uniqueStrings(rows.flatMap((row) => Object.keys(row)));
+  const body = rows.map((row) => columns.map((column) => editorCell(row[column] ?? "")).join(","));
+  return [columns.map(editorCell).join(","), ...body].join("\n");
+}
+
+function editorCell(value: string | number) {
+  const text = String(value);
+  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, "\"\"")}"`;
+  return text;
+}
+
 function MetricCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]">
@@ -6298,6 +6824,10 @@ function buildDecisionRecommendations(
     "revenue-engine": [
       decision("revenue-launch-campaign", "Google Ads", topCampaign ? `Approve launch plan for ${topCampaign.campaign}` : "Generate the Revenue Engine launch plan", "High", "Moves paid search from strategy to implementation.", annualHigh, baseConfidence + 5, "Moderate", "45 minutes", ["Google Ads access", "Tracking"], "Revenue Engine decisions should create campaign assets, not stop at keyword lists."),
       decision("revenue-landing-page", "Website", missingPage ? `Create landing page for ${missingPage}` : "QA the best existing landing page for launch campaigns", "High", "Improves conversion rate before budget increases.", annualHigh, baseConfidence + 3, "Moderate", "2 hours", ["CMS access", "Offer approval"], "Paid clicks need matching pages or the campaign will leak revenue."),
+    ],
+    "google-ads-deployment": [
+      decision("ads-editor-project", "Google Ads", ppcPlan ? "Export the Google Ads Editor project and complete import QA" : "Run Revenue Engine before exporting Google Ads Editor files", "High", "Turns campaign strategy into an import-ready account build.", annualHigh, baseConfidence + 5, "Moderate", "45 minutes", ["Revenue Engine", "Tracking review"], "The Deployment Engine should move approved paid-search strategy into a reviewable Google Ads Editor project."),
+      decision("ads-editor-validation", "Google Ads", "Resolve deployment validation issues before posting campaigns", "High", "Protects budget by confirming phone, landing pages, CTAs, service areas, and tracking.", annualHigh, baseConfidence + 3, "Moderate", "30 minutes", ["Phone number", "Landing pages", "Service area"], "Google Ads should not be posted until the launch package passes a human QA checkpoint."),
     ],
     "marketing-intelligence": [
       decision("marketing-budget", "Google Ads", `Review a 15% budget shift toward AC Repair in ${city}`, "High", "Captures weather and seasonality-driven repair demand.", annualHigh, baseConfidence + 4, "Moderate", "20 minutes", ["Ads performance", "Budget approval"], "Marketing Intelligence exists to decide where today's marginal dollar should go."),
