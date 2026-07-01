@@ -4441,10 +4441,24 @@ function GoogleAdsDeploymentEngine({
         </Panel>
 
         <Panel>
-          <h3 className="text-lg font-black text-ink">Export Package</h3>
-          <p className="mt-2 text-sm leading-6 text-graphite/70">
-            Files are organized by Google Ads Editor import convention, not generic spreadsheet reports.
-          </p>
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+            <div>
+              <h3 className="text-lg font-black text-ink">Export Package</h3>
+              <p className="mt-2 text-sm leading-6 text-graphite/70">
+                Download the full package, unzip it, then import the CSV files into Google Ads Editor in the included order.
+              </p>
+            </div>
+            <Button onClick={() => downloadGoogleAdsEditorPackage(project, analysis, contractorUrl)} type="button">
+              <Download className="size-4" aria-hidden="true" />
+              Download Package
+            </Button>
+          </div>
+          <div className="mt-4 rounded-xl border border-flame/15 bg-flame/5 p-4">
+            <p className="text-sm font-black text-ink">Recommended first import order</p>
+            <p className="mt-2 text-sm leading-6 text-graphite/70">
+              Campaigns, Budgets, Ad Groups, Keywords, Negative Keywords, Responsive Search Ads, Locations, Callouts, Sitelinks, Structured Snippets.
+            </p>
+          </div>
           <div className="mt-4 grid gap-3">
             {project.files.map((file) => (
               <div className="flex flex-col justify-between gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 sm:flex-row sm:items-center" key={file.fileName}>
@@ -4516,6 +4530,89 @@ function DeploymentValidationBadge({ status }: { status: "Ready" | "Needs Review
         : "border-red-200 bg-red-50 text-red-700";
 
   return <span className={`rounded-lg border px-2 py-1 text-xs font-black ${className}`}>{status}</span>;
+}
+
+function downloadGoogleAdsEditorPackage(
+  project: GoogleAdsDeploymentProject,
+  analysis: BusinessProfile,
+  contractorUrl: string,
+) {
+  const clientName = analysis.companyName || "HVAC Client";
+  const packageSlug = slugify(clientName || "google-ads-project") || "google-ads-project";
+  const guide = buildGoogleAdsEditorImportGuide(project, clientName, contractorUrl);
+  const files = [
+    { name: "00_READ_ME_IMPORT_GUIDE.txt", content: guide },
+    ...project.files.map((file) => ({
+      name: file.fileName,
+      content: file.csv,
+    })),
+  ];
+  const blob = createZipBlob(files);
+  downloadBlob(`${packageSlug}-google-ads-editor-package.zip`, blob);
+}
+
+function buildGoogleAdsEditorImportGuide(
+  project: GoogleAdsDeploymentProject,
+  clientName: string,
+  contractorUrl: string,
+) {
+  const coreFiles = [
+    "google_ads_editor_campaigns.csv",
+    "google_ads_editor_budgets.csv",
+    "google_ads_editor_ad_groups.csv",
+    "google_ads_editor_keywords.csv",
+    "google_ads_editor_negative_keywords.csv",
+    "google_ads_editor_responsive_search_ads.csv",
+    "google_ads_editor_locations.csv",
+    "google_ads_editor_callouts.csv",
+    "google_ads_editor_sitelinks.csv",
+    "google_ads_editor_structured_snippets.csv",
+  ];
+  const reviewFiles = [
+    "google_ads_editor_ad_schedule.csv",
+    "google_ads_editor_audience_settings.csv",
+    "google_ads_editor_image_assets.csv",
+    "google_ads_editor_campaign_notes.csv",
+    "google_ads_editor_landing_page_mapping.csv",
+  ];
+  const validation = project.validation
+    .map((item) => `- ${item.label}: ${item.status} - ${item.detail}`)
+    .join("\n");
+
+  return [
+    `Google Ads Editor Import Package`,
+    `Client: ${clientName}`,
+    `Website: ${contractorUrl}`,
+    `Package status: ${project.status}`,
+    "",
+    "Important:",
+    "- This package does not post changes automatically.",
+    "- Download the latest account in Google Ads Editor before importing.",
+    "- Import files one at a time for the first QA pass.",
+    "- Review all warnings and errors before posting.",
+    "- Keep campaigns paused until tracking, landing pages, and budgets are approved.",
+    "",
+    "Recommended core import order:",
+    ...coreFiles.map((fileName, index) => `${index + 1}. ${fileName}`),
+    "",
+    "Review/support files:",
+    ...reviewFiles.map((fileName) => `- ${fileName}`),
+    "",
+    "Package preview:",
+    `- Campaigns: ${project.preview.campaignCount}`,
+    `- Ad groups: ${project.preview.adGroupCount}`,
+    `- Keywords: ${project.preview.keywordCount}`,
+    `- Negative keywords: ${project.preview.negativeKeywordCount}`,
+    `- Responsive search ads: ${project.preview.adCount}`,
+    `- Assets: ${project.preview.assetCount}`,
+    `- Estimated monthly spend: $${Math.round(project.preview.estimatedMonthlySpend).toLocaleString()}`,
+    "",
+    "Validation:",
+    validation,
+    "",
+    "Deployment notes:",
+    ...project.notes.map((note) => `- ${note}`),
+  ].join("\n");
 }
 
 function buildGoogleAdsEditorProject(
@@ -5897,6 +5994,11 @@ function slugify(value: string) {
 function downloadJson(fileName: string, payload: unknown) {
   if (typeof document === "undefined") return;
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  downloadBlob(fileName, blob);
+}
+
+function downloadBlob(fileName: string, blob: Blob) {
+  if (typeof document === "undefined") return;
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -5906,6 +6008,101 @@ function downloadJson(fileName: string, payload: unknown) {
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+function createZipBlob(files: Array<{ name: string; content: string }>) {
+  const encoder = new TextEncoder();
+  const localParts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  let offset = 0;
+
+  files.forEach((file) => {
+    const fileName = encoder.encode(file.name);
+    const data = encoder.encode(file.content);
+    const crc = crc32(data);
+    const localHeader = zipHeader(30);
+    writeUint32(localHeader, 0, 0x04034b50);
+    writeUint16(localHeader, 4, 20);
+    writeUint16(localHeader, 6, 0);
+    writeUint16(localHeader, 8, 0);
+    writeZipDateTime(localHeader, 10);
+    writeUint32(localHeader, 14, crc);
+    writeUint32(localHeader, 18, data.length);
+    writeUint32(localHeader, 22, data.length);
+    writeUint16(localHeader, 26, fileName.length);
+    writeUint16(localHeader, 28, 0);
+    localParts.push(localHeader, fileName, data);
+
+    const centralHeader = zipHeader(46);
+    writeUint32(centralHeader, 0, 0x02014b50);
+    writeUint16(centralHeader, 4, 20);
+    writeUint16(centralHeader, 6, 20);
+    writeUint16(centralHeader, 8, 0);
+    writeUint16(centralHeader, 10, 0);
+    writeZipDateTime(centralHeader, 12);
+    writeUint32(centralHeader, 16, crc);
+    writeUint32(centralHeader, 20, data.length);
+    writeUint32(centralHeader, 24, data.length);
+    writeUint16(centralHeader, 28, fileName.length);
+    writeUint16(centralHeader, 30, 0);
+    writeUint16(centralHeader, 32, 0);
+    writeUint16(centralHeader, 34, 0);
+    writeUint16(centralHeader, 36, 0);
+    writeUint32(centralHeader, 38, 0);
+    writeUint32(centralHeader, 42, offset);
+    centralParts.push(centralHeader, fileName);
+
+    offset += localHeader.length + fileName.length + data.length;
+  });
+
+  const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+  const endHeader = zipHeader(22);
+  writeUint32(endHeader, 0, 0x06054b50);
+  writeUint16(endHeader, 4, 0);
+  writeUint16(endHeader, 6, 0);
+  writeUint16(endHeader, 8, files.length);
+  writeUint16(endHeader, 10, files.length);
+  writeUint32(endHeader, 12, centralSize);
+  writeUint32(endHeader, 16, offset);
+  writeUint16(endHeader, 20, 0);
+
+  return new Blob([...localParts, ...centralParts, endHeader], { type: "application/zip" });
+}
+
+function zipHeader(length: number) {
+  return new Uint8Array(length);
+}
+
+function writeUint16(target: Uint8Array, offset: number, value: number) {
+  new DataView(target.buffer).setUint16(offset, value, true);
+}
+
+function writeUint32(target: Uint8Array, offset: number, value: number) {
+  new DataView(target.buffer).setUint32(offset, value >>> 0, true);
+}
+
+function writeZipDateTime(target: Uint8Array, offset: number) {
+  const now = new Date();
+  const time = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
+  const date = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  writeUint16(target, offset, time);
+  writeUint16(target, offset + 2, date);
+}
+
+function crc32(data: Uint8Array) {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xff];
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+const CRC32_TABLE = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  return value >>> 0;
+});
 
 function updateDeploymentRecord(
   existing: DeploymentRecord | undefined,
