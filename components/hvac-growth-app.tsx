@@ -111,6 +111,35 @@ type ImplementationAction = {
   estimatedTime: string;
   targetSection: PlatformSection;
 };
+type DeployPlatform =
+  | "Google Ads"
+  | "HighLevel"
+  | "Google Business Profile"
+  | "Meta"
+  | "Website / Landing Pages"
+  | "SEO"
+  | "Reports";
+type DeployAction = {
+  id: string;
+  clientId: string;
+  platform: DeployPlatform;
+  actionType: string;
+  title: string;
+  problem: string;
+  recommendation: string;
+  expectedImpact: string;
+  confidence: number;
+  requiredPermissions: string[];
+  payloadPreview: string[];
+  validationStatus: "Ready" | "Permission Required" | "Needs Review" | "Blocked";
+  approvalStatus: "Pending" | "Approved" | "Dismissed" | "Remind Later";
+  deploymentStatus: "Waiting" | "Fixed" | "Failed";
+  errorMessage: string;
+  createdAt: string;
+  approvedAt: string;
+  deployedAt: string;
+  deployedBy: string;
+};
 type DeploymentApprovalStatus = "Pending" | "Approved" | "Dismissed" | "Remind Later";
 type DeploymentRuntimeStatus = "Waiting" | "Success" | "Failed";
 type ChannelStatus = "Ready" | "Needs Setup" | "Pending Review" | "Deployed" | "Failed";
@@ -1428,6 +1457,70 @@ function RecommendationActionFooter({
   context: string;
 }) {
   const resolved = resolveImplementationAction(context, action);
+  const deployActionId = deployActionIdForContext(context);
+  const [deployAction, setDeployAction] = useState<DeployAction>(() =>
+    loadDeployAction(deployActionId) ?? createDeployActionFromContext(context, resolved),
+  );
+  const [showPreview, setShowPreview] = useState(false);
+
+  function persist(nextAction: DeployAction) {
+    setDeployAction(nextAction);
+    saveDeployAction(nextAction);
+  }
+
+  function approve() {
+    persist({
+      ...deployAction,
+      approvalStatus: "Approved",
+      approvedAt: new Date().toISOString(),
+      errorMessage: "",
+    });
+  }
+
+  function dismiss() {
+    persist({ ...deployAction, approvalStatus: "Dismissed", errorMessage: "" });
+  }
+
+  function remindLater() {
+    persist({ ...deployAction, approvalStatus: "Remind Later", errorMessage: "" });
+  }
+
+  function deploy() {
+    if (resolved.buttonLabel === "Connect" || deployAction.validationStatus === "Permission Required") {
+      persist({
+        ...deployAction,
+        deploymentStatus: "Failed",
+        errorMessage: "Connect the required platform before HVAC Growth OS can fix this automatically.",
+      });
+      navigateToImplementationTarget("connected-apps");
+      return;
+    }
+    if (deployAction.approvalStatus !== "Approved") {
+      persist({
+        ...deployAction,
+        deploymentStatus: "Failed",
+        errorMessage: "Human approval is required before any API deploy action can run.",
+      });
+      return;
+    }
+    if (deployAction.validationStatus === "Blocked") {
+      persist({
+        ...deployAction,
+        deploymentStatus: "Failed",
+        errorMessage: "Validation is blocked. Review missing dependencies before deploying.",
+      });
+      return;
+    }
+    const now = new Date().toISOString();
+    persist({
+      ...deployAction,
+      deploymentStatus: "Fixed",
+      deployedAt: now,
+      deployedBy: currentActor(),
+      errorMessage: "",
+    });
+    recordDeployActionMemory({ ...deployAction, deploymentStatus: "Fixed", deployedAt: now, deployedBy: currentActor() });
+  }
 
   return (
     <div className={`mt-4 rounded-xl border border-ink/10 bg-white p-3 ${className}`}>
@@ -1437,17 +1530,53 @@ function RecommendationActionFooter({
         <DecisionMeta label="Confidence" value={`${resolved.confidence}%`} />
         <DecisionMeta label="Dependencies" value={resolved.dependencies.join(", ") || "None"} />
       </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-4">
+        <DecisionMeta label="Validation" value={deployAction.validationStatus} />
+        <DecisionMeta label="Approval" value={deployAction.approvalStatus} />
+        <DecisionMeta label="Deploy Status" value={deployAction.deploymentStatus} />
+        <DecisionMeta label="Platform" value={deployAction.platform} />
+      </div>
+      {showPreview && (
+        <div className="mt-3 rounded-lg border border-ink/10 bg-[#fbfbfa] p-3">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">Payload Preview</p>
+          <ul className="mt-2 space-y-1">
+            {deployAction.payloadPreview.map((item) => (
+              <li className="text-sm leading-5 text-graphite/75" key={item}>{item}</li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs font-bold text-graphite/60">
+            Required permissions: {deployAction.requiredPermissions.join(", ") || "Human approval"}
+          </p>
+        </div>
+      )}
+      {deployAction.errorMessage && (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
+          {deployAction.errorMessage} Next step: {deployAction.validationStatus === "Permission Required" ? "open Connected Apps and connect the platform." : "review the preview and approve again."}
+        </p>
+      )}
+      {deployAction.deploymentStatus === "Fixed" && (
+        <p className="mt-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800">
+          Fixed. Result recorded in Intelligence Memory.
+        </p>
+      )}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs font-bold leading-5 text-graphite/65">
-          Next step opens the workspace area where this can be reviewed, generated, connected, approved, or deployed.
+          Safe deploy workflow: preview the payload, validate permissions, approve, deploy, then record the result in Intelligence Memory.
         </p>
-        <button
-          className="inline-flex h-10 items-center justify-center rounded-md bg-ink px-4 text-sm font-black text-white transition hover:-translate-y-0.5"
-          onClick={() => navigateToImplementationTarget(resolved.targetSection)}
-          type="button"
-        >
-          {resolved.buttonLabel}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className="inline-flex h-9 items-center justify-center rounded-md border border-ink/15 bg-white px-3 text-xs font-black text-ink" onClick={() => setShowPreview(!showPreview)} type="button">Preview</button>
+          <button className="inline-flex h-9 items-center justify-center rounded-md border border-ink/15 bg-white px-3 text-xs font-black text-ink" onClick={approve} type="button">Approve</button>
+          <button className="inline-flex h-9 items-center justify-center rounded-md bg-ink px-3 text-xs font-black text-white" onClick={deploy} type="button">Deploy</button>
+          <button className="inline-flex h-9 items-center justify-center rounded-md border border-ink/15 bg-white px-3 text-xs font-black text-ink" onClick={dismiss} type="button">Dismiss</button>
+          <button className="inline-flex h-9 items-center justify-center rounded-md border border-ink/15 bg-white px-3 text-xs font-black text-ink" onClick={remindLater} type="button">Remind Later</button>
+          <button
+            className="inline-flex h-9 items-center justify-center rounded-md bg-copper px-3 text-xs font-black text-white"
+            onClick={() => navigateToImplementationTarget(resolved.targetSection)}
+            type="button"
+          >
+            {resolved.buttonLabel}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1529,6 +1658,164 @@ function dependenciesForActionContext(context: string) {
   if (/approve|deploy|budget|launch/i.test(context)) dependencies.add("Human approval");
   if (!dependencies.size) dependencies.add("Owner approval");
   return Array.from(dependencies);
+}
+
+function deployActionIdForContext(context: string) {
+  return `deploy-action-${hashString(context)}`;
+}
+
+function createDeployActionFromContext(context: string, implementation: ImplementationAction): DeployAction {
+  const platform = platformForActionContext(context);
+  const validationStatus = validationStatusForDeployAction(platform, implementation);
+  const now = new Date().toISOString();
+  return {
+    id: deployActionIdForContext(context),
+    clientId: "comfort-guardians",
+    platform,
+    actionType: actionTypeForDeployContext(context),
+    title: titleForDeployContext(context),
+    problem: problemForDeployContext(context),
+    recommendation: recommendationForDeployContext(context, implementation),
+    expectedImpact: implementation.estimatedBusinessImpact,
+    confidence: implementation.confidence,
+    requiredPermissions: requiredPermissionsForPlatform(platform, implementation),
+    payloadPreview: payloadPreviewForDeployContext(context, platform, implementation),
+    validationStatus,
+    approvalStatus: "Pending",
+    deploymentStatus: "Waiting",
+    errorMessage: "",
+    createdAt: now,
+    approvedAt: "",
+    deployedAt: "",
+    deployedBy: "",
+  };
+}
+
+function platformForActionContext(context: string): DeployPlatform {
+  if (/highlevel|crm|call|lead|opportunit|won|estimate|workflow|tag/i.test(context)) return "HighLevel";
+  if (/gbp|google business profile|review|service list/i.test(context)) return "Google Business Profile";
+  if (/meta|facebook|instagram|social/i.test(context)) return "Meta";
+  if (/landing|website|city page|service page|cms/i.test(context)) return "Website / Landing Pages";
+  if (/seo|schema|meta title|meta description|organic|search readiness/i.test(context)) return "SEO";
+  if (/report|summary|monthly|weekly|quarterly/i.test(context)) return "Reports";
+  return "Google Ads";
+}
+
+function actionTypeForDeployContext(context: string) {
+  if (/negative keyword/i.test(context)) return "add_negative_keyword";
+  if (/pause keyword/i.test(context)) return "pause_keyword";
+  if (/add keyword|keyword/i.test(context)) return "add_keyword";
+  if (/budget/i.test(context)) return "adjust_budget_after_approval";
+  if (/campaign/i.test(context)) return "create_paused_campaign";
+  if (/ad draft|headline|description|ad copy/i.test(context)) return "create_paused_ad";
+  if (/missed.call/i.test(context)) return "create_missed_call_workflow_draft";
+  if (/review request|review/i.test(context)) return "create_review_request_draft";
+  if (/opportunit|follow/i.test(context)) return "create_opportunity_follow_up_draft";
+  if (/tag/i.test(context)) return "add_tag";
+  if (/lead source/i.test(context)) return "update_lead_source_field";
+  if (/post/i.test(context)) return "create_post_draft";
+  if (/reply/i.test(context)) return "reply_after_approval";
+  if (/service/i.test(context) && /gbp|business profile/i.test(context)) return "update_services_draft";
+  if (/meta title|meta description/i.test(context)) return "generate_meta_updates";
+  if (/schema/i.test(context)) return "generate_schema_markup";
+  if (/city page/i.test(context)) return "generate_city_page_draft";
+  if (/landing page/i.test(context)) return "generate_landing_page_draft";
+  if (/report/i.test(context)) return "generate_report_draft";
+  return "create_task";
+}
+
+function titleForDeployContext(context: string) {
+  return context.replace(/\s+/g, " ").trim().slice(0, 96) || "Deploy approved action";
+}
+
+function problemForDeployContext(context: string) {
+  if (/missing|not connected|blocked|needs|fix|gap/i.test(context)) return "A recommended growth issue needs implementation before confidence or performance can improve.";
+  return "A recommendation is ready for human-approved implementation.";
+}
+
+function recommendationForDeployContext(context: string, implementation: ImplementationAction) {
+  return `${implementation.buttonLabel}: ${titleForDeployContext(context)}`;
+}
+
+function requiredPermissionsForPlatform(platform: DeployPlatform, implementation: ImplementationAction) {
+  const permissions = new Set<string>(implementation.dependencies);
+  if (platform === "Google Ads") permissions.add("Google Ads write scope for draft/paused changes");
+  if (platform === "HighLevel") permissions.add("HighLevel location write scope for drafts/tasks/tags");
+  if (platform === "Google Business Profile") permissions.add("GBP manage posts/services/reviews permission");
+  if (platform === "Meta") permissions.add("Meta content publishing permission");
+  if (platform === "Website / Landing Pages") permissions.add("Website CMS draft permission");
+  if (platform === "SEO") permissions.add("Website SEO edit permission");
+  if (platform === "Reports") permissions.add("Report generation permission");
+  permissions.add("Human approval");
+  return Array.from(permissions);
+}
+
+function validationStatusForDeployAction(platform: DeployPlatform, implementation: ImplementationAction): DeployAction["validationStatus"] {
+  if (implementation.buttonLabel === "Connect") return "Permission Required";
+  if (platform === "Google Ads" || platform === "HighLevel" || platform === "Google Business Profile" || platform === "Meta") return "Permission Required";
+  if (implementation.dependencies.some((dependency) => /missing|blocked/i.test(dependency))) return "Blocked";
+  return "Needs Review";
+}
+
+function payloadPreviewForDeployContext(context: string, platform: DeployPlatform, implementation: ImplementationAction) {
+  const actionType = actionTypeForDeployContext(context);
+  const safeState =
+    platform === "Google Ads"
+      ? "Google Ads output defaults to PAUSED."
+      : platform === "HighLevel"
+        ? "HighLevel output defaults to DRAFT or inactive when supported."
+        : platform === "Google Business Profile" || platform === "Meta"
+          ? "Social/profile output is drafted first and requires approval before publishing."
+          : "Output is generated as a draft for review.";
+
+  return [
+    `Platform: ${platform}`,
+    `Action type: ${actionType}`,
+    `Recommendation: ${titleForDeployContext(context)}`,
+    `Expected impact: ${implementation.estimatedBusinessImpact}`,
+    safeState,
+    "No deletion will be performed.",
+    "No live publishing or budget increase will happen without approval.",
+  ];
+}
+
+function loadDeployAction(id: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(`hvac-growth-os:${id}`);
+    return raw ? JSON.parse(raw) as DeployAction : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDeployAction(action: DeployAction) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(`hvac-growth-os:${action.id}`, JSON.stringify(action));
+}
+
+function recordDeployActionMemory(action: DeployAction) {
+  if (typeof window === "undefined") return;
+  const key = "hvac-growth-os:deploy-action-memory";
+  const memory = safeJsonParse<DeployAction[]>(window.localStorage.getItem(key), []);
+  window.localStorage.setItem(key, JSON.stringify([action, ...memory].slice(0, 50)));
+}
+
+function safeJsonParse<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function hashString(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
 }
 
 function DecisionButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -2159,10 +2446,15 @@ function DeployCenter({
   const storageKey = deploymentMemoryKey(analysis, contractorUrl);
   const candidates = buildDeploymentCandidates(analysis, ppcPlan, campaign);
   const [records, setRecords] = useState<Record<string, DeploymentRecord>>({});
+  const [apiActions, setApiActions] = useState<DeployAction[]>(() => buildApiDeployActions(analysis, ppcPlan, campaign, contractorUrl));
 
   useEffect(() => {
     setRecords(loadDeploymentMemory(storageKey));
   }, [storageKey]);
+
+  useEffect(() => {
+    setApiActions(buildApiDeployActions(analysis, ppcPlan, campaign, contractorUrl));
+  }, [analysis, campaign, contractorUrl, ppcPlan]);
 
   function persist(nextRecords: Record<string, DeploymentRecord>) {
     setRecords(nextRecords);
@@ -2242,6 +2534,11 @@ function DeployCenter({
     persist({ ...records, [channel.candidate.id]: nextRecord });
   }
 
+  function updateApiAction(nextAction: DeployAction) {
+    setApiActions((current) => current.map((item) => item.id === nextAction.id ? nextAction : item));
+    saveDeployAction(nextAction);
+  }
+
   const deploymentHistory = Object.values(records)
     .flatMap((record) => record.history.map((item) => ({ ...item, title: record.title, status: record.runtimeStatus })))
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
@@ -2284,6 +2581,7 @@ function DeployCenter({
           />
         ))}
       </div>
+      <ApiDeployActionsPanel actions={apiActions} onUpdate={updateApiAction} />
       <div className="grid gap-5">
         {candidates.map((candidate) => (
           <DeploymentWorkflowCard
@@ -4921,6 +5219,142 @@ function ActionRow({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
+function ApiDeployActionsPanel({
+  actions,
+  onUpdate,
+}: {
+  actions: DeployAction[];
+  onUpdate: (action: DeployAction) => void;
+}) {
+  function approve(action: DeployAction) {
+    onUpdate({ ...action, approvalStatus: "Approved", approvedAt: new Date().toISOString(), errorMessage: "" });
+  }
+
+  function deploy(action: DeployAction) {
+    if (action.validationStatus === "Permission Required") {
+      onUpdate({
+        ...action,
+        deploymentStatus: "Failed",
+        errorMessage: "Connect to fix this automatically. The required API permission is not active yet.",
+      });
+      navigateToImplementationTarget("connected-apps");
+      return;
+    }
+    if (action.approvalStatus !== "Approved") {
+      onUpdate({
+        ...action,
+        deploymentStatus: "Failed",
+        errorMessage: "Human approval is required before this API deploy action can run.",
+      });
+      return;
+    }
+    if (action.validationStatus === "Blocked") {
+      onUpdate({
+        ...action,
+        deploymentStatus: "Failed",
+        errorMessage: "Validation is blocked. Resolve the listed dependency before deploying.",
+      });
+      return;
+    }
+    const fixed = {
+      ...action,
+      deploymentStatus: "Fixed" as const,
+      deployedAt: new Date().toISOString(),
+      deployedBy: currentActor(),
+      errorMessage: "",
+    };
+    onUpdate(fixed);
+    recordDeployActionMemory(fixed);
+  }
+
+  function mark(action: DeployAction, approvalStatus: DeployAction["approvalStatus"]) {
+    onUpdate({ ...action, approvalStatus, errorMessage: "" });
+  }
+
+  return (
+    <Panel>
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <Eyebrow>API Deploy Actions</Eyebrow>
+          <h3 className="text-xl font-black text-ink">Human-approved API fixes</h3>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-graphite/70">
+            These universal deploy actions are ready for future platform API adapters. They preview the payload, validate permissions, require approval, deploy only safe paused/draft assets, and feed Intelligence Memory.
+          </p>
+        </div>
+        <ScoreBadge label="Actions" score={actions.length} />
+      </div>
+      <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        {actions.map((action) => (
+          <article className="rounded-2xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={action.id}>
+            <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+              <div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full bg-ink px-3 py-1 text-xs font-black text-white">{action.platform}</span>
+                  <span className="rounded-full border border-ink/10 bg-white px-3 py-1 text-xs font-black text-graphite">{action.actionType}</span>
+                  <DeployActionStatusBadge label={action.validationStatus} />
+                  <DeployActionStatusBadge label={action.approvalStatus} />
+                  <DeployActionStatusBadge label={action.deploymentStatus} />
+                </div>
+                <h4 className="mt-3 text-base font-black text-ink">{action.title}</h4>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{action.problem}</p>
+                <p className="mt-2 text-sm leading-5 text-graphite">{action.recommendation}</p>
+              </div>
+              <ConfidenceBadge score={action.confidence} />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-3">
+              <DecisionMeta label="Impact" value={action.expectedImpact} />
+              <DecisionMeta label="Permissions" value={action.requiredPermissions.join(", ")} />
+              <DecisionMeta label="Created" value={new Date(action.createdAt).toLocaleDateString()} />
+            </div>
+            <div className="mt-4 rounded-xl border border-ink/10 bg-white p-3">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">Payload Preview</p>
+              <ul className="mt-2 space-y-1">
+                {action.payloadPreview.map((item) => (
+                  <li className="text-sm leading-5 text-graphite/75" key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            {action.validationStatus === "Permission Required" && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
+                Connect to fix this automatically. Permission required: {action.requiredPermissions.join(", ")}.
+              </p>
+            )}
+            {action.errorMessage && (
+              <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-800">
+                {action.errorMessage}
+              </p>
+            )}
+            {action.deploymentStatus === "Fixed" && (
+              <p className="mt-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800">
+                Fixed and recorded in Intelligence Memory.
+              </p>
+            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-black text-ink" type="button">Preview</button>
+              <button className="rounded-lg bg-ink px-3 py-2 text-xs font-black text-white" onClick={() => approve(action)} type="button">Approve</button>
+              <button className="rounded-lg bg-copper px-3 py-2 text-xs font-black text-white" onClick={() => deploy(action)} type="button">Deploy</button>
+              <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-black text-ink" onClick={() => mark(action, "Dismissed")} type="button">Dismiss</button>
+              <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-black text-ink" onClick={() => mark(action, "Remind Later")} type="button">Remind Later</button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function DeployActionStatusBadge({ label }: { label: string }) {
+  const className =
+    /Ready|Approved|Fixed/i.test(label)
+      ? "border-teal-200 bg-teal-50 text-teal-700"
+      : /Required|Review|Pending|Waiting|Remind/i.test(label)
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : /Failed|Blocked|Dismissed/i.test(label)
+          ? "border-rose-200 bg-rose-50 text-rose-700"
+          : "border-ink/10 bg-white text-graphite";
+  return <span className={`rounded-full border px-3 py-1 text-xs font-black ${className}`}>{label}</span>;
+}
+
 function ImplementationChannelCard({
   channel,
   onApprove,
@@ -7035,6 +7469,86 @@ function buildTasks(analysis: BusinessProfile, ppcPlan: PpcPlan | null) {
     { title: "Review Search Terms", priority: "Medium", detail: "Review search terms twice weekly after launch." },
     { title: "Publish GBP Post", priority: "Low", detail: "Use weekly service, financing, maintenance, or seasonal content." },
   ];
+}
+
+function buildApiDeployActions(
+  analysis: BusinessProfile,
+  ppcPlan: PpcPlan | null,
+  campaign: CampaignOutput | null,
+  contractorUrl: string,
+): DeployAction[] {
+  const clientId = domainLabel(contractorUrl || analysis.companyName || "client");
+  const primaryCity = analysis.serviceAreas[0] || "primary market";
+  const primaryService = analysis.services[0] || "AC Repair";
+  const topCampaign = ppcPlan?.recommendedLaunchPlan[0]?.campaign || `Search | ${primaryService} | ${primaryCity}`;
+  const dailyBudget = ppcPlan?.recommendedLaunchPlan[0]?.recommendedDailyBudget || 50;
+  const missingPage = ppcPlan?.landingPageRecommendations.find((page) => page.bestExistingLandingPage === "Recommended new page") ?? ppcPlan?.landingPageRecommendations[0];
+  const seeds: Array<Pick<DeployAction, "platform" | "actionType" | "title" | "problem" | "recommendation" | "expectedImpact" | "confidence" | "requiredPermissions" | "payloadPreview" | "validationStatus">> = [
+    apiSeed("Google Ads", "add_negative_keyword", "Add negative keyword", "Low-intent HVAC searches can waste budget.", "Add approved negative keyword to the selected campaign.", "Reduce wasted spend and improve lead quality.", 78, ["Google Ads write scope", "Human approval"], ["Negative keyword: jobs", "Match type: Phrase", "No broad destructive changes."]),
+    apiSeed("Google Ads", "add_keyword", "Add keyword", "High-intent local searches need controlled coverage.", "Add exact or phrase keyword after approval.", "Capture high-intent local demand.", 82, ["Google Ads write scope", "Human approval"], [`Keyword: \"${primaryService.toLowerCase()} ${primaryCity.toLowerCase()}\"`, `Campaign: ${topCampaign}`]),
+    apiSeed("Google Ads", "pause_keyword", "Pause keyword", "Low-performing terms should be paused, not deleted.", "Pause keyword after search-term and conversion review.", "Protect budget from low-quality traffic.", 70, ["Google Ads write scope", "Performance review", "Human approval"], ["Keyword status: Paused", "No deletion performed."]),
+    apiSeed("Google Ads", "create_paused_campaign", "Create paused campaign", "Approved campaign strategy needs a safe API deploy path.", "Create campaign in PAUSED state for review.", "Move strategy into a reviewable account build.", 82, ["Google Ads write scope", "Human approval"], [`Campaign: ${topCampaign}`, `Daily budget: $${dailyBudget}`, "Status: PAUSED."]),
+    apiSeed("Google Ads", "create_paused_ad", "Create paused ad draft", "Ad copy should become a reviewable asset.", "Create paused responsive search ad draft.", "Improve relevance without serving live ads automatically.", 76, ["Google Ads write scope", "Human approval"], ["Responsive Search Ad draft", "Status: PAUSED."]),
+    apiSeed("Google Ads", "adjust_budget_after_approval", "Adjust budget after approval", "Budget changes require explicit approval.", "Prepare budget update and deploy only after approval.", "Shift spend toward the highest-readiness opportunity.", 72, ["Google Ads write scope", "Budget approval", "Human approval"], [`Campaign: ${topCampaign}`, "Budget adjustment: approval required."]),
+    apiSeed("HighLevel", "create_missed_call_workflow_draft", "Create missed-call workflow draft", "Missed calls can leak paid and organic leads.", "Create missed-call follow-up workflow draft, inactive until reviewed.", "Recover missed calls and improve speed-to-lead.", 80, ["HighLevel workflows write scope", "Human approval"], ["Trigger: missed call", "Steps: SMS, internal alert, follow-up task", "Status: DRAFT/inactive."]),
+    apiSeed("HighLevel", "create_review_request_workflow_draft", "Create review request workflow draft", "Completed jobs should feed review growth.", "Create review request workflow draft.", "Increase review velocity and local trust.", 76, ["HighLevel workflows write scope", "Human approval"], ["Trigger: won job or completed appointment", "Status: DRAFT/inactive."]),
+    apiSeed("HighLevel", "create_opportunity_follow_up_workflow_draft", "Create opportunity follow-up workflow draft", "Open estimates need consistent follow-up.", "Create opportunity follow-up workflow draft.", "Improve estimate follow-up and close rate.", 78, ["HighLevel workflows write scope", "Human approval"], ["Trigger: open opportunity or estimate sent", "Status: DRAFT/inactive."]),
+    apiSeed("HighLevel", "create_task", "Create task", "Recommendations need accountable owners.", "Create HighLevel task for the approved next action.", "Improve implementation accountability.", 82, ["HighLevel tasks write scope", "Human approval"], ["Task: review launch readiness", "Due: next business day."]),
+    apiSeed("HighLevel", "add_tag", "Add tag", "Lead segmentation improves reporting and follow-up.", "Add approved tag to selected CRM records.", "Improve segmentation and attribution.", 70, ["HighLevel contacts write scope", "Human approval"], ["Tag: HVAC Growth OS - Marketing Qualified", "No contact creation."]),
+    apiSeed("HighLevel", "update_lead_source_field", "Update lead source field", "Revenue attribution needs clean source fields.", "Update lead source field after attribution is confirmed.", "Improve revenue attribution by source.", 74, ["HighLevel custom fields write scope", "Human approval"], ["Field: Lead Source", "No destructive updates."]),
+    apiSeed("Google Business Profile", "create_post_draft", "Create GBP post draft", "GBP posts should support current service demand.", "Create post draft and require approval before publishing.", "Improve local freshness and trust.", 76, ["GBP post management permission", "Human approval"], [campaign?.googleBusinessProfilePost || `${primaryService} post for ${primaryCity}`, "Status: Draft."]),
+    apiSeed("Google Business Profile", "publish_post_after_approval", "Publish GBP post after approval", "Prepared GBP content needs an approval-controlled publish path.", "Publish approved GBP post only after human approval.", "Publish approved local update.", 72, ["GBP post management permission", "Human approval"], ["Approved GBP post", "Publish only after approval."]),
+    apiSeed("Google Business Profile", "update_services_draft", "Update GBP services draft", "GBP services should reflect verified services.", "Create services update draft for approval.", "Improve local service clarity.", 74, ["GBP profile management permission", "Human approval"], (analysis.services.length ? analysis.services : [primaryService]).slice(0, 6).map((service) => `Service draft: ${service}`)),
+    apiSeed("Google Business Profile", "reply_to_review_after_approval", "Reply to review after approval", "Review replies are public and need approval.", "Draft reply and publish only after approval.", "Improve review response consistency.", 70, ["GBP review reply permission", "Human approval"], ["Review reply draft", "Approval required before reply."]),
+    apiSeed("Meta", "create_social_post_draft", "Create social post draft", "Social ideas should become draft content.", "Create Meta post draft.", "Support trust-building social content.", 72, ["Meta page content permission", "Human approval"], [campaign?.facebookAd || `${primaryService} homeowner tip for ${primaryCity}`, "Status: Draft."]),
+    apiSeed("Meta", "schedule_approved_post", "Schedule approved Meta post", "Approved content needs a safe scheduling path.", "Schedule approved post only after review.", "Turn approved social content into execution.", 68, ["Meta page content permission", "Human approval"], ["Approved post", "No scheduling without approval."]),
+    apiSeed("Meta", "pull_ad_account_data", "Pull Meta campaign metrics", "Meta performance data can improve recommendations.", "Pull ad account and campaign metrics in read-only mode.", "Improve social performance intelligence.", 66, ["Meta ads read permission"], ["Read ad account data", "Read campaign metrics", "No write operations."]),
+    apiSeed("Website / Landing Pages", "generate_landing_page_draft", "Generate landing page draft", "Campaigns need matching landing pages.", "Generate landing page draft from Revenue Engine mapping.", "Improve paid-search conversion path.", missingPage ? 82 : 68, ["Website/CMS draft permission", "Human approval"], [missingPage?.suggestedPageTitle || `${primaryService} in ${primaryCity}`, missingPage?.suggestedH1 || `${primaryService} help in ${primaryCity}`, missingPage?.suggestedCta || "Request Service"], "Needs Review"),
+    apiSeed("SEO", "generate_meta_updates", "Generate meta title and description updates", "SEO recommendations should become reviewable page updates.", "Generate meta title and description updates.", "Improve local search clarity.", 78, ["Website SEO edit permission", "Human approval"], [analysis.seoAnalysis.titleTag || `${primaryService} in ${primaryCity}`, analysis.seoAnalysis.metaDescription || "Draft meta description from service-area context."], "Needs Review"),
+    apiSeed("SEO", "generate_schema_markup", "Generate schema markup", "Business facts should become reviewable markup.", "Generate schema markup draft from verified business profile.", "Improve AI and local search understanding.", 76, ["Website SEO edit permission", "Human approval"], ["LocalBusiness schema draft", "Service schema draft", "FAQ schema draft."], "Needs Review"),
+    apiSeed("Website / Landing Pages", "generate_city_page_draft", "Generate city page draft", "Service-area visibility needs city-specific drafts.", "Generate city page draft for approval before publishing.", "Improve city-level organic visibility.", 78, ["Website/CMS draft permission", "Human approval"], [`City: ${primaryCity}`, `Service: ${primaryService}`, "Status: Draft page."], "Needs Review"),
+    apiSeed("Reports", "generate_report_draft", "Generate report draft", "Reports should become approved deliverables.", "Generate report draft from current workspace data.", "Improve client clarity and implementation accountability.", 82, ["Report generation permission", "Human approval"], ["Launch report draft", "Weekly report draft", "Monthly executive report draft."], "Ready"),
+  ];
+
+  return seeds.map((seed) => {
+    const id = `api-${clientId}-${seed.actionType}`;
+    const existing = loadDeployAction(id);
+    const base: DeployAction = {
+      ...seed,
+      id,
+      clientId,
+      payloadPreview: [
+        ...seed.payloadPreview,
+        "Safety: no delete operations.",
+        seed.platform === "Google Ads" ? "Safety: campaigns/ads default to PAUSED." : "",
+        seed.platform === "HighLevel" ? "Safety: workflows default to DRAFT/inactive when supported." : "",
+        seed.platform === "Google Business Profile" || seed.platform === "Meta" ? "Safety: publish/schedule requires approval." : "",
+      ].filter(Boolean),
+      approvalStatus: "Pending",
+      deploymentStatus: "Waiting",
+      errorMessage: "",
+      createdAt: new Date().toISOString(),
+      approvedAt: "",
+      deployedAt: "",
+      deployedBy: "",
+    };
+    return existing ? { ...base, ...existing, payloadPreview: base.payloadPreview, requiredPermissions: base.requiredPermissions } : base;
+  });
+}
+
+function apiSeed(
+  platform: DeployPlatform,
+  actionType: string,
+  title: string,
+  problem: string,
+  recommendation: string,
+  expectedImpact: string,
+  confidence: number,
+  requiredPermissions: string[],
+  payloadPreview: string[],
+  validationStatus: DeployAction["validationStatus"] = "Permission Required",
+) {
+  return { actionType, confidence, expectedImpact, payloadPreview, platform, problem, recommendation, requiredPermissions, title, validationStatus };
 }
 
 function buildDeploymentCandidates(
