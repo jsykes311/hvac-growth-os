@@ -103,6 +103,14 @@ type DecisionRecommendation = {
   dependencies: string[];
   reasoning: string;
 };
+type ImplementationAction = {
+  buttonLabel: "Fix Now" | "Generate" | "Deploy" | "Publish" | "Reply" | "Optimize" | "Connect" | "Approve" | "Schedule" | "Sync" | "Build" | "Create";
+  confidence: number;
+  dependencies: string[];
+  estimatedBusinessImpact: string;
+  estimatedTime: string;
+  targetSection: PlatformSection;
+};
 type DeploymentApprovalStatus = "Pending" | "Approved" | "Dismissed" | "Remind Later";
 type DeploymentRuntimeStatus = "Waiting" | "Success" | "Failed";
 type ChannelStatus = "Ready" | "Needs Setup" | "Pending Review" | "Deployed" | "Failed";
@@ -429,6 +437,19 @@ export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
 
   useEffect(() => {
     void loadSavedWorkspace();
+  }, []);
+
+  useEffect(() => {
+    function handleNavigate(event: Event) {
+      const section = (event as CustomEvent<PlatformSection>).detail;
+      if (!PLATFORM_NAV.some((item) => item.id === section)) return;
+      setActiveSection(section);
+      setView("results");
+      window.scrollTo({ behavior: "smooth", top: 0 });
+    }
+
+    window.addEventListener("hvac-growth-os:navigate", handleNavigate);
+    return () => window.removeEventListener("hvac-growth-os:navigate", handleNavigate);
   }, []);
 
   async function loadSavedWorkspace() {
@@ -1355,6 +1376,17 @@ function DecisionEngine({
                 </div>
               </div>
 
+              <RecommendationActionFooter
+                action={{
+                  confidence: decision.confidenceScore,
+                  dependencies: decision.dependencies,
+                  estimatedBusinessImpact: `${decision.expectedImpact} ${decision.estimatedRevenueOpportunity}`,
+                  estimatedTime: decision.estimatedTime,
+                  targetSection: sectionForActionContext(`${decision.category} ${decision.recommendedAction}`),
+                }}
+                context={`${decision.category} ${decision.recommendedAction} ${decision.reasoning}`}
+              />
+
               <textarea
                 className="mt-3 min-h-20 w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-flame focus:ring-4 focus:ring-flame/15"
                 onChange={(event) => setOutcomes({ ...outcomes, [decision.id]: event.target.value })}
@@ -1384,6 +1416,119 @@ function DecisionMeta({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-black text-ink">{value}</p>
     </div>
   );
+}
+
+function RecommendationActionFooter({
+  action,
+  className = "",
+  context,
+}: {
+  action?: Partial<ImplementationAction>;
+  className?: string;
+  context: string;
+}) {
+  const resolved = resolveImplementationAction(context, action);
+
+  return (
+    <div className={`mt-4 rounded-xl border border-ink/10 bg-white p-3 ${className}`}>
+      <div className="grid gap-2 md:grid-cols-4">
+        <DecisionMeta label="Business Impact" value={resolved.estimatedBusinessImpact} />
+        <DecisionMeta label="Time" value={resolved.estimatedTime} />
+        <DecisionMeta label="Confidence" value={`${resolved.confidence}%`} />
+        <DecisionMeta label="Dependencies" value={resolved.dependencies.join(", ") || "None"} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs font-bold leading-5 text-graphite/65">
+          Next step opens the workspace area where this can be reviewed, generated, connected, approved, or deployed.
+        </p>
+        <button
+          className="inline-flex h-10 items-center justify-center rounded-md bg-ink px-4 text-sm font-black text-white transition hover:-translate-y-0.5"
+          onClick={() => navigateToImplementationTarget(resolved.targetSection)}
+          type="button"
+        >
+          {resolved.buttonLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function navigateToImplementationTarget(section: PlatformSection) {
+  window.dispatchEvent(new CustomEvent("hvac-growth-os:navigate", { detail: section }));
+}
+
+function resolveImplementationAction(context: string, override: Partial<ImplementationAction> = {}): ImplementationAction {
+  const targetSection = override.targetSection ?? sectionForActionContext(context);
+  const buttonLabel = override.buttonLabel ?? buttonForActionContext(context);
+  return {
+    buttonLabel,
+    confidence: clampScore(override.confidence ?? confidenceForActionContext(context)),
+    dependencies: override.dependencies ?? dependenciesForActionContext(context),
+    estimatedBusinessImpact: override.estimatedBusinessImpact ?? impactForActionContext(context),
+    estimatedTime: override.estimatedTime ?? timeForActionContext(context),
+    targetSection,
+  };
+}
+
+function buttonForActionContext(context: string): ImplementationAction["buttonLabel"] {
+  if (/connect|oauth|highlevel|google ads|search console|gbp|business profile|meta/i.test(context)) return "Connect";
+  if (/deploy|export|package|editor|launch/i.test(context)) return "Deploy";
+  if (/approve|review|qa/i.test(context)) return "Approve";
+  if (/sync|refresh|data|tracking|gclid|utm|conversion/i.test(context)) return "Sync";
+  if (/publish|post|gbp|social|email|reply|review request/i.test(context)) return "Publish";
+  if (/create|page|landing|city|faq|schema|asset/i.test(context)) return "Create";
+  if (/generate|report|campaign|revenue engine/i.test(context)) return "Generate";
+  if (/optimize|budget|keyword|negative|search term|cpc|ctr/i.test(context)) return "Optimize";
+  if (/schedule|calendar|appointment/i.test(context)) return "Schedule";
+  return "Fix Now";
+}
+
+function sectionForActionContext(context: string): PlatformSection {
+  if (/connect|oauth|highlevel|google ads data|search console|gbp|business profile|meta/i.test(context)) return "connected-apps";
+  if (/tracking|gclid|utm|conversion|call tracking|form tracking|tag manager|gtm/i.test(context)) return "conversion-tracking";
+  if (/deploy|export|package|editor|launch qa|approval/i.test(context)) return "deploy-center";
+  if (/revenue engine|campaign|keyword|budget|google ads|search term|negative/i.test(context)) return "revenue-engine";
+  if (/landing page|website|city page|service page|cms|phone|cta/i.test(context)) return "website-audit";
+  if (/seo|organic|faq|schema|search readiness|ai visibility/i.test(context)) return "seo";
+  if (/market|competitor|positioning|promotion/i.test(context)) return "market-intelligence";
+  if (/weather|social|email|post|review request|today/i.test(context)) return "marketing-intelligence";
+  if (/report|summary|monthly|weekly|quarterly/i.test(context)) return "reports";
+  if (/task|workspace|owner|health/i.test(context)) return "client-workspace";
+  return "dashboard";
+}
+
+function impactForActionContext(context: string) {
+  if (/budget|campaign|revenue|won|estimate|replacement|deploy|launch/i.test(context)) return "High revenue opportunity";
+  if (/tracking|connect|crm|google ads|highlevel|conversion/i.test(context)) return "High confidence lift";
+  if (/seo|landing|city|website|cta|page/i.test(context)) return "Medium to high lead lift";
+  if (/social|email|post|review|gbp/i.test(context)) return "Medium trust and demand lift";
+  return "Medium operating improvement";
+}
+
+function timeForActionContext(context: string) {
+  if (/sync|approve|review|connect|post|publish|negative keyword/i.test(context)) return "10-30 minutes";
+  if (/tracking|gclid|utm|tag|campaign|export|report/i.test(context)) return "30-60 minutes";
+  if (/landing page|city page|service page|website|schema|faq/i.test(context)) return "1-2 hours";
+  return "30 minutes";
+}
+
+function confidenceForActionContext(context: string) {
+  if (/connected|synced|detected|ready|available/i.test(context)) return 82;
+  if (/missing|optional|not generated|not connected|needs/i.test(context)) return 64;
+  return 74;
+}
+
+function dependenciesForActionContext(context: string) {
+  const dependencies = new Set<string>();
+  if (/google ads|campaign|keyword|budget|search term/i.test(context)) dependencies.add("Google Ads access");
+  if (/highlevel|crm|call|lead|opportunit|won|estimate/i.test(context)) dependencies.add("HighLevel access");
+  if (/website|landing|city page|service page|cta|phone|cms/i.test(context)) dependencies.add("Website/CMS access");
+  if (/gbp|business profile|review/i.test(context)) dependencies.add("GBP access");
+  if (/social|facebook|instagram|meta/i.test(context)) dependencies.add("Social account access");
+  if (/email/i.test(context)) dependencies.add("Email/CRM list");
+  if (/approve|deploy|budget|launch/i.test(context)) dependencies.add("Human approval");
+  if (!dependencies.size) dependencies.add("Owner approval");
+  return Array.from(dependencies);
 }
 
 function DecisionButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -1570,6 +1715,16 @@ function MorningBriefSection({
                   <StatusBadge status={alert.status} />
                 </div>
                 <p className="mt-2 text-sm leading-5 text-graphite/70">{alert.detail}</p>
+                <RecommendationActionFooter
+                  action={{
+                    buttonLabel: alert.status === "Ready" ? "Optimize" : "Fix Now",
+                    confidence: alert.status === "Ready" ? 82 : 66,
+                    dependencies: dependenciesForActionContext(`${alert.label} ${alert.detail}`),
+                    estimatedBusinessImpact: impactForActionContext(`${alert.label} ${alert.detail}`),
+                    estimatedTime: timeForActionContext(`${alert.label} ${alert.detail}`),
+                  }}
+                  context={`${alert.label} ${alert.detail}`}
+                />
               </article>
             ))}
           </div>
@@ -1585,6 +1740,16 @@ function MorningBriefSection({
                   <ConfidenceBadge score={alert.confidence} />
                 </div>
                 <p className="mt-2 text-sm leading-5 text-graphite/70">{alert.detail}</p>
+                <RecommendationActionFooter
+                  action={{
+                    confidence: alert.confidence,
+                    dependencies: ["Market review", "Owner approval"],
+                    estimatedBusinessImpact: "Medium to high positioning lift",
+                    estimatedTime: "30-60 minutes",
+                    targetSection: "market-intelligence",
+                  }}
+                  context={`${alert.label} ${alert.detail}`}
+                />
               </article>
             ))}
           </div>
@@ -1627,6 +1792,16 @@ function MorningActionCard({ action }: { action: MorningBriefAction }) {
         <DecisionMeta label="Expected Impact" value={action.expectedImpact} />
         <DecisionMeta label="Dependencies" value={action.dependencies.join(", ")} />
       </div>
+      <RecommendationActionFooter
+        action={{
+          confidence: action.confidence,
+          dependencies: action.dependencies,
+          estimatedBusinessImpact: action.expectedImpact,
+          estimatedTime: /budget|campaign/i.test(action.action) ? "20-45 minutes" : "10-30 minutes",
+          targetSection: sectionForActionContext(`${action.relatedModule} ${action.action}`),
+        }}
+        context={`${action.relatedModule} ${action.action} ${action.reason}`}
+      />
     </article>
   );
 }
@@ -3496,6 +3671,16 @@ function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
                 </div>
                 <p className="mt-2 text-sm leading-5 text-graphite/70">{recommendation.reason}</p>
                 <p className="mt-3 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-bold leading-5 text-graphite/70">{recommendation.importGuidance}</p>
+                <RecommendationActionFooter
+                  action={{
+                    confidence: recommendation.confidence,
+                    dependencies: dependenciesForActionContext(`${recommendation.title} ${recommendation.importGuidance}`),
+                    estimatedBusinessImpact: impactForActionContext(`${recommendation.title} ${recommendation.reason}`),
+                    estimatedTime: timeForActionContext(`${recommendation.title} ${recommendation.importGuidance}`),
+                    targetSection: "conversion-tracking",
+                  }}
+                  context={`${recommendation.title} ${recommendation.reason} ${recommendation.importGuidance}`}
+                />
               </article>
             ))}
           </div>
@@ -3521,6 +3706,17 @@ function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
             {blockers.length ? blockers.map((blocker) => (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold leading-5 text-amber-900" key={blocker}>
                 {blocker}
+                <RecommendationActionFooter
+                  action={{
+                    confidence: 68,
+                    dependencies: dependenciesForActionContext(blocker),
+                    estimatedBusinessImpact: "High confidence lift before scaling spend",
+                    estimatedTime: timeForActionContext(blocker),
+                    targetSection: sectionForActionContext(blocker),
+                  }}
+                  className="bg-white/80"
+                  context={blocker}
+                />
               </div>
             )) : (
               <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-bold leading-5 text-teal-800">
@@ -3542,6 +3738,17 @@ function TrackingCheck({ detail, label, status }: { detail: string; label: strin
         <TrackingStatusBadge status={status} />
       </div>
       <p className="mt-2 text-sm leading-5 text-graphite/70">{detail}</p>
+      <RecommendationActionFooter
+        action={{
+          buttonLabel: status === "Ready" ? "Optimize" : "Fix Now",
+          confidence: status === "Ready" ? 82 : 64,
+          dependencies: dependenciesForActionContext(`${label} ${detail}`),
+          estimatedBusinessImpact: status === "Ready" ? "Medium optimization opportunity" : "High tracking confidence lift",
+          estimatedTime: timeForActionContext(`${label} ${detail}`),
+          targetSection: sectionForActionContext(`${label} ${detail}`),
+        }}
+        context={`${label} ${detail}`}
+      />
     </article>
   );
 }
@@ -4115,6 +4322,16 @@ function MarketingIntelligenceSection({
                   <p className="text-xs font-black uppercase tracking-[0.12em] text-copper">{answer.question}</p>
                   <p className="mt-2 text-sm font-black text-ink">{answer.answer}</p>
                   <p className="mt-2 text-sm leading-5 text-graphite/70">{answer.explanation}</p>
+                  <RecommendationActionFooter
+                    action={{
+                      confidence: 74,
+                      dependencies: dependenciesForActionContext(`${answer.question} ${answer.answer}`),
+                      estimatedBusinessImpact: impactForActionContext(`${answer.question} ${answer.answer}`),
+                      estimatedTime: timeForActionContext(`${answer.question} ${answer.answer}`),
+                      targetSection: sectionForActionContext(`${answer.question} ${answer.answer}`),
+                    }}
+                    context={`${answer.question} ${answer.answer} ${answer.explanation}`}
+                  />
                 </article>
               ))}
             </div>
@@ -4133,6 +4350,16 @@ function MarketingIntelligenceSection({
                     <ConfidenceBadge score={action.confidence} />
                   </div>
                   <p className="mt-2 text-sm leading-5 text-graphite/70">{action.explanation}</p>
+                  <RecommendationActionFooter
+                    action={{
+                      confidence: action.confidence,
+                      dependencies: dependenciesForActionContext(action.action),
+                      estimatedBusinessImpact: impactForActionContext(action.action),
+                      estimatedTime: timeForActionContext(action.action),
+                      targetSection: sectionForActionContext(action.action),
+                    }}
+                    context={`${action.action} ${action.explanation}`}
+                  />
                 </article>
               ))}
             </div>
@@ -4248,6 +4475,16 @@ function MarketIntelligenceSection({
                 <p className="text-3xl font-black text-ink">{score.score}</p>
                 <p className="mt-1 text-sm font-black text-ink">{score.label}</p>
                 <p className="mt-2 text-sm leading-5 text-graphite/70">{score.explanation}</p>
+                <RecommendationActionFooter
+                  action={{
+                    confidence: score.score,
+                    dependencies: dependenciesForActionContext(`${score.label} ${score.explanation}`),
+                    estimatedBusinessImpact: impactForActionContext(`${score.label} ${score.explanation}`),
+                    estimatedTime: timeForActionContext(`${score.label} ${score.explanation}`),
+                    targetSection: "market-intelligence",
+                  }}
+                  context={`${score.label} ${score.explanation}`}
+                />
               </article>
             ))}
           </div>
@@ -4331,6 +4568,17 @@ function MarketIntelligenceSection({
             <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]" key={`${copy.headline}-${copy.description}`}>
               <p className="text-sm font-black text-ink">{copy.headline}</p>
               <p className="mt-2 text-sm leading-5 text-graphite/70">{copy.description}</p>
+              <RecommendationActionFooter
+                action={{
+                  buttonLabel: "Generate",
+                  confidence: 76,
+                  dependencies: ["Revenue Engine", "Owner approval"],
+                  estimatedBusinessImpact: "Medium to high ad relevance lift",
+                  estimatedTime: "20-30 minutes",
+                  targetSection: "revenue-engine",
+                }}
+                context={`${copy.headline} ${copy.description}`}
+              />
             </article>
           ))}
         </div>
@@ -4351,6 +4599,16 @@ function RecommendationPanel({ title, values }: { title: string; values: Array<{
               <ConfidenceBadge score={value.confidence} />
             </div>
             <p className="mt-2 text-sm leading-5 text-graphite/70">{value.detail}</p>
+            <RecommendationActionFooter
+              action={{
+                confidence: value.confidence,
+                dependencies: dependenciesForActionContext(`${title} ${value.label} ${value.detail}`),
+                estimatedBusinessImpact: impactForActionContext(`${title} ${value.label} ${value.detail}`),
+                estimatedTime: timeForActionContext(`${title} ${value.label} ${value.detail}`),
+                targetSection: sectionForActionContext(`${title} ${value.label} ${value.detail}`),
+              }}
+              context={`${title} ${value.label} ${value.detail}`}
+            />
           </article>
         ))}
       </div>
@@ -4413,6 +4671,17 @@ function ReportsSection({
               <p className="mt-2 text-sm leading-5 text-graphite/70">
                 {ppcPlan ? "Ready to generate from current workspace data." : "Run Revenue Engine to complete this report."}
               </p>
+              <RecommendationActionFooter
+                action={{
+                  buttonLabel: ppcPlan ? "Generate" : "Build",
+                  confidence: ppcPlan ? 82 : 62,
+                  dependencies: ppcPlan ? ["Report review"] : ["Revenue Engine"],
+                  estimatedBusinessImpact: "Medium client clarity and retention lift",
+                  estimatedTime: ppcPlan ? "20-30 minutes" : "30-45 minutes",
+                  targetSection: ppcPlan ? "reports" : "revenue-engine",
+                }}
+                context={`${report} ${ppcPlan ? "ready to generate" : "run Revenue Engine"}`}
+              />
             </article>
           ))}
         </div>
@@ -4592,6 +4861,17 @@ function TaskCenter({ analysis, ppcPlan }: { analysis: BusinessProfile; ppcPlan:
               <span className="rounded-lg bg-white px-2 py-1 text-xs font-black text-copper ring-1 ring-ink/10">{task.priority}</span>
             </div>
             <p className="mt-2 text-sm leading-5 text-graphite/70">{task.detail}</p>
+            <RecommendationActionFooter
+              action={{
+                buttonLabel: buttonForActionContext(task.title),
+                confidence: task.priority === "High" ? 82 : task.priority === "Medium" ? 72 : 62,
+                dependencies: dependenciesForActionContext(`${task.title} ${task.detail}`),
+                estimatedBusinessImpact: impactForActionContext(`${task.title} ${task.detail}`),
+                estimatedTime: timeForActionContext(`${task.title} ${task.detail}`),
+                targetSection: sectionForActionContext(`${task.title} ${task.detail}`),
+              }}
+              context={`${task.title} ${task.detail}`}
+            />
           </article>
         ))}
       </div>
@@ -4681,6 +4961,18 @@ function ImplementationChannelCard({
         <p className="mt-1 text-sm font-bold text-ink">{channel.lastDeployedItem}</p>
       </div>
 
+      <RecommendationActionFooter
+        action={{
+          buttonLabel: channel.status === "Ready" || channel.status === "Pending Review" ? "Approve" : "Fix Now",
+          confidence: channel.status === "Ready" ? 82 : channel.status === "Pending Review" ? 74 : 62,
+          dependencies: [...channel.requiredIntegrations, ...channel.blockingIssues].length ? [...channel.requiredIntegrations, ...channel.blockingIssues] : ["Human approval"],
+          estimatedBusinessImpact: impactForActionContext(`${channel.target} ${channel.topRecommendedDeployment}`),
+          estimatedTime: channel.pendingDeployments ? "20-45 minutes" : "30 minutes",
+          targetSection: "deploy-center",
+        }}
+        context={`${channel.target} ${channel.topRecommendedDeployment} ${channel.blockingIssues.join(" ")}`}
+      />
+
       <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-black text-ink transition hover:border-flame/40" disabled={!channel.candidate} onClick={onPreview} type="button">Preview</button>
         <button className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-black text-ink transition hover:border-flame/40" disabled={!channel.candidate} onClick={onApprove} type="button">Approve</button>
@@ -4749,6 +5041,17 @@ function DeploymentWorkflowCard({
           </div>
           <h3 className="mt-3 text-xl font-black text-ink">{candidate.title}</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">{candidate.recommendation}</p>
+          <RecommendationActionFooter
+            action={{
+              buttonLabel: approvalStatus === "Approved" ? "Deploy" : "Approve",
+              confidence: validation.ready ? 82 : 64,
+              dependencies: validation.ready ? ["Human approval"] : validation.missing,
+              estimatedBusinessImpact: impactForActionContext(`${candidate.target} ${candidate.title} ${candidate.recommendation}`),
+              estimatedTime: "20-45 minutes",
+              targetSection: "deploy-center",
+            }}
+            context={`${candidate.target} ${candidate.title} ${candidate.recommendation}`}
+          />
         </div>
         <Button onClick={() => onDeploy(candidate)} variant={approvalStatus === "Approved" ? "primary" : "secondary"}>
           Deploy Draft
@@ -4860,6 +5163,17 @@ function DeployCard({ title, items }: { title: string; items: Array<{ label: str
               <StatusBadge status={item.status} />
             </div>
             <p className="mt-2 text-sm leading-5 text-graphite/70">{item.detail}</p>
+            <RecommendationActionFooter
+              action={{
+                buttonLabel: item.status === "Ready" ? "Generate" : "Build",
+                confidence: item.status === "Ready" ? 80 : 62,
+                dependencies: dependenciesForActionContext(`${title} ${item.label} ${item.detail}`),
+                estimatedBusinessImpact: impactForActionContext(`${title} ${item.label} ${item.detail}`),
+                estimatedTime: timeForActionContext(`${title} ${item.label} ${item.detail}`),
+                targetSection: sectionForActionContext(`${title} ${item.label} ${item.detail}`),
+              }}
+              context={`${title} ${item.label} ${item.detail}`}
+            />
           </div>
         ))}
       </div>
@@ -5077,6 +5391,17 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
                   ))}
                 </ul>
               )}
+              <RecommendationActionFooter
+                action={{
+                  buttonLabel: item.readinessStatus === "Ready" ? "Approve" : item.readinessStatus === "Needs Work" ? "Fix Now" : "Create",
+                  confidence: item.priorityScore,
+                  dependencies: item.missingRequirements.length ? item.missingRequirements : ["Human approval"],
+                  estimatedBusinessImpact: item.readinessStatus === "Ready" ? "High revenue launch opportunity" : "Medium readiness lift",
+                  estimatedTime: item.readinessStatus === "Ready" ? "30-45 minutes" : "45-90 minutes",
+                  targetSection: item.readinessStatus === "Ready" ? "deploy-center" : sectionForActionContext(item.recommendedFirstAction),
+                }}
+                context={`${item.campaignName} ${item.reasoning} ${item.recommendedFirstAction}`}
+              />
             </article>
           ))}
         </div>
@@ -5105,6 +5430,17 @@ function PpcPlanResults({ plan }: { plan: PpcPlan }) {
                 <p className="mt-2 text-xs font-black uppercase tracking-[0.12em] text-graphite/60">
                   ${campaign.monthlyBudgetEstimate}/month estimate
                 </p>
+                <RecommendationActionFooter
+                  action={{
+                    buttonLabel: "Deploy",
+                    confidence: campaign.priorityScore,
+                    dependencies: ["Google Ads access", "Tracking review", "Human approval"],
+                    estimatedBusinessImpact: "High revenue opportunity",
+                    estimatedTime: "45 minutes",
+                    targetSection: "google-ads-deployment",
+                  }}
+                  context={`${campaign.campaign} ${campaign.whyLaunchNow}`}
+                />
               </article>
             ))}
           </div>
@@ -5269,6 +5605,17 @@ function GoogleAdsDeploymentEngine({
                   <DeploymentValidationBadge status={item.status} />
                 </div>
                 <p className="mt-2 text-sm leading-5 text-graphite/70">{item.detail}</p>
+                <RecommendationActionFooter
+                  action={{
+                    buttonLabel: item.status === "Ready" ? "Approve" : "Fix Now",
+                    confidence: item.status === "Ready" ? 82 : item.status === "Needs Review" ? 70 : 55,
+                    dependencies: dependenciesForActionContext(`${item.label} ${item.detail}`),
+                    estimatedBusinessImpact: item.status === "Ready" ? "High launch confidence" : "High import protection",
+                    estimatedTime: timeForActionContext(`${item.label} ${item.detail}`),
+                    targetSection: sectionForActionContext(`${item.label} ${item.detail}`),
+                  }}
+                  context={`${item.label} ${item.detail}`}
+                />
               </article>
             ))}
           </div>
@@ -5324,6 +5671,17 @@ function GoogleAdsDeploymentEngine({
                 <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-copper">${campaign.recommendedDailyBudget}/day</span>
               </div>
               <p className="mt-2 text-sm leading-5 text-graphite/70">{campaign.whyLaunchNow}</p>
+              <RecommendationActionFooter
+                action={{
+                  buttonLabel: "Deploy",
+                  confidence: campaign.priorityScore,
+                  dependencies: ["Google Ads Editor", "Tracking review", "Human approval"],
+                  estimatedBusinessImpact: "High launch opportunity",
+                  estimatedTime: "30-45 minutes",
+                  targetSection: "deploy-center",
+                }}
+                context={`${campaign.campaign} ${campaign.whyLaunchNow}`}
+              />
             </article>
           ))}
         </div>
@@ -5859,6 +6217,17 @@ function ImplementationChecklist({ plan }: { plan: PpcPlan }) {
             </div>
             <p className="mt-2 text-sm font-bold text-graphite">{item.item}</p>
             <p className="mt-2 text-sm leading-5 text-graphite/70">{item.notes}</p>
+            <RecommendationActionFooter
+              action={{
+                buttonLabel: item.status === "Ready" ? "Approve" : "Fix Now",
+                confidence: item.status === "Ready" ? 80 : 66,
+                dependencies: dependenciesForActionContext(`${item.category} ${item.item} ${item.notes}`),
+                estimatedBusinessImpact: impactForActionContext(`${item.category} ${item.item} ${item.notes}`),
+                estimatedTime: timeForActionContext(`${item.category} ${item.item} ${item.notes}`),
+                targetSection: sectionForActionContext(`${item.category} ${item.item} ${item.notes}`),
+              }}
+              context={`${item.category} ${item.item} ${item.notes}`}
+            />
           </article>
         ))}
       </div>
@@ -5912,6 +6281,16 @@ function ReportList({ title, values }: { title: string; values: string[] }) {
         {values.map((value) => (
           <li className="rounded-md bg-frost px-3 py-2 text-sm leading-5 text-graphite" key={value}>
             {value}
+            <RecommendationActionFooter
+              action={{
+                confidence: 72,
+                dependencies: dependenciesForActionContext(`${title} ${value}`),
+                estimatedBusinessImpact: impactForActionContext(`${title} ${value}`),
+                estimatedTime: timeForActionContext(`${title} ${value}`),
+                targetSection: sectionForActionContext(`${title} ${value}`),
+              }}
+              context={`${title} ${value}`}
+            />
           </li>
         ))}
       </ul>
@@ -5973,6 +6352,17 @@ function SeoAnalysisPanel({ analysis }: { analysis: BusinessProfile }) {
                 <p className="mt-2 font-mono text-xs font-bold text-graphite/70">{page.slug || "/recommended-page"}</p>
                 <p className="mt-2 text-sm leading-5 text-graphite">{page.searchIntent}</p>
                 <p className="mt-2 text-sm leading-5 text-graphite/70">{page.rationale}</p>
+                <RecommendationActionFooter
+                  action={{
+                    buttonLabel: "Create",
+                    confidence: page.priority === "High" ? 82 : page.priority === "Medium" ? 72 : 62,
+                    dependencies: ["Website/CMS access", "Service details"],
+                    estimatedBusinessImpact: page.priority === "High" ? "High local search opportunity" : "Medium local visibility lift",
+                    estimatedTime: "1-2 hours",
+                    targetSection: "website-audit",
+                  }}
+                  context={`${page.title} ${page.searchIntent} ${page.rationale}`}
+                />
               </article>
             ))
           ) : (
@@ -6057,6 +6447,17 @@ function KeywordUpdateList({
                 Use this wording: <span className="font-black text-ink">{item.suggestedText}</span>
               </p>
               <p className="mt-2 text-sm leading-5 text-graphite/70">{item.reason}</p>
+              <RecommendationActionFooter
+                action={{
+                  buttonLabel: "Optimize",
+                  confidence: 76,
+                  dependencies: ["Website/CMS access"],
+                  estimatedBusinessImpact: "Medium SEO relevance lift",
+                  estimatedTime: "20-30 minutes",
+                  targetSection: "seo",
+                }}
+                context={`${item.page} ${item.suggestedText} ${item.reason}`}
+              />
             </article>
           ))}
         </div>
@@ -6095,6 +6496,16 @@ function CompactList({
           {values.map((value) => (
             <li className="rounded-md bg-frost px-3 py-2 text-sm leading-5 text-graphite" key={value}>
               {value}
+              <RecommendationActionFooter
+                action={{
+                  confidence: 72,
+                  dependencies: dependenciesForActionContext(`${title} ${value}`),
+                  estimatedBusinessImpact: impactForActionContext(`${title} ${value}`),
+                  estimatedTime: timeForActionContext(`${title} ${value}`),
+                  targetSection: sectionForActionContext(`${title} ${value}`),
+                }}
+                context={`${title} ${value}`}
+              />
             </li>
           ))}
         </ul>
@@ -6130,6 +6541,17 @@ function FixList({
               <p className="mt-3 text-sm font-black text-ink">{item.problem}</p>
               <p className="mt-2 text-sm leading-5 text-graphite">{item.fix}</p>
               <p className="mt-2 text-sm leading-5 text-graphite/70">{item.impact}</p>
+              <RecommendationActionFooter
+                action={{
+                  buttonLabel: item.effort === "Quick" ? "Fix Now" : "Build",
+                  confidence: item.priority === "High" ? 82 : item.priority === "Medium" ? 72 : 62,
+                  dependencies: dependenciesForActionContext(`${title} ${item.problem} ${item.fix}`),
+                  estimatedBusinessImpact: item.impact,
+                  estimatedTime: item.effort === "Quick" ? "20-30 minutes" : item.effort === "Moderate" ? "45-90 minutes" : "2+ hours",
+                  targetSection: sectionForActionContext(`${title} ${item.problem} ${item.fix}`),
+                }}
+                context={`${title} ${item.problem} ${item.fix} ${item.impact}`}
+              />
             </article>
           ))}
         </div>
