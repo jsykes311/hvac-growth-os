@@ -361,6 +361,15 @@ type MorningBriefAction = {
   relatedModule: string;
   status: DecisionStatus;
 };
+type IntelligenceUpgradeItem = {
+  buttonLabel: string;
+  gain: string;
+  key: string;
+  level: "Level 1" | "Level 2" | "Level 3" | "Level 4";
+  status: "Active" | "Connected" | "Optional" | "Ready" | "Setup Needed";
+  title: string;
+  unlocks: string;
+};
 
 const CAMPAIGN_GOALS = [
   "Book more service calls",
@@ -722,13 +731,14 @@ function HomeView({
   return (
     <div className="grid flex-1 items-center gap-10 py-12 lg:grid-cols-[1.05fr_0.95fr]">
       <section>
-        <Eyebrow>Implementation platform</Eyebrow>
+        <Eyebrow>Progressive Intelligence</Eyebrow>
         <h1 className="max-w-3xl text-5xl font-black leading-[1.02] text-ink sm:text-6xl">
-          Turn an HVAC website into a deployed growth system.
+          Start with one website URL.
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-8 text-graphite">
-          Enter a contractor URL. HVAC Growth OS builds the workspace, audits the site, creates the Revenue Engine, and organizes the assets needed to launch.
+          HVAC Growth OS gives immediate recommendations from the website scan, then gets smarter as you optionally connect Google Ads, HighLevel, GBP, Meta, Search Console, and weather data.
         </p>
+        <ProgressiveIntelligencePanel compact items={buildProgressiveIntelligenceItems()} />
         <OnboardingPreview />
         <OperatingChannels />
       </section>
@@ -771,7 +781,7 @@ function HomeView({
           </div>
           <Button disabled={!isReady || isAnalyzing} type="submit">
             {isAnalyzing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}
-            {isAnalyzing ? "Analyzing..." : "Analyze"}
+            {isAnalyzing ? "Analyzing..." : "Analyze Website URL"}
           </Button>
           {error && <ErrorMessage message={error} />}
         </form>
@@ -1068,6 +1078,178 @@ function PlatformNav({
   );
 }
 
+function ProgressiveIntelligencePanel({
+  compact = false,
+  items,
+}: {
+  compact?: boolean;
+  items: IntelligenceUpgradeItem[];
+}) {
+  const connectedCount = items.filter((item) => item.status === "Active" || item.status === "Connected").length;
+  const score = Math.round((connectedCount / items.length) * 100);
+  const currentLevel = intelligenceLevel(connectedCount);
+
+  return (
+    <Panel className={compact ? "mt-6" : ""}>
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <Eyebrow>Intelligence Score</Eyebrow>
+          <h2 className="mt-2 text-2xl font-black text-ink">{currentLevel.label}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+            Website intelligence is active immediately. Optional connections improve accuracy, confidence, and attribution when you are ready.
+          </p>
+        </div>
+        <ScoreBadge label="Intel" score={score} />
+      </div>
+      <div className={`mt-5 grid gap-3 ${compact ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-4"}`}>
+        {items.map((item) => (
+          <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={item.key}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-ink">{item.title}</p>
+                <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-copper">{item.level}</p>
+              </div>
+              <IntelligenceStatusBadge status={item.status} />
+            </div>
+            <p className="mt-3 text-sm leading-5 text-graphite/70">{item.unlocks}</p>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-graphite/65">{item.gain}</span>
+              <span className="text-xs font-black text-ink">{item.buttonLabel}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function IntelligenceStatusBadge({ status }: { status: IntelligenceUpgradeItem["status"] }) {
+  const className =
+    status === "Active" || status === "Connected"
+      ? "border-teal-200 bg-teal-50 text-teal-700"
+      : status === "Ready"
+        ? "border-blue-200 bg-blue-50 text-blue-700"
+        : status === "Setup Needed"
+          ? "border-amber-200 bg-amber-50 text-amber-700"
+          : "border-ink/10 bg-white text-graphite/65";
+
+  return <span className={`rounded-full border px-2 py-1 text-[0.65rem] font-black ${className}`}>{status}</span>;
+}
+
+function intelligenceLevel(connectedCount: number) {
+  if (connectedCount >= 6) return { label: "Level 4: Full Growth Intelligence" };
+  if (connectedCount >= 3) return { label: "Level 3: Revenue Intelligence" };
+  if (connectedCount >= 2) return { label: "Level 2: Marketing Intelligence" };
+  return { label: "Level 1: Website Intelligence" };
+}
+
+function buildProgressiveIntelligenceItems(status: {
+  googleAds?: ConnectedAppStatus["googleAds"];
+  highLevel?: ConnectedAppStatus["highLevel"];
+} = {}): IntelligenceUpgradeItem[] {
+  return [
+    {
+      buttonLabel: "Active",
+      gain: "Baseline intelligence",
+      key: "website",
+      level: "Level 1",
+      status: "Active",
+      title: "Website Scan",
+      unlocks: "Website, services, cities, SEO, AI visibility, trust signals, CTAs, and landing page gaps.",
+    },
+    {
+      buttonLabel: status.googleAds?.connected ? "Connected" : "Connect when ready",
+      gain: "+15 intelligence",
+      key: "google-ads",
+      level: "Level 2",
+      status: connectionUpgradeStatus(status.googleAds?.connected, status.googleAds?.configured),
+      title: "Google Ads",
+      unlocks: "Campaign performance, spend, clicks, CPC, CTR, search terms, assets, and conversions.",
+    },
+    {
+      buttonLabel: status.highLevel?.connected ? "Connected" : "Connect when ready",
+      gain: "+25 intelligence",
+      key: "highlevel",
+      level: "Level 3",
+      status: connectionUpgradeStatus(status.highLevel?.connected, status.highLevel?.configured),
+      title: "HighLevel",
+      unlocks: "Calls, leads, appointments, estimates, won jobs, pipeline value, and revenue attribution.",
+    },
+    {
+      buttonLabel: "Connect when ready",
+      gain: "+12 intelligence",
+      key: "gbp",
+      level: "Level 2",
+      status: "Optional",
+      title: "Google Business Profile",
+      unlocks: "Local visibility, reviews, posts, calls, service activity, and profile health.",
+    },
+    {
+      buttonLabel: "Connect when ready",
+      gain: "+8 intelligence",
+      key: "meta",
+      level: "Level 2",
+      status: "Optional",
+      title: "Meta",
+      unlocks: "Social recommendations, engagement memory, audience signals, and creative timing.",
+    },
+    {
+      buttonLabel: "Connect when ready",
+      gain: "+12 intelligence",
+      key: "search-console",
+      level: "Level 2",
+      status: "Optional",
+      title: "Search Console",
+      unlocks: "SEO query insights, indexing health, search opportunities, and page-level demand.",
+    },
+    {
+      buttonLabel: "Automatic soon",
+      gain: "+8 intelligence",
+      key: "weather",
+      level: "Level 2",
+      status: "Optional",
+      title: "Weather",
+      unlocks: "Demand timing for heat waves, cold snaps, seasonal service pushes, and budget timing.",
+    },
+  ];
+}
+
+function connectionUpgradeStatus(connected?: boolean, configured?: boolean): IntelligenceUpgradeItem["status"] {
+  if (connected) return "Connected";
+  if (configured) return "Ready";
+  return "Optional";
+}
+
+function missingDataForDecision(decision: DecisionRecommendation) {
+  const text = `${decision.category} ${decision.recommendedAction} ${decision.reasoning}`;
+  if (/google ads|budget|campaign|keyword|search term|cpc|ctr/i.test(text)) {
+    return "Google Ads performance data would improve confidence with spend, clicks, search terms, CTR, CPC, and conversion signals.";
+  }
+  if (/crm|revenue|lead|call|estimate|won|tracking|pipeline|appointment/i.test(text)) {
+    return "HighLevel CRM data would improve attribution by connecting calls, leads, appointments, estimates, won jobs, and revenue.";
+  }
+  if (/seo|organic|search console|query|index/i.test(text)) {
+    return "Search Console query data would improve SEO prioritization and page-level opportunity scoring.";
+  }
+  if (/gbp|google business profile|review|local/i.test(text)) {
+    return "Google Business Profile data would improve local visibility, review, call, and post-performance confidence.";
+  }
+  if (/social|facebook|instagram|meta|email|content/i.test(text)) {
+    return "Meta and social engagement data would improve content timing and creative recommendations.";
+  }
+  return "No required integration. The recommendation is based on website intelligence, and more connected data can improve confidence over time.";
+}
+
+function optionalConnectionForDecision(decision: DecisionRecommendation) {
+  const text = `${decision.category} ${decision.recommendedAction} ${decision.reasoning}`;
+  if (/google ads|budget|campaign|keyword|search term|cpc|ctr/i.test(text)) return "Google Ads: improves revenue recommendations and campaign performance insights.";
+  if (/crm|revenue|lead|call|estimate|won|tracking|pipeline|appointment/i.test(text)) return "HighLevel: connects calls, leads, estimates, won jobs, and revenue back to marketing activity.";
+  if (/seo|organic|search console|query|index/i.test(text)) return "Search Console: improves SEO query insights and search opportunity scoring.";
+  if (/gbp|google business profile|review|local/i.test(text)) return "Google Business Profile: improves local visibility, reviews, calls, and post recommendations.";
+  if (/social|facebook|instagram|meta|email|content/i.test(text)) return "Meta: improves social recommendations, engagement memory, and creative timing.";
+  return "None required now. Continue with the website scan, then connect platforms when you want higher accuracy.";
+}
+
 function DecisionEngine({
   activeSection,
   analysis,
@@ -1133,6 +1315,8 @@ function DecisionEngine({
       <div className="mt-5 grid gap-4">
         {decisions.map((decision) => {
           const status = statuses[decision.id] ?? "Pending";
+          const missingData = missingDataForDecision(decision);
+          const optionalConnection = optionalConnectionForDecision(decision);
           return (
             <article className="rounded-[18px] border border-ink/10 bg-white/82 p-4 shadow-[0_20px_52px_rgba(6,57,68,0.07)] backdrop-blur-sm" key={decision.id}>
               <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
@@ -1158,6 +1342,17 @@ function DecisionEngine({
               <div className="mt-4 rounded-lg border border-ink/10 bg-white px-3 py-2">
                 <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">Dependencies</p>
                 <p className="mt-1 text-sm leading-5 text-graphite">{decision.dependencies.join(", ") || "None"}</p>
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-ink/10 bg-white px-3 py-2">
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">Missing Data That Improves Accuracy</p>
+                  <p className="mt-1 text-sm leading-5 text-graphite">{missingData}</p>
+                </div>
+                <div className="rounded-lg border border-ink/10 bg-white px-3 py-2">
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">Optional Next Connection</p>
+                  <p className="mt-1 text-sm leading-5 text-graphite">{optionalConnection}</p>
+                </div>
               </div>
 
               <textarea
@@ -1335,7 +1530,7 @@ function MorningBriefSection({
         <Panel>
           <h3 className="text-lg font-black text-ink">Google Business Profile Summary</h3>
           <p className="mt-2 text-sm leading-6 text-graphite/70">
-            GBP is not connected yet. Use today&apos;s demand signal to publish a service-area post, then connect GBP for calls, reviews, and post performance.
+            Use today&apos;s demand signal to publish a service-area post. Connect Google Business Profile when ready to improve calls, reviews, and post-performance insights.
           </p>
           <div className="mt-4 grid gap-3">
             <InfoRow label="Recommended Post" value={brief.contentRecommendations.find((item) => item.label === "GBP Post")?.detail ?? "Publish a local service update."} />
@@ -1967,14 +2162,14 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
   const loadGoogleAdsData = useCallback(async () => {
     const response = await fetch("/api/google-ads/data", { cache: "no-store" });
     const payload = (await response.json()) as { data?: GoogleAdsDataPayload } & ApiError;
-    if (!response.ok) throw new Error(payload.error || "Unable to load Google Ads data.");
+    if (!response.ok) throw new Error("Google Ads can be connected when you are ready to add campaign performance insights.");
     setGoogleAdsData(payload.data ?? null);
   }, []);
 
   const loadHighLevelData = useCallback(async () => {
     const response = await fetch("/api/highlevel/data", { cache: "no-store" });
     const payload = (await response.json()) as { data?: HighLevelDataPayload } & ApiError;
-    if (!response.ok) throw new Error(payload.error || "Unable to load HighLevel data.");
+    if (!response.ok) throw new Error("HighLevel can be connected when you are ready to unlock revenue attribution.");
     if (payload.data?.syncRange) {
       setHighLevelEndDate(payload.data.syncRange.endDate);
       setHighLevelStartDate(payload.data.syncRange.startDate);
@@ -1999,7 +2194,8 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
         highLevelPayload.highLevel.connected ? loadHighLevelData().catch(() => setHighLevelData(null)) : Promise.resolve(),
       ]);
     } catch (caughtError) {
-      setMessage(caughtError instanceof Error ? caughtError.message : "Connected Apps setup could not be loaded. Please refresh the page.");
+      setStatus({ googleAds: emptyGoogleAdsStatus(), highLevel: emptyHighLevelStatus() });
+      setMessage("Website intelligence is still active. Optional integrations can be configured when you are ready to improve accuracy.");
     } finally {
       setIsLoading(false);
     }
@@ -2036,12 +2232,12 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
         body: JSON.stringify({ endDate: highLevelEndDate, startDate: highLevelStartDate }),
       });
       const payload = (await response.json()) as { data?: HighLevelDataPayload } & ApiError;
-      if (!response.ok) throw new Error(payload.error || "HighLevel is not ready to sync yet. Review the setup checklist below, then try again.");
+      if (!response.ok) throw new Error("HighLevel is optional. Connect it when you are ready to sync calls, leads, estimates, won jobs, and revenue.");
       setHighLevelData(payload.data ?? null);
       await refreshConnectedApps();
       setMessage("HighLevel data refreshed in read-only mode.");
     } catch (caughtError) {
-      setMessage(caughtError instanceof Error ? caughtError.message : "HighLevel is not ready to sync yet. Review the setup checklist below, then try again.");
+      setMessage(caughtError instanceof Error ? caughtError.message : "HighLevel is optional. Connect it when you are ready to sync calls, leads, estimates, won jobs, and revenue.");
     } finally {
       setIsSyncingHighLevel(false);
     }
@@ -2083,15 +2279,17 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
             <Eyebrow>Connected Apps</Eyebrow>
             <h2 className="flex items-center gap-2 text-xl font-black text-ink">
               <Settings className="size-5" aria-hidden="true" />
-              External marketing data connections
+              Optional intelligence upgrades
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
-              Connect read-only data sources now so HVAC Growth OS can learn from real performance. Write actions remain disabled until a future approval-based deployment mode is enabled.
+              HVAC Growth OS works from the website URL first. Connect platforms only when you want higher confidence, richer attribution, and performance-aware recommendations.
             </p>
           </div>
           <Button onClick={refreshConnectedApps} variant="secondary">{isLoading ? "Refreshing..." : "Refresh Status"}</Button>
         </div>
       </Panel>
+
+      <ProgressiveIntelligencePanel items={buildProgressiveIntelligenceItems({ googleAds, highLevel })} />
 
       {message && (
         <div className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-bold text-graphite/75 shadow-soft">
@@ -2103,7 +2301,8 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
         <ConnectedAppCard
           configured={Boolean(googleAds?.configured)}
           connected={Boolean(googleAds?.connected)}
-          description="Read campaigns, ad groups, keywords, search terms, ads, assets, budgets, and conversions."
+          description="Connect Google Ads to improve revenue recommendations and unlock campaign performance insights."
+          gain="+15 intelligence"
           mode={googleAds?.permissionMode ?? "Read Only"}
           primaryAction={!canManageSetup && !googleAds?.connected ? (
             <ConnectionRequestButton appName="Google Ads" currentUser={currentUser} />
@@ -2114,11 +2313,13 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
           )}
           secondaryAction={<Button disabled={!googleAds?.connected || isSyncing} onClick={syncGoogleAds} variant="secondary">{isSyncing ? "Syncing..." : "Refresh Data"}</Button>}
           title="Google Ads"
+          unlocks="Spend, clicks, CPC, CTR, search terms, campaigns, assets, budgets, and conversions."
         />
         <ConnectedAppCard
           configured={Boolean(highLevel?.configured)}
           connected={Boolean(highLevel?.connected)}
-          description="Read locations, contacts, opportunities, pipelines, conversations, calendars, forms, tags, workflows, custom fields, and revenue funnel metrics."
+          description="Connect HighLevel to connect calls, leads, estimates, and revenue back to marketing activity."
+          gain="+25 intelligence"
           mode={highLevel?.permissionMode ?? "Read Only"}
           primaryAction={!canManageSetup && !highLevel?.connected ? (
             <ConnectionRequestButton appName="HighLevel" currentUser={currentUser} />
@@ -2131,23 +2332,26 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
           )}
           secondaryAction={<Button disabled={!highLevel?.connected || isSyncingHighLevel} onClick={syncHighLevel} variant="secondary">{isSyncingHighLevel ? "Syncing..." : "Refresh Data"}</Button>}
           title="HighLevel"
+          unlocks="Calls, forms, contacts, opportunities, appointments, estimates, won jobs, and revenue attribution."
         />
         {[
-          ["Google Analytics", "Website traffic, events, source quality, and conversion paths."],
-          ["Google Search Console", "Queries, pages, clicks, impressions, indexing, and search visibility."],
-          ["Google Business Profile", "Calls, views, posts, reviews, services, and local profile activity."],
-          ["Meta / Facebook / Instagram", "Social content, engagement, ads, audiences, and lead forms."],
-          ["LinkedIn", "Professional visibility, posts, page engagement, and B2B referral signals."],
-          ["Weather Data", "Forecast, temperature swings, heat waves, cold snaps, and demand triggers."],
-        ].map(([title, description]) => (
+          ["Google Analytics", "Website traffic, events, source quality, and conversion paths.", "+10 intelligence"],
+          ["Google Search Console", "Search Console improves SEO query insights, indexing visibility, and page-level opportunity scoring.", "+12 intelligence"],
+          ["Google Business Profile", "GBP improves local visibility insights, review prompts, post recommendations, and profile activity analysis.", "+12 intelligence"],
+          ["Meta / Facebook / Instagram", "Meta improves social recommendations, engagement memory, and campaign creative timing.", "+8 intelligence"],
+          ["LinkedIn", "LinkedIn adds professional visibility, page engagement, and B2B referral signals.", "+4 intelligence"],
+          ["Weather Data", "Weather improves demand timing for heat waves, cold snaps, seasonal service pushes, and daily budget recommendations.", "+8 intelligence"],
+        ].map(([title, description, gain]) => (
           <ConnectedAppCard
             configured={false}
             connected={false}
             description={description}
+            gain={gain}
             key={title}
             mode="Read Only"
             primaryAction={<Button disabled variant="secondary">Coming Soon</Button>}
             title={title}
+            unlocks={description}
           />
         ))}
       </div>
@@ -2172,8 +2376,8 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
           <PermissionModePills activeMode={googleAds?.permissionMode ?? "Read Only"} />
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-4">
-          <InfoTile label="Connection" value={googleAds?.connected ? "Connected" : googleAds?.configured ? "Not connected" : "Needs setup"} />
-          <InfoTile label="Credential storage" value={googleAds?.credentialStorage || "Not connected"} />
+          <InfoTile label="Connection" value={googleAds?.connected ? "Connected" : googleAds?.configured ? "Ready when you are" : "Optional setup"} />
+          <InfoTile label="Credential storage" value={googleAds?.credentialStorage || "Optional upgrade"} />
           <InfoTile label="Last sync" value={googleAds?.lastSyncAt ? new Date(googleAds.lastSyncAt).toLocaleString() : "Never synced"} />
           <InfoTile label="Active customer" value={googleAds?.activeCustomerId || "None selected"} />
         </div>
@@ -2191,7 +2395,7 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
             </select>
           ) : (
             <p className="rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">
-              No customer IDs loaded yet. Connect Google Ads, then refresh data.
+              Website intelligence is already active. Connect Google Ads when you want campaign performance, search terms, spend, and conversion insights.
             </p>
           )}
         </div>
@@ -2303,9 +2507,9 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
           ) : null}
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-6">
-          <InfoTile label="Connection" value={highLevel?.connected ? "Connected" : highLevel?.configured ? "Not connected" : "Needs setup"} />
+          <InfoTile label="Connection" value={highLevel?.connected ? "Connected" : highLevel?.configured ? "Ready when you are" : "Optional setup"} />
           <InfoTile label="Connection type" value={highLevel?.connectionSource || "Not selected"} />
-          <InfoTile label="Credential storage" value={highLevel?.credentialStorage || "Not connected"} />
+          <InfoTile label="Credential storage" value={highLevel?.credentialStorage || "Optional upgrade"} />
           <InfoTile label="Last sync" value={highLevel?.lastSyncAt ? new Date(highLevel.lastSyncAt).toLocaleString() : "Never synced"} />
           <InfoTile label="Connected location" value={highLevel?.connectedLocation || highLevel?.activeLocationId || "None selected"} />
           <InfoTile label="Location ID" value={highLevel?.activeLocationId || highLevelData?.activeLocationId || "Not synced"} />
@@ -2470,32 +2674,45 @@ function ConnectedAppCard({
   configured,
   connected,
   description,
+  gain,
   mode,
   primaryAction,
   secondaryAction,
   title,
+  unlocks,
 }: {
   configured: boolean;
   connected: boolean;
   description: string;
+  gain?: string;
   mode: PermissionMode;
   primaryAction: ReactNode;
   secondaryAction?: ReactNode;
   title: string;
+  unlocks?: string;
 }) {
+  const statusLabel = connected ? "Connected" : configured ? "Ready when you are" : "Optional";
   return (
     <Panel>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-black text-ink">{title}</h3>
           <p className="mt-2 text-sm leading-6 text-graphite/70">{description}</p>
+          {unlocks && (
+            <p className="mt-3 rounded-xl border border-ink/10 bg-[#fbfbfa] px-3 py-2 text-xs font-bold leading-5 text-graphite/70">
+              <span className="text-ink">Unlocks:</span> {unlocks}
+            </p>
+          )}
         </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-black ${connected ? "border-teal-200 bg-teal-50 text-teal-700" : configured ? "border-amber-200 bg-amber-50 text-amber-700" : "border-ink/10 bg-slate-100 text-graphite"}`}>
-          {connected ? "Connected" : configured ? "Ready to Connect" : "Needs Setup"}
+        <span className={`rounded-full border px-3 py-1 text-xs font-black ${connected ? "border-teal-200 bg-teal-50 text-teal-700" : configured ? "border-blue-200 bg-blue-50 text-blue-700" : "border-ink/10 bg-slate-100 text-graphite"}`}>
+          {statusLabel}
         </span>
       </div>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <span className="rounded-full bg-[#fbfbfa] px-3 py-2 text-xs font-black text-graphite/70">Mode: {mode}</span>
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full bg-[#fbfbfa] px-3 py-2 text-xs font-black text-graphite/70">Mode: {mode}</span>
+          {gain && <span className="rounded-full bg-[#f7f1ef] px-3 py-2 text-xs font-black text-copper">{gain}</span>}
+        </div>
         <div className="flex flex-wrap gap-2">
           {primaryAction}
           {secondaryAction}
@@ -2657,7 +2874,7 @@ function HighLevelSetupWizard({ highLevel, onConfigured }: { highLevel?: Connect
         body: JSON.stringify({ locationId, privateIntegrationToken }),
       });
       const payload = (await response.json()) as ApiError;
-      if (!response.ok) throw new Error(payload.error || "HighLevel setup could not be saved.");
+      if (!response.ok) throw new Error("HighLevel setup could not be saved. Review the setup fields and try again.");
 
       const syncResponse = await fetch("/api/highlevel/sync", { method: "POST" });
       const syncPayload = (await syncResponse.json()) as ApiError;
@@ -3083,7 +3300,7 @@ function MiniAttributionTable({ rows, title }: { rows: string[][]; title: string
             <span className="font-bold text-graphite/70">{row[2]}</span>
           </div>
         )) : (
-          <p className="rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">No synced CRM attribution yet.</p>
+          <p className="rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">Connect HighLevel when ready to unlock CRM attribution, calls, estimates, won jobs, and revenue history.</p>
         )}
       </div>
     </div>
@@ -3228,8 +3445,8 @@ function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
       </Panel>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <InfoTile label="Google Ads Clicks" value={adsClicks ? adsClicks.toLocaleString() : hasGoogleAds ? "No clicks synced" : "Not connected"} />
-        <InfoTile label="Google Ads Cost" value={adsCost ? `$${Math.round(adsCost).toLocaleString()}` : hasGoogleAds ? "$0 synced" : "Not connected"} />
+        <InfoTile label="Google Ads Clicks" value={adsClicks ? adsClicks.toLocaleString() : hasGoogleAds ? "No clicks synced" : "Optional upgrade"} />
+        <InfoTile label="Google Ads Cost" value={adsCost ? `$${Math.round(adsCost).toLocaleString()}` : hasGoogleAds ? "$0 synced" : "Optional upgrade"} />
         <InfoTile label="HighLevel Calls" value={String(funnel?.phoneCalls ?? highLevelData?.calls.length ?? 0)} />
         <InfoTile label="Forms Submitted" value={String(funnel?.formsSubmitted ?? highLevelData?.formSubmissions.length ?? 0)} />
         <InfoTile label="CRM Leads" value={String(funnel?.crmLeads ?? funnel?.leads ?? 0)} />
@@ -3367,7 +3584,7 @@ function emptyGoogleAdsStatus(): ConnectedAppStatus["googleAds"] {
     activeCustomerId: "",
     connected: false,
     configured: false,
-    credentialStorage: "Not connected",
+    credentialStorage: "Optional upgrade",
     customerIds: [],
     lastSyncAt: "",
     permissionMode: "Read Only",
@@ -3385,7 +3602,7 @@ function emptyHighLevelStatus(): ConnectedAppStatus["highLevel"] {
     connected: false,
     connectedLocation: "",
     connectionSource: "",
-    credentialStorage: "Not connected",
+    credentialStorage: "Optional upgrade",
     configured: false,
     formsSubmitted: 0,
     lastSyncAt: "",
@@ -3483,8 +3700,8 @@ function buildTrackingBlockers(signals: {
   hasUtmFields: boolean;
 }) {
   return [
-    !signals.hasGoogleAds ? "Connect Google Ads in read-only mode so spend, clicks, campaigns, and conversion actions can be compared." : "",
-    !signals.hasHighLevel ? "Connect HighLevel so calls, forms, opportunities, and won jobs can become revenue signals." : "",
+    !signals.hasGoogleAds ? "Optional upgrade: connect Google Ads in read-only mode to compare spend, clicks, campaigns, and conversion actions." : "",
+    !signals.hasHighLevel ? "Optional upgrade: connect HighLevel to turn calls, forms, opportunities, and won jobs into revenue signals." : "",
     !signals.hasGclidField ? "Add HighLevel custom fields for GCLID, GBRAID, and WBRAID before importing offline conversions." : "",
     !signals.hasUtmFields ? "Add or confirm UTM/source fields so leads can be grouped by Google Ads, GBP, social, SEO, and direct." : "",
     !signals.hasCalls && !signals.hasForms ? "Confirm call tracking and form tracking before scaling paid traffic." : "",
@@ -3496,7 +3713,7 @@ function GoogleAdsDataTable({ rows }: { rows: GoogleAdsMetricRow[] }) {
   if (!rows.length) {
     return (
       <p className="mt-5 rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">
-        No synced rows yet. Connect Google Ads and refresh data.
+        Website intelligence is active. Connect Google Ads when you want campaign performance, search terms, spend, and conversion insights.
       </p>
     );
   }
@@ -3545,7 +3762,7 @@ function HighLevelDataTable({ rows }: { rows: HighLevelRecord[] }) {
   if (!rows.length) {
     return (
       <p className="mt-5 rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">
-        No synced CRM rows yet. Connect HighLevel and refresh data.
+        Website intelligence is active. Connect HighLevel when you want calls, opportunities, estimates, won jobs, and revenue attribution.
       </p>
     );
   }
@@ -3831,7 +4048,7 @@ function MarketingIntelligenceSection({
     forecast: "7-day forecast favors higher cooling demand with scattered storms",
     seasonality: currentHvacSeason(),
     googleTrends: `AC repair and HVAC repair interest rising around ${primaryCity}`,
-    adsPerformance: ppcPlan ? "Revenue Engine campaigns are ready for launch review" : "Google Ads data not connected yet",
+    adsPerformance: ppcPlan ? "Revenue Engine campaigns are ready for launch review" : "Google Ads is optional; connect it to add campaign performance signals",
     searchVolume: "High cooling-season search demand",
     competitorObservations: "Nearby contractors are pushing repair speed, financing, and maintenance offers",
     websiteAnalytics: "Service pages and contact paths should be watched for conversion lift",
@@ -6940,7 +7157,7 @@ function buildAiCmoBrief(
       { label: "HVAC Demand Level", value: `${marketing.hvacDemandIndex}/100` },
       { label: "Most Likely To Convert", value: `${topService} in ${topCity}` },
       { label: "Google Ads Clicks", value: googleAdsClicks ? `${googleAdsClicks} synced clicks` : "Waiting on Google Ads sync" },
-      { label: "CRM Leads", value: hasCrmData ? `${crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0} synced leads` : "HighLevel not connected" },
+      { label: "CRM Leads", value: hasCrmData ? `${crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0} synced leads` : "Connect HighLevel to unlock CRM lead data" },
       { label: "Phone Calls", value: hasCrmData ? `${crmFunnel?.phoneCalls ?? 0} synced calls` : "Waiting on CRM sync" },
       { label: "Appointments", value: hasCrmData ? `${crmFunnel?.appointments ?? 0} synced appointments` : "Waiting on CRM sync" },
       { label: "Estimates", value: hasCrmData ? `${crmFunnel?.estimates ?? 0} synced estimates` : "Waiting on CRM sync" },
@@ -6966,7 +7183,7 @@ function buildAiCmoBrief(
     ],
     operationsAlerts: [
       { label: "Google Ads Tag", status: ppcPlan ? "Needs Work" as const : "Not Recommended" as const, detail: ppcPlan ? "Verify conversion tag before approving budget increases." : "Generate campaigns first, then verify tags." },
-      { label: "HighLevel Connected", status: hasCrmData ? "Ready" as const : "Needs Work" as const, detail: hasCrmData ? `CRM funnel synced: ${crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0} leads, ${crmFunnel?.phoneCalls ?? 0} calls, ${crmFunnel?.wonJobs ?? crmFunnel?.wonOpportunities ?? 0} won jobs, $${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()} estimated revenue.` : "CRM and pipeline metrics are not connected in this workspace yet." },
+      { label: "HighLevel Connected", status: hasCrmData ? "Ready" as const : "Needs Work" as const, detail: hasCrmData ? `CRM funnel synced: ${crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0} leads, ${crmFunnel?.phoneCalls ?? 0} calls, ${crmFunnel?.wonJobs ?? crmFunnel?.wonOpportunities ?? 0} won jobs, $${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()} estimated revenue.` : "Connect HighLevel to connect calls, leads, appointments, estimates, won jobs, and revenue back to marketing activity." },
       { label: "Call Tracking", status: analysis.phone ? "Needs Work" as const : "Not Recommended" as const, detail: analysis.phone ? "Phone is detected; confirm tracked numbers and source attribution." : "Add a phone number before campaign launch." },
       { label: "Form Tracking", status: "Needs Work" as const, detail: "Confirm form submissions pass source, campaign, and service intent into CRM." },
       { label: "GBP Linked", status: analysis.aiSeoAnalysis.citationOpportunities.length ? "Needs Work" as const : "Not Recommended" as const, detail: "Link GBP data to validate post, call, direction, and review trends." },
@@ -6991,11 +7208,11 @@ function buildHighLevelCmoAction(
 
   if (!crmFunnel) {
     return {
-      action: "Connect HighLevel call tracking before scaling spend",
+      action: "Connect HighLevel when ready to unlock revenue attribution",
       confidence: actionConfidence(-8),
       impact: "Cleaner attribution",
       priority: "High",
-      reason: "CRM calls, opportunities, and won jobs are not connected yet, so budget recommendations are intentionally conservative.",
+      reason: "Website intelligence is already active. HighLevel adds calls, opportunities, estimates, won jobs, and revenue to improve confidence.",
       relatedModule: "HighLevel / CRM",
     };
   }
@@ -7158,7 +7375,7 @@ function buildLessonsLearned(
       },
       {
         label: "Tracking gaps limit certainty",
-        detail: "Historical CTR, CPC, conversion rate, and HighLevel pipeline metrics are not connected yet, so recommendation confidence is intentionally conservative.",
+        detail: "Historical CTR, CPC, conversion rate, and HighLevel pipeline metrics are optional upgrades, so recommendation confidence is intentionally conservative until they are connected.",
         confidence: 52,
       },
     ];
@@ -7235,8 +7452,8 @@ function createIntelligenceSnapshot(
     demandIndex: Number(brief.demandSignals.find((item) => item.label === "HVAC Demand Level")?.value.split("/")[0] ?? 50),
     topService: brief.demandSignals.find((item) => item.label === "Most Likely To Convert")?.value.split(" in ")[0] ?? "AC Repair",
     topCity: brief.demandSignals.find((item) => item.label === "Most Likely To Convert")?.value.split(" in ")[1] ?? "Primary market",
-    weather: brief.demandSignals.find((item) => item.label === "Temperature")?.value ?? "Not connected",
-    forecast: brief.demandSignals.find((item) => item.label === "Forecast")?.value ?? "Not connected",
+    weather: brief.demandSignals.find((item) => item.label === "Temperature")?.value ?? "Weather timing optional",
+    forecast: brief.demandSignals.find((item) => item.label === "Forecast")?.value ?? "Forecast timing optional",
     recommendations: brief.actions.map((action) => action.action),
     actionsTaken: notes ? linesToList(notes) : [],
     notes,
@@ -7271,7 +7488,7 @@ function defaultMarketingSignals(analysis: BusinessProfile, ppcPlan: PpcPlan | n
     forecast: "7-day forecast favors higher cooling demand with scattered storms",
     seasonality: currentHvacSeason(),
     googleTrends: `AC repair and HVAC repair interest rising around ${city}`,
-    adsPerformance: ppcPlan ? "Revenue Engine campaigns are ready for launch review" : "Google Ads data not connected yet",
+    adsPerformance: ppcPlan ? "Revenue Engine campaigns are ready for launch review" : "Google Ads is optional; connect it to add campaign performance signals",
     searchVolume: "High cooling-season search demand",
     competitorObservations: "Nearby contractors are pushing repair speed, financing, and maintenance offers",
     websiteAnalytics: "Service pages and contact paths should be watched for conversion lift",
