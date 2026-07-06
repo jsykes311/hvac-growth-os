@@ -24,6 +24,22 @@ export type GoogleAdsMetricRow = {
   conversions: number;
 };
 
+export type GoogleAdsSnapshot = {
+  activeCustomerId: string;
+  adGroups: number;
+  ads: number;
+  avgCpc: number;
+  budgets: number;
+  campaigns: number;
+  clicks: number;
+  conversions: number;
+  cost: number;
+  impressions: number;
+  keywords: number;
+  searchTerms: number;
+  syncedAt: string;
+};
+
 export type GoogleAdsDataPayload = {
   activeCustomerId: string;
   lastSyncAt: string;
@@ -35,6 +51,7 @@ export type GoogleAdsDataPayload = {
   assets: GoogleAdsMetricRow[];
   budgets: Array<{ id: string; name: string; amount: number; status: string }>;
   conversions: GoogleAdsMetricRow[];
+  snapshots: GoogleAdsSnapshot[];
 };
 
 type GoogleTokenSet = {
@@ -49,6 +66,7 @@ type GoogleAdsStore = {
   customerIds: string[];
   lastSyncAt: string;
   permissionMode: PermissionMode;
+  snapshots: GoogleAdsSnapshot[];
   tokenSet?: GoogleTokenSet;
   data?: GoogleAdsDataPayload;
 };
@@ -224,7 +242,7 @@ export async function setActiveGoogleAdsCustomer(customerId: string) {
 
 export async function getStoredGoogleAdsData() {
   const store = await loadGoogleAdsStore();
-  return store.data ?? emptyGoogleAdsData(store.activeCustomerId, store.lastSyncAt);
+  return store.data ?? emptyGoogleAdsData(store.activeCustomerId, store.lastSyncAt, store.snapshots);
 }
 
 export async function syncGoogleAdsData() {
@@ -237,19 +255,20 @@ export async function syncGoogleAdsData() {
   const activeCustomerId = store.activeCustomerId || customerIds[0] || "";
   if (!activeCustomerId) throw new Error("No accessible Google Ads customer accounts were returned.");
 
-  const data = await fetchGoogleAdsData(accessToken, activeCustomerId);
+  const data = await fetchGoogleAdsData(accessToken, activeCustomerId, store.snapshots || store.data?.snapshots || []);
   const nextStore: GoogleAdsStore = {
     ...store,
     activeCustomerId,
     customerIds,
     data,
     lastSyncAt: data.lastSyncAt,
+    snapshots: data.snapshots,
   };
   await saveGoogleAdsStore(nextStore);
   return data;
 }
 
-async function fetchGoogleAdsData(accessToken: string, customerId: string): Promise<GoogleAdsDataPayload> {
+async function fetchGoogleAdsData(accessToken: string, customerId: string, previousSnapshots: GoogleAdsSnapshot[]): Promise<GoogleAdsDataPayload> {
   const [
     campaigns,
     adGroups,
@@ -270,9 +289,10 @@ async function fetchGoogleAdsData(accessToken: string, customerId: string): Prom
     runGoogleAdsQuery(accessToken, customerId, conversionQuery()),
   ]);
 
-  return {
+  const lastSyncAt = new Date().toISOString();
+  const payload = {
     activeCustomerId: customerId,
-    lastSyncAt: new Date().toISOString(),
+    lastSyncAt,
     campaigns: campaigns.map((row) => metricRow(row, "campaign")),
     adGroups: adGroups.map((row) => metricRow(row, "adGroup")),
     keywords: keywords.map((row) => metricRow(row, "keyword")),
@@ -286,6 +306,11 @@ async function fetchGoogleAdsData(accessToken: string, customerId: string): Prom
       status: String(row.campaignBudget?.status ?? "UNKNOWN"),
     })),
     conversions: conversions.map((row) => metricRow(row, "conversion")),
+    snapshots: [],
+  };
+  return {
+    ...payload,
+    snapshots: buildGoogleAdsSnapshots(previousSnapshots, payload, lastSyncAt),
   };
 }
 
@@ -408,10 +433,11 @@ function defaultStore(): GoogleAdsStore {
     customerIds: [],
     lastSyncAt: "",
     permissionMode: "Read Only",
+    snapshots: [],
   };
 }
 
-function emptyGoogleAdsData(activeCustomerId: string, lastSyncAt: string): GoogleAdsDataPayload {
+function emptyGoogleAdsData(activeCustomerId: string, lastSyncAt: string, snapshots: GoogleAdsSnapshot[] = []): GoogleAdsDataPayload {
   return {
     activeCustomerId,
     adGroups: [],
@@ -423,7 +449,37 @@ function emptyGoogleAdsData(activeCustomerId: string, lastSyncAt: string): Googl
     keywords: [],
     lastSyncAt,
     searchTerms: [],
+    snapshots,
   };
+}
+
+function buildGoogleAdsSnapshots(
+  previousSnapshots: GoogleAdsSnapshot[],
+  data: Omit<GoogleAdsDataPayload, "snapshots"> & { snapshots: GoogleAdsSnapshot[] },
+  syncedAt: string,
+) {
+  const campaignClicks = sumRows(data.campaigns, "clicks");
+  const campaignCost = sumRows(data.campaigns, "cost");
+  const snapshot: GoogleAdsSnapshot = {
+    activeCustomerId: data.activeCustomerId,
+    adGroups: data.adGroups.length,
+    ads: data.ads.length,
+    avgCpc: campaignClicks ? campaignCost / campaignClicks : 0,
+    budgets: data.budgets.length,
+    campaigns: data.campaigns.length,
+    clicks: campaignClicks,
+    conversions: sumRows(data.campaigns, "conversions"),
+    cost: campaignCost,
+    impressions: sumRows(data.campaigns, "impressions"),
+    keywords: data.keywords.length,
+    searchTerms: data.searchTerms.length,
+    syncedAt,
+  };
+  return [snapshot, ...previousSnapshots.filter((item) => item.syncedAt !== syncedAt)].slice(0, 24);
+}
+
+function sumRows(rows: GoogleAdsMetricRow[], field: "clicks" | "impressions" | "cost" | "conversions") {
+  return rows.reduce((total, row) => total + row[field], 0);
 }
 
 function metricRow(row: Record<string, any>, type: "campaign" | "adGroup" | "keyword" | "searchTerm" | "ad" | "asset" | "conversion"): GoogleAdsMetricRow {

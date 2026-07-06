@@ -41,6 +41,7 @@ import { Button, Eyebrow, FieldLabel, Panel } from "@/components/ui";
 
 type View = "home" | "results";
 type PlatformSection =
+  | "morning-brief"
   | "dashboard"
   | "website-audit"
   | "seo"
@@ -193,6 +194,21 @@ type GoogleAdsMetricRow = {
   cost: number;
   conversions: number;
 };
+type GoogleAdsSnapshot = {
+  activeCustomerId: string;
+  adGroups: number;
+  ads: number;
+  avgCpc: number;
+  budgets: number;
+  campaigns: number;
+  clicks: number;
+  conversions: number;
+  cost: number;
+  impressions: number;
+  keywords: number;
+  searchTerms: number;
+  syncedAt: string;
+};
 type GoogleAdsDataPayload = {
   activeCustomerId: string;
   lastSyncAt: string;
@@ -204,6 +220,7 @@ type GoogleAdsDataPayload = {
   assets: GoogleAdsMetricRow[];
   budgets: Array<{ id: string; name: string; amount: number; status: string }>;
   conversions: GoogleAdsMetricRow[];
+  snapshots: GoogleAdsSnapshot[];
 };
 type HighLevelRecord = {
   id: string;
@@ -315,6 +332,16 @@ type ImplementationChannel = {
   lastDeployedItem: string;
   candidate?: DeploymentCandidate;
 };
+type MorningBriefAction = {
+  action: string;
+  confidence: number;
+  dependencies: string[];
+  expectedImpact: string;
+  priority: "High" | "Medium" | "Low";
+  reason: string;
+  relatedModule: string;
+  status: DecisionStatus;
+};
 
 const CAMPAIGN_GOALS = [
   "Book more service calls",
@@ -325,6 +352,7 @@ const CAMPAIGN_GOALS = [
 ];
 
 const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
+  { id: "morning-brief", label: "Morning Brief" },
   { id: "dashboard", label: "Dashboard" },
   { id: "website-audit", label: "Website Audit" },
   { id: "seo", label: "SEO" },
@@ -345,7 +373,7 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
 export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
   const [contractorUrl, setContractorUrl] = useState("https://comfortguardianshvac.com");
   const [view, setView] = useState<View>("home");
-  const [activeSection, setActiveSection] = useState<PlatformSection>("dashboard");
+  const [activeSection, setActiveSection] = useState<PlatformSection>("morning-brief");
   const [analysis, setAnalysis] = useState<BusinessProfile | null>(null);
   const [scrapedPages, setScrapedPages] = useState<AnalyzedPage[]>([]);
   const [savedWorkspace, setSavedWorkspace] = useState<SavedClientWorkspace | null>(null);
@@ -816,6 +844,16 @@ function ResultsView({
 
       <PlatformNav activeSection={activeSection} onChange={setActiveSection} />
 
+      {activeSection === "morning-brief" && (
+        <MorningBriefSection
+          analysis={analysis}
+          contractorUrl={contractorUrl}
+          currentUser={currentUser}
+          ppcPlan={ppcPlan}
+          setActiveSection={setActiveSection}
+        />
+      )}
+
       {activeSection === "dashboard" && (
         <DashboardSection
           analysis={analysis}
@@ -1143,6 +1181,374 @@ function DecisionButton({ label, onClick }: { label: string; onClick: () => void
     >
       {label}
     </button>
+  );
+}
+
+function MorningBriefSection({
+  analysis,
+  contractorUrl,
+  currentUser,
+  ppcPlan,
+  setActiveSection,
+}: {
+  analysis: BusinessProfile;
+  contractorUrl: string;
+  currentUser: AuthSession;
+  ppcPlan: PpcPlan | null;
+  setActiveSection: (section: PlatformSection) => void;
+}) {
+  const memoryKey = intelligenceMemoryKey(analysis, contractorUrl);
+  const decisionsKey = decisionMemoryKey(analysis, contractorUrl);
+  const [memory, setMemory] = useState<IntelligenceSnapshot[]>([]);
+  const [decisionHistory, setDecisionHistory] = useState<ReturnType<typeof loadDecisionMemory>["history"]>([]);
+  const [crmFunnel, setCrmFunnel] = useState<RevenueFunnelPayload | null>(null);
+  const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
+  const googleAdsClicks = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "clicks") : 0;
+  const googleAdsSpend = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "cost") : 0;
+  const googleAdsImpressions = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "impressions") : 0;
+  const googleAdsConversions = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "conversions") : 0;
+  const brief = buildAiCmoBrief(analysis, contractorUrl, ppcPlan, memory, crmFunnel ?? undefined, googleAdsClicks);
+  const actions = buildMorningBriefActions(brief, crmFunnel ?? undefined, Boolean(googleAdsData), Boolean(ppcPlan));
+  const hasCrmData = Boolean(crmFunnel && (crmFunnel.crmLeads || crmFunnel.phoneCalls || crmFunnel.pipelineValue || crmFunnel.revenue));
+  const revenueOpportunity = buildMorningRevenueOpportunity(analysis, ppcPlan, crmFunnel ?? undefined, brief);
+
+  useEffect(() => {
+    const storedMemory = loadIntelligenceMemory(memoryKey);
+    setMemory(storedMemory);
+    setDecisionHistory(loadDecisionMemory(decisionsKey).history);
+  }, [decisionsKey, memoryKey]);
+
+  useEffect(() => {
+    void Promise.all([
+      fetch("/api/highlevel/data", { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload: { data?: HighLevelDataPayload } | null) => setCrmFunnel(payload?.data?.revenueFunnel ?? null))
+        .catch(() => setCrmFunnel(null)),
+      fetch("/api/google-ads/data", { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload: { data?: GoogleAdsDataPayload } | null) => setGoogleAdsData(payload?.data ?? null))
+        .catch(() => setGoogleAdsData(null)),
+    ]);
+  }, []);
+
+  return (
+    <div className="grid gap-5">
+      <Panel>
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+          <div>
+            <Eyebrow>Morning Brief</Eyebrow>
+            <h2 className="mt-2 text-3xl font-black text-ink">Good Morning, {currentUser.name}</h2>
+            <p className="mt-2 text-lg font-black text-copper">{analysis.companyName || "Client"} Marketing Brief</p>
+            <p className="mt-2 text-sm font-semibold text-graphite/65">
+              {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </p>
+            <p className="mt-4 max-w-4xl text-base leading-7 text-graphite">
+              {brief.headline}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <ScoreBadge label="Marketing" score={brief.todayScore} />
+            <ScoreBadge label="Confidence" score={Math.round(avg(actions.map((action) => action.confidence)))} />
+          </div>
+        </div>
+      </Panel>
+
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <Panel>
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+            <div>
+              <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+                <TrendingUp className="size-5" aria-hidden="true" />
+                Today&apos;s Revenue Opportunity
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-graphite/70">{revenueOpportunity.reason}</p>
+            </div>
+            <span className={`rounded-full px-3 py-2 text-xs font-black ${priorityClass(revenueOpportunity.priority)}`}>{revenueOpportunity.priority}</span>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <BriefMetric label="Opportunity" value={revenueOpportunity.value} />
+            <BriefMetric label="Best Service" value={brief.demandSignals.find((item) => item.label === "Most Likely To Convert")?.value ?? "AC Repair"} />
+            <BriefMetric label="Demand" value={brief.demandSignals.find((item) => item.label === "HVAC Demand Level")?.value ?? `${brief.todayScore}/100`} />
+            <BriefMetric label="Blocking Item" value={revenueOpportunity.blocker} />
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+            <CloudSun className="size-5" aria-hidden="true" />
+            Weather / Demand Signal
+          </h3>
+          <div className="mt-4 grid gap-3">
+            {brief.demandSignals.slice(0, 6).map((signal) => (
+              <InfoRow key={signal.label} label={signal.label} value={signal.value} />
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Google Ads Overnight Summary</h3>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            {googleAdsData ? "Read-only Google Ads data is connected and available for recommendations." : "Connect Google Ads to show overnight spend, search terms, CPC, CTR, and conversions."}
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <BriefMetric label="Clicks" value={String(googleAdsClicks)} />
+            <BriefMetric label="Spend" value={`$${Math.round(googleAdsSpend).toLocaleString()}`} />
+            <BriefMetric label="Impressions" value={googleAdsImpressions.toLocaleString()} />
+            <BriefMetric label="Conversions" value={String(Math.round(googleAdsConversions))} />
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="text-lg font-black text-ink">HighLevel Lead Summary</h3>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            {hasCrmData ? "CRM conversion data is connected for revenue attribution." : "Connect HighLevel to complete revenue attribution."}
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <BriefMetric label="Calls" value={String(crmFunnel?.phoneCalls ?? 0)} />
+            <BriefMetric label="Missed Calls" value={String(crmFunnel?.missedCalls ?? 0)} />
+            <BriefMetric label="Leads" value={String(crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0)} />
+            <BriefMetric label="Won Revenue" value={`$${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()}`} />
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Google Business Profile Summary</h3>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            GBP is not connected yet. Use today&apos;s demand signal to publish a service-area post, then connect GBP for calls, reviews, and post performance.
+          </p>
+          <div className="mt-4 grid gap-3">
+            <InfoRow label="Recommended Post" value={brief.contentRecommendations.find((item) => item.label === "GBP Post")?.detail ?? "Publish a local service update."} />
+            <InfoRow label="Review Ask" value="Request reviews from recent completed jobs once CRM outcomes are confirmed." />
+          </div>
+        </Panel>
+      </div>
+
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+              <Target className="size-5" aria-hidden="true" />
+              Top 5 Recommended Actions
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-graphite/70">
+              These are approval-required decisions. HVAC Growth OS will not change budgets, campaigns, CRM records, or GBP content automatically.
+            </p>
+          </div>
+          <Button onClick={() => setActiveSection("deploy-center")} variant="secondary">Open Deploy Center</Button>
+        </div>
+        <div className="mt-5 grid gap-3">
+          {actions.map((action) => (
+            <MorningActionCard action={action} key={action.action} />
+          ))}
+        </div>
+      </Panel>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Tracking / Setup Alerts</h3>
+          <div className="mt-4 grid gap-3">
+            {brief.operationsAlerts.map((alert) => (
+              <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={alert.label}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-black text-ink">{alert.label}</p>
+                  <StatusBadge status={alert.status} />
+                </div>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{alert.detail}</p>
+              </article>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Competitor / Market Alerts</h3>
+          <div className="mt-4 grid gap-3">
+            {brief.competitiveAlerts.map((alert) => (
+              <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={`${alert.label}-${alert.detail}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-black text-ink">{alert.label}</p>
+                  <ConfidenceBadge score={alert.confidence} />
+                </div>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{alert.detail}</p>
+              </article>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <CampaignMemoryView
+          decisionHistory={decisionHistory}
+          googleAdsData={googleAdsData}
+          memory={memory}
+          ppcPlan={ppcPlan}
+        />
+        <LeadJourneyView
+          crmFunnel={crmFunnel ?? undefined}
+          googleAdsClicks={googleAdsClicks}
+          hasHighLevel={hasCrmData}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MorningActionCard({ action }: { action: MorningBriefAction }) {
+  return (
+    <article className="rounded-[18px] border border-ink/10 bg-white/82 p-4 shadow-[0_20px_52px_rgba(6,57,68,0.07)] backdrop-blur-sm">
+      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-md px-2 py-1 text-xs font-black ${priorityClass(action.priority)}`}>{action.priority}</span>
+            <span className="rounded-lg bg-white px-2 py-1 text-xs font-black text-copper ring-1 ring-ink/10">{action.relatedModule}</span>
+            <span className="rounded-lg bg-white px-2 py-1 text-xs font-black text-graphite ring-1 ring-ink/10">{action.status}</span>
+          </div>
+          <h4 className="mt-3 text-base font-black text-ink">{action.action}</h4>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">{action.reason}</p>
+        </div>
+        <ConfidenceBadge score={action.confidence} />
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <DecisionMeta label="Expected Impact" value={action.expectedImpact} />
+        <DecisionMeta label="Dependencies" value={action.dependencies.join(", ")} />
+      </div>
+    </article>
+  );
+}
+
+function BriefMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
+      <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">{label}</p>
+      <p className="mt-2 text-sm font-black leading-5 text-ink">{value}</p>
+    </div>
+  );
+}
+
+function CampaignMemoryView({
+  decisionHistory,
+  googleAdsData,
+  memory,
+  ppcPlan,
+}: {
+  decisionHistory: ReturnType<typeof loadDecisionMemory>["history"];
+  googleAdsData: GoogleAdsDataPayload | null;
+  memory: IntelligenceSnapshot[];
+  ppcPlan: PpcPlan | null;
+}) {
+  const latestSnapshot = memory[0];
+  const googleSnapshots = googleAdsData?.snapshots ?? [];
+  const topKeywords = googleAdsData?.keywords.slice(0, 4) ?? [];
+  const topSearchTerms = googleAdsData?.searchTerms.slice(0, 4) ?? [];
+  const budgetHistory = googleAdsData?.budgets.slice(0, 4) ?? [];
+  const adHistory = googleAdsData?.ads.slice(0, 4) ?? [];
+
+  return (
+    <Panel>
+      <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+        <ClipboardList className="size-5" aria-hidden="true" />
+        Campaign Memory
+      </h3>
+      <p className="mt-2 text-sm leading-6 text-graphite/70">
+        Historical observations, decisions, keywords, search terms, budgets, ads, and experiments for this client.
+      </p>
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <MemoryMiniList
+          emptyText="No campaign timeline yet. Approve or complete recommendations to start memory."
+          items={[
+            ...googleSnapshots.slice(0, 2).map((snapshot) => `${new Date(snapshot.syncedAt).toLocaleDateString()} - Google Ads sync: ${snapshot.clicks} clicks, $${Math.round(snapshot.cost).toLocaleString()} cost`),
+            ...(decisionHistory.length ? decisionHistory : latestSnapshot ? [{ decision: latestSnapshot.recommendations[0] || "Initial baseline saved", date: latestSnapshot.date, status: "Pending" as DecisionStatus, outcome: latestSnapshot.notes, performance: `Demand ${latestSnapshot.demandIndex}/100` }] : []).slice(0, 3).map((item) => `${new Date(item.date).toLocaleDateString()} - ${item.decision} (${item.status})`),
+          ].slice(0, 4)}
+          title="Campaign Timeline"
+        />
+        <MemoryMiniList
+          emptyText="Connect Google Ads to store keyword history."
+          items={topKeywords.map((row) => `${row.name}: ${row.clicks} clicks, ${formatPercent(row.ctr)} CTR`)}
+          title="Keyword History"
+        />
+        <MemoryMiniList
+          emptyText="Connect Google Ads to store search term history."
+          items={topSearchTerms.map((row) => `${row.name}: $${Math.round(row.cost).toLocaleString()} cost, ${row.conversions} conversions`)}
+          title="Search Term History"
+        />
+        <MemoryMiniList
+          emptyText="Connect Google Ads to store budget history."
+          items={budgetHistory.map((budget) => `${budget.name}: $${budget.amount.toFixed(2)} / day (${budget.status})`)}
+          title="Budget History"
+        />
+        <MemoryMiniList
+          emptyText="Connect Google Ads to store ad history."
+          items={adHistory.map((row) => `${row.name}: ${row.clicks} clicks, ${formatPercent(row.ctr)} CTR`)}
+          title="Ad History"
+        />
+        <MemoryMiniList
+          emptyText="Run Revenue Engine and complete decisions to build experiment history."
+          items={(ppcPlan?.recommendedLaunchPlan ?? []).slice(0, 4).map((campaign) => `${campaign.campaign}: ${campaign.priorityScore}/100 launch score`)}
+          title="Experiment History"
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function MemoryMiniList({ emptyText, items, title }: { emptyText: string; items: string[]; title: string }) {
+  return (
+    <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
+      <h4 className="text-xs font-black uppercase tracking-[0.12em] text-graphite/65">{title}</h4>
+      <div className="mt-3 grid gap-2">
+        {items.length ? items.map((item) => (
+          <p className="rounded-lg bg-white px-3 py-2 text-sm leading-5 text-graphite/75" key={item}>{item}</p>
+        )) : (
+          <p className="rounded-lg border border-dashed border-ink/15 bg-white px-3 py-2 text-sm leading-5 text-graphite/60">{emptyText}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LeadJourneyView({
+  crmFunnel,
+  googleAdsClicks,
+  hasHighLevel,
+}: {
+  crmFunnel: RevenueFunnelPayload | undefined;
+  googleAdsClicks: number;
+  hasHighLevel: boolean;
+}) {
+  const steps = [
+    ["Google Ads click", googleAdsClicks],
+    ["Call / Form", (crmFunnel?.phoneCalls ?? 0) + (crmFunnel?.formsSubmitted ?? 0)],
+    ["HighLevel Contact", crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0],
+    ["Opportunity", crmFunnel?.totalOpportunities ?? 0],
+    ["Estimate", crmFunnel?.estimates ?? 0],
+    ["Won Job", crmFunnel?.wonJobs ?? crmFunnel?.wonOpportunities ?? 0],
+    ["Revenue", `$${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()}`],
+  ];
+
+  return (
+    <Panel>
+      <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+        <Users className="size-5" aria-hidden="true" />
+        Lead Journey
+      </h3>
+      <p className="mt-2 text-sm leading-6 text-graphite/70">
+        {hasHighLevel
+          ? "Revenue attribution connects ad clicks to calls, contacts, opportunities, estimates, won jobs, and revenue."
+          : "Connect HighLevel to complete revenue attribution."}
+      </p>
+      <div className="mt-5 grid gap-3">
+        {steps.map(([label, value], index) => (
+          <div className="flex items-center gap-3" key={label}>
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-sm font-black text-white">{index + 1}</div>
+            <div className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-[#fbfbfa] p-3">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-graphite/60">{label}</p>
+              <p className="mt-1 text-lg font-black text-ink">{String(value)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -6433,6 +6839,67 @@ function buildHighLevelCmoAction(
   };
 }
 
+function buildMorningBriefActions(
+  brief: ReturnType<typeof buildAiCmoBrief>,
+  crmFunnel: RevenueFunnelPayload | undefined,
+  hasGoogleAdsData: boolean,
+  hasRevenueEngine: boolean,
+): MorningBriefAction[] {
+  const baseActions = brief.actions.slice(0, 5);
+  return baseActions.map((action, index) => {
+    const dependencies = new Set<string>();
+    if (!hasGoogleAdsData && /budget|campaign|search term|negative keyword/i.test(action.action)) dependencies.add("Connect Google Ads");
+    if (!crmFunnel && /call|lead|review|opportunit|won|follow/i.test(action.action)) dependencies.add("Connect HighLevel");
+    if (!hasRevenueEngine && /budget|campaign|landing page|search/i.test(action.action)) dependencies.add("Run Revenue Engine");
+    if (!dependencies.size) dependencies.add("Human approval");
+    if (/budget/i.test(action.action)) dependencies.add("Budget approval");
+    if (/landing page/i.test(action.action)) dependencies.add("Website access");
+
+    return {
+      action: action.action,
+      confidence: action.confidence,
+      dependencies: Array.from(dependencies),
+      expectedImpact: action.impact,
+      priority: action.priority as MorningBriefAction["priority"],
+      reason: action.reason,
+      relatedModule: action.relatedModule,
+      status: index === 0 ? "Pending" : "Pending",
+    };
+  });
+}
+
+function buildMorningRevenueOpportunity(
+  analysis: BusinessProfile,
+  ppcPlan: PpcPlan | null,
+  crmFunnel: RevenueFunnelPayload | undefined,
+  brief: ReturnType<typeof buildAiCmoBrief>,
+) {
+  const topCampaign = ppcPlan?.recommendedLaunchPlan[0];
+  const demand = Number(brief.demandSignals.find((item) => item.label === "HVAC Demand Level")?.value.split("/")[0] ?? brief.todayScore);
+  const hasRevenueData = Boolean(crmFunnel && (crmFunnel.estimatedRevenue || crmFunnel.revenue || crmFunnel.pipelineValue));
+  const revenueValue = hasRevenueData
+    ? `$${Math.round((crmFunnel?.estimatedRevenue || crmFunnel?.revenue || crmFunnel?.pipelineValue || 0)).toLocaleString()} tracked`
+    : topCampaign
+      ? `$${Math.round(topCampaign.monthlyBudgetEstimate * 2.5).toLocaleString()}-$${Math.round(topCampaign.monthlyBudgetEstimate * 7).toLocaleString()} planning range`
+      : "$10k-$30k planning range";
+  const blocker = !ppcPlan
+    ? "Revenue Engine"
+    : !crmFunnel
+      ? "HighLevel data"
+      : !analysis.phone
+        ? "Tracked phone"
+        : "Approval";
+
+  return {
+    blocker,
+    priority: demand >= 78 ? "High" as const : "Medium" as const,
+    reason: hasRevenueData
+      ? "CRM data is available, so today's opportunity can be judged against calls, leads, opportunities, and revenue instead of traffic only."
+      : "Today's opportunity is estimated from demand, campaign readiness, service-area signals, and available website data. Connect CRM data to tighten the revenue estimate.",
+    value: revenueValue,
+  };
+}
+
 function buildLessonsLearned(
   memory: IntelligenceSnapshot[],
   analysis: BusinessProfile,
@@ -6990,6 +7457,10 @@ function buildDecisionRecommendations(
     dependencies: ["Verified tracking", "Owner approval"],
   };
   const map: Record<PlatformSection, DecisionRecommendation[]> = {
+    "morning-brief": [
+      decision("morning-brief-top-action", "Revenue", topCampaign ? `Approve today's top action for ${topCampaign.campaign}` : "Run Revenue Engine before approving today's paid-search action", "High", "Turns the daily brief into one accountable revenue move.", annualHigh, baseConfidence + 6, "Moderate", "30 minutes", ["Morning Brief review", "Human approval"], "The Morning Brief should produce decisions, not passive insights. Start with the highest-confidence action and record the outcome."),
+      decision("morning-brief-attribution", "CRM", "Confirm Google Ads and HighLevel attribution before scaling spend", "High", "Improves confidence in budget, follow-up, and ROI decisions.", annualHigh, baseConfidence + 4, "Moderate", "45 minutes", ["Connected Apps", "Tracking review"], "Daily recommendations become stronger when clicks, calls, leads, opportunities, and revenue are connected in one client history."),
+    ],
     dashboard: [
       decision("dashboard-revenue-engine", "Revenue", "Run or refresh the Revenue Engine", "High", "Creates the campaign launch plan and budget priorities.", annualHigh, baseConfidence, "Moderate", "30 minutes", ["Website scan", "Service areas"], "The dashboard needs one revenue decision before deployment work can be prioritized."),
       decision("dashboard-tracking", "CRM", "Verify call, form, and HighLevel tracking", "High", "Improves attribution before any spend increase.", annualHigh, baseConfidence - 2, "Moderate", "45 minutes", ["GTM access", "HighLevel access"], "Marketing decisions only get smarter when the platform can compare outcomes against source-level performance."),
