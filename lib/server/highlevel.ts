@@ -46,6 +46,7 @@ export type RevenueFunnelPayload = {
   crmLeads: number;
   phoneCalls: number;
   missedCalls: number;
+  appointments: number;
   formsSubmitted: number;
   totalConversations: number;
   totalOpportunities: number;
@@ -61,12 +62,30 @@ export type RevenueFunnelPayload = {
   roi: number;
   leadSources: Array<{ source: string; count: number; value: number }>;
   opportunityStages: Array<{ stage: string; count: number; value: number }>;
-  campaignAttribution: Array<{ campaign: string; leads: number; value: number }>;
+  stageMapping: Array<{ stage: string; mappedTo: "Lead" | "Appointment" | "Estimate" | "Won" | "Lost" | "Ignore"; count: number; value: number }>;
+  campaignAttribution: Array<{
+    campaign: string;
+    clicks: number;
+    calls: number;
+    appointments: number;
+    estimates: number;
+    wonJobs: number;
+    revenue: number;
+    closeRate: number;
+    revenuePerClick: number;
+    costPerWonJob: number;
+    estimatedRoi: number;
+    cost: number;
+    leads: number;
+    value: number;
+  }>;
 };
 
 export type HighLevelSnapshot = {
+  appointments: number;
   closedWon: number;
   contacts: number;
+  estimates: number;
   estimatedRevenue: number;
   openOpportunities: number;
   phoneCalls: number;
@@ -430,16 +449,21 @@ async function fetchHighLevelData(
   const normalizedForms = normalizeRecords(forms, ["forms"]);
   const normalizedFormSubmissions = filterRecordsByDateRange(normalizeRecords(formSubmissions, ["submissions", "formSubmissions", "forms"]), syncRange);
   const normalizedOpportunityStages = normalizeOpportunityStages(pipelines);
+  const stageNameLookup = new Map(normalizedOpportunityStages.map((stage) => [stage.id, stage.name]));
+  const opportunitiesWithStageNames = normalizedOpportunities.map((opportunity) => ({
+    ...opportunity,
+    stage: stageNameLookup.get(opportunity.stage || "") || opportunity.stage || opportunity.status || "",
+  }));
   const syncAlerts = [
     ...(normalizedCalls.length ? [] : [`No call data found. HVAC Growth OS read ${normalizedConversations.length} conversations, but HighLevel did not expose call-type events from conversation search or message history.`]),
     ...(normalizedFormSubmissions.length ? [] : ["No form submission data found. Confirm forms are connected to this location or that form-submission access is available."]),
   ];
-  const revenueFunnel = buildRevenueFunnel(normalizedContacts, normalizedOpportunities, normalizedCalls, normalizedFormSubmissions, normalizedConversations);
+  const revenueFunnel = buildRevenueFunnel(normalizedContacts, opportunitiesWithStageNames, normalizedCalls, normalizedFormSubmissions, normalizedConversations);
   const lastSyncAt = new Date().toISOString();
   const snapshots = buildSnapshots(previousSnapshots, lastSyncAt, {
     contacts: normalizedContacts,
     formsSubmitted: normalizedFormSubmissions.length,
-    opportunities: normalizedOpportunities,
+    opportunities: opportunitiesWithStageNames,
     phoneCalls: normalizedCalls.length,
     missedCalls: countMissedCalls(normalizedCalls),
     revenueFunnel,
@@ -457,7 +481,7 @@ async function fetchHighLevelData(
     formSubmissions: normalizedFormSubmissions,
     lastSyncAt,
     locations: [locationRecord],
-    opportunities: normalizedOpportunities,
+    opportunities: opportunitiesWithStageNames,
     opportunityStages: normalizedOpportunityStages,
     pipelines: normalizedPipelines,
     revenueFunnel,
@@ -662,8 +686,15 @@ function buildRevenueFunnel(
   formSubmissions: HighLevelRecord[],
   conversations: HighLevelRecord[],
 ): RevenueFunnelPayload {
-  const estimates = opportunities.filter((item) => /estimate|proposal|quoted|sent/i.test(`${item.stage} ${item.status} ${item.name}`));
-  const won = opportunities.filter((item) => /won|closed won|sold/i.test(`${item.stage} ${item.status}`));
+  const stageMapping = groupRecords(opportunities, "stage").slice(0, 20).map((row) => ({
+    count: row.count,
+    mappedTo: classifyOpportunityStage(row.label),
+    stage: row.label,
+    value: row.value,
+  }));
+  const appointments = opportunities.filter((item) => classifyOpportunityStage(`${item.stage} ${item.status} ${item.name}`) === "Appointment");
+  const estimates = opportunities.filter((item) => classifyOpportunityStage(`${item.stage} ${item.status} ${item.name}`) === "Estimate");
+  const won = opportunities.filter((item) => classifyOpportunityStage(`${item.stage} ${item.status} ${item.name}`) === "Won");
   const openOpportunities = opportunities.filter((item) => !/won|closed won|lost|abandoned|sold/i.test(`${item.stage} ${item.status}`));
   const revenue = sum(won.map((item) => item.value || 0));
   const pipelineValue = sum(opportunities.map((item) => item.value || 0));
@@ -673,8 +704,9 @@ function buildRevenueFunnel(
   const missedCalls = countMissedCalls(calls);
 
   return {
+    appointments: appointments.length,
     closedWonValue: revenue,
-    campaignAttribution: groupRecords([...contacts, ...opportunities], "source").slice(0, 8).map((row) => ({ campaign: row.label, leads: row.count, value: row.value })),
+    campaignAttribution: buildCampaignAttribution(contacts, calls, opportunities),
     crmLeads: contacts.length,
     estimates: estimates.length,
     estimatedRevenue,
@@ -694,7 +726,58 @@ function buildRevenueFunnel(
     totalOpportunities: opportunities.length,
     wonJobs: won.length,
     wonOpportunities: won.length,
+    stageMapping,
   };
+}
+
+function classifyOpportunityStage(value: string): RevenueFunnelPayload["stageMapping"][number]["mappedTo"] {
+  const text = value.toLowerCase();
+  if (/lost|dead|declined|cancel|abandon|disqualified|no show/.test(text)) return "Lost";
+  if (/won|closed won|sold|complete|paid|job won/.test(text)) return "Won";
+  if (/estimate|proposal|quote|quoted|bid|sent|approved estimate/.test(text)) return "Estimate";
+  if (/appointment|booked|scheduled|dispatch|visit|consult|inspection|set/.test(text)) return "Appointment";
+  if (/ignore|spam|duplicate|test/.test(text)) return "Ignore";
+  return "Lead";
+}
+
+function buildCampaignAttribution(
+  contacts: HighLevelRecord[],
+  calls: HighLevelRecord[],
+  opportunities: HighLevelRecord[],
+): RevenueFunnelPayload["campaignAttribution"] {
+  const labels = new Set<string>();
+  [...contacts, ...calls, ...opportunities].forEach((record) => labels.add((record.source || "Unattributed").trim() || "Unattributed"));
+  return [...labels].map((label) => {
+    const campaignContacts = contacts.filter((record) => sourceMatches(record, label));
+    const campaignCalls = calls.filter((record) => sourceMatches(record, label));
+    const campaignOpportunities = opportunities.filter((record) => sourceMatches(record, label));
+    const appointments = campaignOpportunities.filter((record) => classifyOpportunityStage(`${record.stage} ${record.status} ${record.name}`) === "Appointment").length;
+    const estimates = campaignOpportunities.filter((record) => classifyOpportunityStage(`${record.stage} ${record.status} ${record.name}`) === "Estimate").length;
+    const won = campaignOpportunities.filter((record) => classifyOpportunityStage(`${record.stage} ${record.status} ${record.name}`) === "Won");
+    const revenue = sum(won.map((record) => record.value || 0));
+    const leads = campaignContacts.length;
+    const wonJobs = won.length;
+    return {
+      appointments,
+      calls: campaignCalls.length,
+      campaign: label,
+      clicks: 0,
+      closeRate: leads ? Number(((wonJobs / leads) * 100).toFixed(1)) : 0,
+      cost: 0,
+      costPerWonJob: 0,
+      estimatedRoi: 0,
+      estimates,
+      leads,
+      revenue,
+      revenuePerClick: 0,
+      value: revenue || sum(campaignOpportunities.map((record) => record.value || 0)),
+      wonJobs,
+    };
+  }).sort((a, b) => b.revenue - a.revenue || b.value - a.value || b.leads - a.leads).slice(0, 12);
+}
+
+function sourceMatches(record: HighLevelRecord, source: string) {
+  return ((record.source || "Unattributed").trim() || "Unattributed") === source;
 }
 
 function countMissedCalls(calls: HighLevelRecord[]) {
@@ -714,8 +797,10 @@ function buildSnapshots(
   },
 ) {
   const snapshot: HighLevelSnapshot = {
+    appointments: data.revenueFunnel.appointments,
     closedWon: data.revenueFunnel.wonOpportunities,
     contacts: data.contacts.length,
+    estimates: data.revenueFunnel.estimates,
     estimatedRevenue: data.revenueFunnel.estimatedRevenue,
     formsSubmitted: data.formsSubmitted,
     missedCalls: data.missedCalls,

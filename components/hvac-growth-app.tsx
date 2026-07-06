@@ -238,6 +238,7 @@ type RevenueFunnelPayload = {
   crmLeads: number;
   phoneCalls: number;
   missedCalls: number;
+  appointments: number;
   formsSubmitted: number;
   totalConversations: number;
   totalOpportunities: number;
@@ -253,11 +254,29 @@ type RevenueFunnelPayload = {
   roi: number;
   leadSources: Array<{ source: string; count: number; value: number }>;
   opportunityStages: Array<{ stage: string; count: number; value: number }>;
-  campaignAttribution: Array<{ campaign: string; leads: number; value: number }>;
+  stageMapping: Array<{ stage: string; mappedTo: "Lead" | "Appointment" | "Estimate" | "Won" | "Lost" | "Ignore"; count: number; value: number }>;
+  campaignAttribution: Array<{
+    campaign: string;
+    clicks: number;
+    calls: number;
+    appointments: number;
+    estimates: number;
+    wonJobs: number;
+    revenue: number;
+    closeRate: number;
+    revenuePerClick: number;
+    costPerWonJob: number;
+    estimatedRoi: number;
+    cost: number;
+    leads: number;
+    value: number;
+  }>;
 };
 type HighLevelSnapshot = {
+  appointments?: number;
   closedWon: number;
   contacts: number;
+  estimates?: number;
   estimatedRevenue: number;
   formsSubmitted: number;
   missedCalls: number;
@@ -1518,9 +1537,8 @@ function LeadJourneyView({
 }) {
   const steps = [
     ["Google Ads click", googleAdsClicks],
-    ["Call / Form", (crmFunnel?.phoneCalls ?? 0) + (crmFunnel?.formsSubmitted ?? 0)],
-    ["HighLevel Contact", crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0],
-    ["Opportunity", crmFunnel?.totalOpportunities ?? 0],
+    ["Phone Call Lead", crmFunnel?.phoneCalls ?? 0],
+    ["Appointment", crmFunnel?.appointments ?? 0],
     ["Estimate", crmFunnel?.estimates ?? 0],
     ["Won Job", crmFunnel?.wonJobs ?? crmFunnel?.wonOpportunities ?? 0],
     ["Revenue", `$${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()}`],
@@ -1534,7 +1552,7 @@ function LeadJourneyView({
       </h3>
       <p className="mt-2 text-sm leading-6 text-graphite/70">
         {hasHighLevel
-          ? "Revenue attribution connects ad clicks to calls, contacts, opportunities, estimates, won jobs, and revenue."
+          ? "Revenue attribution connects ad clicks to phone call leads, appointments, estimates, won jobs, and revenue."
           : "Connect HighLevel to complete revenue attribution."}
       </p>
       <div className="mt-5 grid gap-3">
@@ -2318,7 +2336,7 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
         </div>
       </Panel>
 
-      <RevenueFunnelPanel funnel={highLevelData?.revenueFunnel} googleAdsClicks={syncedGoogleAdsClicks} highLevelConnected={Boolean(highLevel?.connected)} />
+      <RevenueFunnelPanel funnel={highLevelData?.revenueFunnel} googleAdsData={googleAdsData} googleAdsClicks={syncedGoogleAdsClicks} highLevelConnected={Boolean(highLevel?.connected)} />
 
       <Panel>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
@@ -2798,8 +2816,19 @@ function PermissionModePills({ activeMode }: { activeMode: PermissionMode }) {
   );
 }
 
-function RevenueFunnelPanel({ funnel, googleAdsClicks = 0, highLevelConnected }: { funnel?: RevenueFunnelPayload; googleAdsClicks?: number; highLevelConnected: boolean }) {
+function RevenueFunnelPanel({
+  funnel,
+  googleAdsClicks = 0,
+  googleAdsData,
+  highLevelConnected,
+}: {
+  funnel?: RevenueFunnelPayload;
+  googleAdsClicks?: number;
+  googleAdsData?: GoogleAdsDataPayload | null;
+  highLevelConnected: boolean;
+}) {
   const fallback: RevenueFunnelPayload = {
+    appointments: 0,
     campaignAttribution: [],
     closedWonValue: 0,
     crmLeads: 0,
@@ -2821,38 +2850,216 @@ function RevenueFunnelPanel({ funnel, googleAdsClicks = 0, highLevelConnected }:
     totalOpportunities: 0,
     wonJobs: 0,
     wonOpportunities: 0,
+    stageMapping: [],
   };
   const data = { ...(funnel ?? fallback), googleAdsClicks: googleAdsClicks || funnel?.googleAdsClicks || 0 };
+  const mappedFunnel = useMappedRevenueFunnel(data);
+  const campaignRows = buildCampaignRevenueRows(mappedFunnel, googleAdsData);
+  const totalCost = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "cost") : mappedFunnel.googleAdsSpend;
+  const totalRevenue = mappedFunnel.estimatedRevenue || mappedFunnel.revenue;
+  const totalWonJobs = mappedFunnel.wonJobs || mappedFunnel.wonOpportunities;
 
   return (
     <Panel>
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <Eyebrow>Revenue Funnel</Eyebrow>
-          <h3 className="text-xl font-black text-ink">Google Ads clicks → HighLevel calls → CRM leads → Estimates → Won jobs → Estimated revenue</h3>
+          <h3 className="text-xl font-black text-ink">Google Ads Clicks → Phone Call Leads → Appointments → Estimates → Won Jobs → Revenue</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
-            HighLevel data gives Revenue Engine a real CRM funnel. These are planning metrics from synced CRM records, not financial guarantees.
+            HighLevel opportunity stages now power revenue attribution. These are planning metrics from synced CRM records and Google Ads data, not financial guarantees.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-2 text-xs font-black ${highLevelConnected ? "border-teal-200 bg-teal-50 text-teal-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
           {highLevelConnected ? "CRM data available" : "Connect HighLevel"}
         </span>
       </div>
-      <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <FunnelMetric label="Google Ads Clicks" value={data.googleAdsClicks ? String(data.googleAdsClicks) : "Pending"} />
-        <FunnelMetric label="HighLevel Calls" value={String(data.phoneCalls)} />
-        <FunnelMetric label="CRM Leads" value={String(data.crmLeads || data.leads)} />
-        <FunnelMetric label="Estimates" value={String(data.estimates)} />
-        <FunnelMetric label="Won Jobs" value={String(data.wonJobs || data.wonOpportunities)} />
-        <FunnelMetric label="Estimated Revenue" value={`$${Math.round(data.estimatedRevenue || data.revenue).toLocaleString()}`} />
+      <div className="mt-5 grid gap-3 xl:grid-cols-6">
+        <FunnelStage label="Google Ads Clicks" value={mappedFunnel.googleAdsClicks ? String(mappedFunnel.googleAdsClicks) : "Pending"} />
+        <FunnelStage label="Phone Call Leads" value={String(mappedFunnel.phoneCalls)} />
+        <FunnelStage label="Appointments" value={String(mappedFunnel.appointments)} />
+        <FunnelStage label="Estimates" value={String(mappedFunnel.estimates)} />
+        <FunnelStage label="Won Jobs" value={String(totalWonJobs)} />
+        <FunnelStage label="Revenue" value={`$${Math.round(totalRevenue).toLocaleString()}`} />
       </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-4">
+        <FunnelMetric label="Revenue / Click" value={mappedFunnel.googleAdsClicks ? `$${Math.round(totalRevenue / mappedFunnel.googleAdsClicks).toLocaleString()}` : "Pending"} />
+        <FunnelMetric label="Cost / Won Job" value={totalCost && totalWonJobs ? `$${Math.round(totalCost / totalWonJobs).toLocaleString()}` : "Pending"} />
+        <FunnelMetric label="Estimated ROI" value={totalCost ? `${(totalRevenue / totalCost).toFixed(2)}x` : "Pending"} />
+        <FunnelMetric label="Close Rate" value={(mappedFunnel.crmLeads || mappedFunnel.leads) ? `${((totalWonJobs / (mappedFunnel.crmLeads || mappedFunnel.leads)) * 100).toFixed(1)}%` : "Pending"} />
+      </div>
+      {data.stageMapping.length ? (
+        <StageMappingEditor data={data} mappedFunnel={mappedFunnel} />
+      ) : null}
+      <CampaignRevenueTable rows={campaignRows} />
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <MiniAttributionTable rows={data.leadSources.map((row) => [row.source, String(row.count), `$${Math.round(row.value).toLocaleString()}`])} title="Lead Sources" />
         <MiniAttributionTable rows={data.opportunityStages.map((row) => [row.stage, String(row.count), `$${Math.round(row.value).toLocaleString()}`])} title="Opportunity Stages" />
-        <MiniAttributionTable rows={data.campaignAttribution.map((row) => [row.campaign, String(row.leads), `$${Math.round(row.value).toLocaleString()}`])} title="Campaign Attribution" />
+        <MiniAttributionTable rows={data.stageMapping.map((row) => [row.stage, row.mappedTo, `$${Math.round(row.value).toLocaleString()}`])} title="Auto Stage Mapping" />
       </div>
     </Panel>
   );
+}
+
+function FunnelStage({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="relative rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
+      <p className="text-2xl font-black text-ink">{value}</p>
+      <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+    </div>
+  );
+}
+
+type StageMappingValue = RevenueFunnelPayload["stageMapping"][number]["mappedTo"];
+
+function useMappedRevenueFunnel(data: RevenueFunnelPayload) {
+  const storageKey = "hvac-growth-os:revenue-stage-mapping";
+  const [adminMapping, setAdminMapping] = useState<Record<string, StageMappingValue>>({});
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      setAdminMapping(JSON.parse(window.localStorage.getItem(storageKey) || "{}") as Record<string, StageMappingValue>);
+    } catch {
+      setAdminMapping({});
+    }
+  }, []);
+
+  const mappedStages = data.stageMapping.map((stage) => ({
+    ...stage,
+    mappedTo: adminMapping[stage.stage] ?? stage.mappedTo,
+  }));
+  const appointments = sum(mappedStages.filter((stage) => stage.mappedTo === "Appointment").map((stage) => stage.count));
+  const estimates = sum(mappedStages.filter((stage) => stage.mappedTo === "Estimate").map((stage) => stage.count));
+  const wonJobs = sum(mappedStages.filter((stage) => stage.mappedTo === "Won").map((stage) => stage.count));
+  const revenue = sum(mappedStages.filter((stage) => stage.mappedTo === "Won").map((stage) => stage.value));
+
+  return {
+    ...data,
+    appointments: appointments || data.appointments,
+    estimates: estimates || data.estimates,
+    estimatedRevenue: revenue || data.estimatedRevenue,
+    revenue: revenue || data.revenue,
+    stageMapping: mappedStages,
+    wonJobs: wonJobs || data.wonJobs,
+    wonOpportunities: wonJobs || data.wonOpportunities,
+    setStageMapping(stage: string, mappedTo: StageMappingValue) {
+      const next = { ...adminMapping, [stage]: mappedTo };
+      setAdminMapping(next);
+      if (typeof window !== "undefined") window.localStorage.setItem(storageKey, JSON.stringify(next));
+    },
+  };
+}
+
+function StageMappingEditor({
+  data,
+  mappedFunnel,
+}: {
+  data: RevenueFunnelPayload;
+  mappedFunnel: ReturnType<typeof useMappedRevenueFunnel>;
+}) {
+  const mappingOptions: StageMappingValue[] = ["Lead", "Appointment", "Estimate", "Won", "Lost", "Ignore"];
+  return (
+    <div className="mt-5 rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
+      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+        <div>
+          <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Admin Stage Mapping</h4>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+            HVAC Growth OS maps common HighLevel stages automatically. If Comfort Guardians uses custom stages, override them here for attribution.
+          </p>
+        </div>
+        <span className="rounded-full border border-ink/10 bg-white px-3 py-2 text-xs font-black text-graphite/70">
+          {data.stageMapping.length} stages
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {mappedFunnel.stageMapping.map((stage) => (
+          <label className="grid gap-2 rounded-lg border border-ink/10 bg-white p-3" key={stage.stage}>
+            <span className="text-sm font-black text-ink">{stage.stage}</span>
+            <span className="text-xs font-bold text-graphite/55">{stage.count} records / ${Math.round(stage.value).toLocaleString()} value</span>
+            <select
+              className="h-10 rounded-md border border-ink/15 bg-white px-3 text-sm font-bold text-ink outline-none focus:border-flame focus:ring-4 focus:ring-flame/15"
+              onChange={(event) => mappedFunnel.setStageMapping(stage.stage, event.target.value as StageMappingValue)}
+              value={stage.mappedTo}
+            >
+              {mappingOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function buildCampaignRevenueRows(funnel: RevenueFunnelPayload, googleAdsData?: GoogleAdsDataPayload | null) {
+  const adsByCampaign = new Map((googleAdsData?.campaigns ?? []).map((campaign) => [normalizeAttributionKey(campaign.name), campaign]));
+  return funnel.campaignAttribution.map((row) => {
+    const ads = adsByCampaign.get(normalizeAttributionKey(row.campaign));
+    const clicks = ads?.clicks ?? row.clicks ?? 0;
+    const cost = ads?.cost ?? row.cost ?? 0;
+    const revenue = row.revenue || row.value || 0;
+    const wonJobs = row.wonJobs || 0;
+    const leads = row.leads || row.calls || 0;
+    return {
+      ...row,
+      clicks,
+      closeRate: leads ? Number(((wonJobs / leads) * 100).toFixed(1)) : row.closeRate || 0,
+      cost,
+      costPerWonJob: cost && wonJobs ? cost / wonJobs : row.costPerWonJob || 0,
+      estimatedRoi: cost ? revenue / cost : row.estimatedRoi || 0,
+      revenue,
+      revenuePerClick: clicks ? revenue / clicks : row.revenuePerClick || 0,
+      wonJobs,
+    };
+  });
+}
+
+function CampaignRevenueTable({ rows }: { rows: ReturnType<typeof buildCampaignRevenueRows> }) {
+  return (
+    <div className="mt-5 overflow-hidden rounded-xl border border-ink/10 bg-white">
+      <div className="flex flex-col justify-between gap-3 border-b border-ink/10 bg-[#fbfbfa] px-4 py-3 lg:flex-row lg:items-center">
+        <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Campaign Revenue Attribution</h4>
+        <p className="text-xs font-bold text-graphite/55">Clicks and cost come from Google Ads when campaign names match HighLevel attribution sources.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[980px] text-left text-xs">
+          <thead className="bg-white text-graphite/65">
+            <tr>
+              {["Campaign", "Clicks", "Calls", "Appointments", "Estimates", "Won Jobs", "Revenue", "Close Rate", "Revenue / Click", "Cost / Won Job", "Estimated ROI"].map((header) => (
+                <th className="px-3 py-3 font-black" key={header}>{header}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? rows.map((row) => (
+              <tr className="border-t border-ink/10" key={row.campaign}>
+                <td className="px-3 py-3 font-black text-ink">{row.campaign}</td>
+                <td className="px-3 py-3 text-graphite/70">{row.clicks}</td>
+                <td className="px-3 py-3 text-graphite/70">{row.calls}</td>
+                <td className="px-3 py-3 text-graphite/70">{row.appointments}</td>
+                <td className="px-3 py-3 text-graphite/70">{row.estimates}</td>
+                <td className="px-3 py-3 text-graphite/70">{row.wonJobs}</td>
+                <td className="px-3 py-3 text-graphite/70">${Math.round(row.revenue).toLocaleString()}</td>
+                <td className="px-3 py-3 text-graphite/70">{row.closeRate ? `${row.closeRate}%` : "-"}</td>
+                <td className="px-3 py-3 text-graphite/70">{row.revenuePerClick ? `$${Math.round(row.revenuePerClick).toLocaleString()}` : "-"}</td>
+                <td className="px-3 py-3 text-graphite/70">{row.costPerWonJob ? `$${Math.round(row.costPerWonJob).toLocaleString()}` : "-"}</td>
+                <td className="px-3 py-3 text-graphite/70">{row.estimatedRoi ? `${row.estimatedRoi.toFixed(2)}x` : "-"}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td className="px-3 py-5 text-sm text-graphite/60" colSpan={11}>No campaign attribution yet. Connect HighLevel and confirm lead source or campaign fields are populated.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function normalizeAttributionKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function FunnelMetric({ label, value }: { label: string; value: string }) {
@@ -2889,9 +3096,11 @@ function MiniSnapshotTable({ snapshots }: { snapshots: HighLevelSnapshot[] }) {
       <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Historical Snapshots</h4>
       <div className="mt-3 grid gap-2">
         {snapshots.length ? snapshots.slice(0, 5).map((snapshot) => (
-          <div className="grid gap-2 rounded-xl border border-ink/10 bg-white p-3 text-xs sm:grid-cols-[1fr_auto_auto_auto]" key={snapshot.syncedAt}>
+          <div className="grid gap-2 rounded-xl border border-ink/10 bg-white p-3 text-xs sm:grid-cols-[1fr_auto_auto_auto_auto_auto]" key={snapshot.syncedAt}>
             <strong className="text-ink">{new Date(snapshot.syncedAt).toLocaleString()}</strong>
             <span className="font-bold text-graphite/70">{snapshot.contacts} contacts</span>
+            <span className="font-bold text-graphite/70">{snapshot.appointments ?? 0} appts</span>
+            <span className="font-bold text-graphite/70">{snapshot.estimates ?? 0} estimates</span>
             <span className="font-bold text-graphite/70">{snapshot.openOpportunities} open</span>
             <span className="font-bold text-graphite/70">${Math.round(snapshot.pipelineValue).toLocaleString()} pipeline</span>
           </div>
@@ -3408,7 +3617,8 @@ function AiCmoSection({
   const [memory, setMemory] = useState<IntelligenceSnapshot[]>([]);
   const [clientNotes, setClientNotes] = useState("");
   const [crmFunnel, setCrmFunnel] = useState<RevenueFunnelPayload | null>(null);
-  const [googleAdsClicks, setGoogleAdsClicks] = useState(0);
+  const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
+  const googleAdsClicks = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "clicks") : 0;
   const hasCrmFunnelData = Boolean(crmFunnel && (crmFunnel.leads || crmFunnel.pipelineValue || crmFunnel.revenue));
   const brief = buildAiCmoBrief(analysis, contractorUrl, ppcPlan, memory, crmFunnel ?? undefined, googleAdsClicks);
   const currentSnapshot = createIntelligenceSnapshot(analysis, ppcPlan, brief, clientNotes);
@@ -3438,9 +3648,9 @@ function AiCmoSection({
       fetch("/api/google-ads/data", { cache: "no-store" })
         .then((response) => response.ok ? response.json() : null)
         .then((payload: { data?: GoogleAdsDataPayload } | null) => {
-          setGoogleAdsClicks(payload?.data?.campaigns ? sumMetricRows(payload.data.campaigns, "clicks") : 0);
+          setGoogleAdsData(payload?.data ?? null);
         })
-        .catch(() => setGoogleAdsClicks(0)),
+        .catch(() => setGoogleAdsData(null)),
     ]);
   }, []);
 
@@ -4456,7 +4666,8 @@ function PpcPlannerPanel({
   setOverrides: (value: PpcManualOverrides) => void;
 }) {
   const [crmFunnel, setCrmFunnel] = useState<RevenueFunnelPayload | null>(null);
-  const [googleAdsClicks, setGoogleAdsClicks] = useState(0);
+  const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
+  const googleAdsClicks = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "clicks") : 0;
   const hasCrmFunnelData = Boolean(crmFunnel && (crmFunnel.leads || crmFunnel.pipelineValue || crmFunnel.revenue));
 
   useEffect(() => {
@@ -4470,9 +4681,9 @@ function PpcPlannerPanel({
       fetch("/api/google-ads/data", { cache: "no-store" })
         .then((response) => response.ok ? response.json() : null)
         .then((payload: { data?: GoogleAdsDataPayload } | null) => {
-          setGoogleAdsClicks(payload?.data?.campaigns ? sumMetricRows(payload.data.campaigns, "clicks") : 0);
+          setGoogleAdsData(payload?.data ?? null);
         })
-        .catch(() => setGoogleAdsClicks(0)),
+        .catch(() => setGoogleAdsData(null)),
     ]);
   }, []);
 
@@ -4612,7 +4823,7 @@ function PpcPlannerPanel({
       </form>
 
       <div className="mt-6">
-        <RevenueFunnelPanel funnel={crmFunnel ?? undefined} googleAdsClicks={googleAdsClicks} highLevelConnected={hasCrmFunnelData} />
+        <RevenueFunnelPanel funnel={crmFunnel ?? undefined} googleAdsData={googleAdsData} googleAdsClicks={googleAdsClicks} highLevelConnected={hasCrmFunnelData} />
       </div>
 
       {ppcPlan && <PpcPlanResults plan={ppcPlan} />}
@@ -6731,6 +6942,8 @@ function buildAiCmoBrief(
       { label: "Google Ads Clicks", value: googleAdsClicks ? `${googleAdsClicks} synced clicks` : "Waiting on Google Ads sync" },
       { label: "CRM Leads", value: hasCrmData ? `${crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0} synced leads` : "HighLevel not connected" },
       { label: "Phone Calls", value: hasCrmData ? `${crmFunnel?.phoneCalls ?? 0} synced calls` : "Waiting on CRM sync" },
+      { label: "Appointments", value: hasCrmData ? `${crmFunnel?.appointments ?? 0} synced appointments` : "Waiting on CRM sync" },
+      { label: "Estimates", value: hasCrmData ? `${crmFunnel?.estimates ?? 0} synced estimates` : "Waiting on CRM sync" },
       { label: "Pipeline Value", value: hasCrmData ? `$${Math.round(crmFunnel?.pipelineValue ?? 0).toLocaleString()}` : "Waiting on CRM sync" },
     ],
     campaignRecommendations: [
@@ -6771,6 +6984,8 @@ function buildHighLevelCmoAction(
   const calls = crmFunnel?.phoneCalls ?? 0;
   const crmLeads = crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0;
   const opportunities = crmFunnel?.totalOpportunities ?? 0;
+  const appointments = crmFunnel?.appointments ?? 0;
+  const estimates = crmFunnel?.estimates ?? 0;
   const wonJobs = crmFunnel?.wonJobs ?? crmFunnel?.wonOpportunities ?? 0;
   const missedCalls = crmFunnel?.missedCalls ?? 0;
 
@@ -6804,6 +7019,28 @@ function buildHighLevelCmoAction(
       priority: "High",
       reason: "HighLevel shows calls, but no synced opportunities. The intake process may not be creating pipeline records consistently.",
       relatedModule: "HighLevel / CRM",
+    };
+  }
+
+  if (calls >= 5 && appointments === 0) {
+    return {
+      action: "Fix appointment creation from phone leads",
+      confidence: actionConfidence(7),
+      impact: "More booked estimates",
+      priority: "High",
+      reason: `HighLevel shows ${calls} calls, but no synced appointment stage. Review intake workflow and stage mapping before increasing budget.`,
+      relatedModule: "HighLevel / CRM",
+    };
+  }
+
+  if (appointments > 0 && estimates === 0) {
+    return {
+      action: "Review estimate follow-up process",
+      confidence: actionConfidence(6),
+      impact: "Improve appointment-to-estimate conversion",
+      priority: "High",
+      reason: `HighLevel shows ${appointments} appointment${appointments === 1 ? "" : "s"}, but no synced estimates. Confirm estimate stages are mapped and follow-up is happening.`,
+      relatedModule: "Revenue Engine",
     };
   }
 
@@ -7585,6 +7822,10 @@ function saveDecisionMemory(key: string, value: ReturnType<typeof loadDecisionMe
 function avg(values: number[]) {
   const cleanValues = values.filter((value) => Number.isFinite(value));
   return cleanValues.length ? cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length : 0;
+}
+
+function sum(values: number[]) {
+  return values.reduce((total, value) => total + value, 0);
 }
 
 function formatPercent(value: number) {
