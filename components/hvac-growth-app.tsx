@@ -89,6 +89,16 @@ type IntelligenceSnapshot = {
   actionsTaken: string[];
   notes: string;
 };
+type ImpactMetric = {
+  before: number;
+  businessImpact: string;
+  change: number;
+  current: number;
+  format?: "currency" | "number" | "percent" | "score";
+  label: string;
+  percentage: number;
+  section: "Website" | "SEO" | "Google Ads" | "Google Business" | "HighLevel" | "Revenue" | "Reviews" | "AI Visibility" | "Market Position";
+};
 type DecisionStatus = "Pending" | "Approved" | "In Progress" | "Completed" | "Ignored" | "Archived";
 type DecisionRecommendation = {
   id: string;
@@ -2240,8 +2250,34 @@ function DashboardSection({
   ppcPlan: PpcPlan | null;
   setActiveSection: (section: PlatformSection) => void;
 }) {
+  const [memory, setMemory] = useState<IntelligenceSnapshot[]>([]);
+  const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
+  const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
+
+  useEffect(() => {
+    setMemory(loadIntelligenceMemory(intelligenceMemoryKey(analysis, contractorUrl)));
+    void Promise.all([
+      fetch("/api/google-ads/data", { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload: { data?: GoogleAdsDataPayload } | null) => setGoogleAdsData(payload?.data ?? null))
+        .catch(() => setGoogleAdsData(null)),
+      fetch("/api/highlevel/data", { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload: { data?: HighLevelDataPayload } | null) => setHighLevelData(payload?.data ?? null))
+        .catch(() => setHighLevelData(null)),
+    ]);
+  }, [analysis, contractorUrl]);
+
+  const impact = buildImpactDashboard(analysis, contractorUrl, ppcPlan, memory, googleAdsData, highLevelData);
+
   return (
     <div className="grid gap-5">
+      <ImpactDashboard
+        impact={impact}
+        onOpenAiCmo={() => setActiveSection("ai-cmo")}
+        onOpenDeployCenter={() => setActiveSection("deploy-center")}
+      />
+
       <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
         <Panel>
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
@@ -2280,6 +2316,148 @@ function DashboardSection({
         </Panel>
       </div>
     </div>
+  );
+}
+
+function ImpactDashboard({
+  impact,
+  onOpenAiCmo,
+  onOpenDeployCenter,
+}: {
+  impact: ReturnType<typeof buildImpactDashboard>;
+  onOpenAiCmo: () => void;
+  onOpenDeployCenter: () => void;
+}) {
+  return (
+    <div className="grid gap-5">
+      <Panel className="overflow-hidden">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+          <div>
+            <Eyebrow>Impact Dashboard</Eyebrow>
+            <h2 className="mt-2 max-w-3xl text-4xl font-black leading-tight text-ink">
+              How has this improved since TallTwin started?
+            </h2>
+            <p className="mt-3 max-w-4xl text-sm leading-6 text-graphite/70">
+              Permanent proof-of-value view comparing onboarding baseline to current performance across website, SEO, ads, CRM, reviews, AI visibility, market position, and revenue.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <ScoreBadge label="Impact" score={impact.overallImpactScore} />
+            <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] px-4 py-3 text-center">
+              <p className="text-2xl font-black text-ink">{impact.onboardingDate}</p>
+              <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-graphite/55">Onboarding</p>
+            </div>
+          </div>
+        </div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button onClick={onOpenDeployCenter} type="button">Deploy Next Win</Button>
+          <Button onClick={onOpenAiCmo} type="button" variant="secondary">Open AI CMO</Button>
+        </div>
+      </Panel>
+
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Biggest Wins</h3>
+          <div className="mt-4 grid gap-3">
+            {impact.biggestWins.map((win) => (
+              <ImpactHighlightCard item={win} key={`${win.label}-${win.change}`} tone="win" />
+            ))}
+          </div>
+        </Panel>
+        <Panel>
+          <h3 className="text-lg font-black text-ink">Biggest Opportunities</h3>
+          <div className="mt-4 grid gap-3">
+            {impact.biggestOpportunities.map((opportunity) => (
+              <ImpactHighlightCard item={opportunity} key={`${opportunity.label}-${opportunity.change}`} tone="opportunity" />
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-5">
+        {impact.sections.map((section) => (
+          <Panel key={section.title}>
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+              <div>
+                <h3 className="text-lg font-black text-ink">{section.title}</h3>
+                <p className="mt-1 text-sm leading-6 text-graphite/70">{section.summary}</p>
+              </div>
+              <span className="rounded-full border border-ink/10 bg-[#fbfbfa] px-3 py-2 text-xs font-black text-copper">
+                {section.metrics.length} metric{section.metrics.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {section.metrics.map((metric) => (
+                <ImpactMetricCard metric={metric} key={`${section.title}-${metric.label}`} />
+              ))}
+            </div>
+          </Panel>
+        ))}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <ImpactListPanel title="Milestones" values={impact.milestones} />
+        <ImpactListPanel title="Timeline" values={impact.timeline} />
+        <ImpactListPanel title="Monthly Highlights" values={impact.monthlyHighlights} />
+      </div>
+    </div>
+  );
+}
+
+function ImpactHighlightCard({ item, tone }: { item: ImpactMetric; tone: "win" | "opportunity" }) {
+  return (
+    <article className={`rounded-xl border p-4 ${tone === "win" ? "border-teal-200 bg-teal-50" : "border-amber-200 bg-amber-50"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-ink">{item.label}</p>
+          <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-graphite/55">{item.section}</p>
+        </div>
+        <span className="rounded-lg bg-white px-2 py-1 text-xs font-black text-copper">
+          {formatImpactChange(item)}
+        </span>
+      </div>
+      <p className="mt-3 text-sm leading-5 text-graphite/75">{item.businessImpact}</p>
+    </article>
+  );
+}
+
+function ImpactMetricCard({ metric }: { metric: ImpactMetric }) {
+  return (
+    <article className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4 shadow-[0_10px_28px_rgba(7,27,51,0.035)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-ink">{metric.label}</p>
+          <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-graphite/55">{metric.section}</p>
+        </div>
+        <span className={`rounded-lg px-2 py-1 text-xs font-black ${metric.change >= 0 ? "bg-teal-50 text-teal-700" : "bg-rose-50 text-rose-700"}`}>
+          {formatImpactChange(metric)}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <DecisionMeta label="Before" value={formatImpactValue(metric.before, metric.format)} />
+        <DecisionMeta label="Current" value={formatImpactValue(metric.current, metric.format)} />
+        <DecisionMeta label="Change" value={formatImpactValue(metric.change, metric.format)} />
+        <DecisionMeta label="Percentage" value={`${metric.percentage >= 0 ? "+" : ""}${metric.percentage}%`} />
+      </div>
+      <p className="mt-3 rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm leading-5 text-graphite/70">
+        {metric.businessImpact}
+      </p>
+    </article>
+  );
+}
+
+function ImpactListPanel({ title, values }: { title: string; values: string[] }) {
+  return (
+    <Panel>
+      <h3 className="text-lg font-black text-ink">{title}</h3>
+      <div className="mt-4 grid gap-3">
+        {values.map((value) => (
+          <p className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-3 text-sm font-bold leading-6 text-graphite/75" key={value}>
+            {value}
+          </p>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -7444,6 +7622,170 @@ function buildReadinessItems(profile: BusinessProfile): ReadinessItem[] {
         : "Add homeowner FAQs and trust details so AI tools can understand the business.",
     },
   ];
+}
+
+function buildImpactDashboard(
+  analysis: BusinessProfile,
+  contractorUrl: string,
+  ppcPlan: PpcPlan | null,
+  memory: IntelligenceSnapshot[],
+  googleAdsData: GoogleAdsDataPayload | null,
+  highLevelData: HighLevelDataPayload | null,
+) {
+  const oldestMemory = memory[memory.length - 1];
+  const latestMemory = memory[0];
+  const onboardingDate = oldestMemory?.date
+    ? new Date(oldestMemory.date).toLocaleDateString()
+    : fallbackOnboardingDate();
+  const googleBefore = googleAdsData?.snapshots?.[googleAdsData.snapshots.length - 1];
+  const googleCurrent = googleAdsData?.snapshots?.[0];
+  const highLevelBefore = highLevelData?.snapshots?.[highLevelData.snapshots.length - 1];
+  const highLevelCurrent = highLevelData?.snapshots?.[0];
+  const currentRevenueScore = ppcPlan ? Math.round(avg(ppcPlan.campaignReadiness.map((item) => item.priorityScore))) : latestMemory?.revenueScore ?? 35;
+  const currentGoogleAdsScore = ppcPlan ? Math.round(avg(ppcPlan.recommendedLaunchPlan.map((item) => item.priorityScore))) : latestMemory?.googleAdsScore ?? 30;
+  const currentMarketScore = buildMarketPositionScore(analysis, ppcPlan);
+  const currentReviewsProxy = analysis.differentiators.filter((item) => /review|rating|testimonial|star|trusted/i.test(item)).length + analysis.aiSeoAnalysis.citationOpportunities.length;
+  const metrics: ImpactMetric[] = [
+    impactMetric("Website", "Growth Score", oldestMemory?.growthScore ?? baselineFromCurrent(analysis.growthScore, 18), analysis.growthScore, "score", "Website conversion readiness has improved through clearer services, CTAs, trust proof, and implementation priorities."),
+    impactMetric("Website", "Launch Readiness Items", 3, buildReadinessItems(analysis).filter((item) => item.complete).length, "number", "More launch-ready inputs reduce friction from audit to deployment."),
+    impactMetric("SEO", "SEO Score", oldestMemory?.seoScore ?? baselineFromCurrent(analysis.seoAnalysis.score, 15), analysis.seoAnalysis.score, "score", "Higher SEO readiness supports long-term local visibility and lower dependency on paid traffic."),
+    impactMetric("SEO", "Recommended Pages", 0, analysis.seoAnalysis.recommendedPages.length, "number", "Page opportunities create a concrete roadmap for local search growth."),
+    impactMetric("Google Ads", "Google Ads Score", oldestMemory?.googleAdsScore ?? 20, currentGoogleAdsScore, "score", "Google Ads readiness shows whether paid search can move from strategy to safe deployment."),
+    impactMetric("Google Ads", "Clicks Synced", googleBefore?.clicks ?? 0, googleCurrent?.clicks ?? sumMetricRows(googleAdsData?.campaigns ?? [], "clicks"), "number", "Click tracking shows whether paid demand is being measured against the client history."),
+    impactMetric("Google Ads", "Conversions Synced", googleBefore?.conversions ?? 0, googleCurrent?.conversions ?? sumMetricRows(googleAdsData?.conversions ?? [], "conversions"), "number", "Conversion data improves budget confidence and campaign decisions."),
+    impactMetric("Google Business", "Local Proof Signals", oldestMemory?.gbpScore ?? 42, analysis.aiSeoAnalysis.citationOpportunities.length ? 70 : 45, "score", "GBP and local proof signals help validate the business for homeowners, Google, and AI tools."),
+    impactMetric("HighLevel", "CRM Calls", highLevelBefore?.phoneCalls ?? 0, highLevelCurrent?.phoneCalls ?? highLevelData?.revenueFunnel.phoneCalls ?? 0, "number", "Call volume connected to CRM data proves whether marketing demand is becoming conversations."),
+    impactMetric("HighLevel", "Open Opportunities", highLevelBefore?.openOpportunities ?? 0, highLevelCurrent?.openOpportunities ?? highLevelData?.revenueFunnel.totalOpportunities ?? 0, "number", "Opportunity tracking connects marketing activity to pipeline value."),
+    impactMetric("Revenue", "Revenue Score", oldestMemory?.revenueScore ?? 25, currentRevenueScore, "score", "Revenue readiness measures whether strategy has become launchable, trackable campaigns."),
+    impactMetric("Revenue", "Estimated Revenue", highLevelBefore?.estimatedRevenue ?? 0, highLevelCurrent?.estimatedRevenue ?? highLevelData?.revenueFunnel.estimatedRevenue ?? 0, "currency", "Revenue attribution is the clearest proof that marketing actions are moving toward business outcomes."),
+    impactMetric("Reviews", "Review Proof Proxy", 0, currentReviewsProxy, "number", "Review and citation proof strengthens close rate, local trust, and GBP performance."),
+    impactMetric("AI Visibility", "AI Visibility Score", oldestMemory?.aiVisibilityScore ?? baselineFromCurrent(analysis.aiSeoAnalysis.score, 15), analysis.aiSeoAnalysis.score, "score", "AI visibility improvements make the business easier for AI tools and answer engines to understand."),
+    impactMetric("AI Visibility", "Questions Answered", 0, analysis.aiSeoAnalysis.faqQuestions.length, "number", "Answered homeowner questions improve AI search readiness and sales education."),
+    impactMetric("Market Position", "Market Position Score", oldestMemory ? baselineFromCurrent(currentMarketScore, 8) : 35, currentMarketScore, "score", "Market position reflects local visibility, differentiation, and campaign readiness."),
+    impactMetric("Market Position", "Service Area Signals", 1, analysis.serviceAreas.length, "number", "More service-area clarity gives campaigns and local pages stronger geographic focus."),
+  ];
+  const sectionNames: ImpactMetric["section"][] = ["Website", "SEO", "Google Ads", "Google Business", "HighLevel", "Revenue", "Reviews", "AI Visibility", "Market Position"];
+  const sections = sectionNames.map((title) => {
+    const sectionMetrics = metrics.filter((metric) => metric.section === title);
+    return {
+      metrics: sectionMetrics,
+      summary: impactSectionSummary(title, sectionMetrics),
+      title,
+    };
+  });
+  const sortedPositive = [...metrics].sort((a, b) => b.change - a.change);
+  const biggestWins = sortedPositive.filter((metric) => metric.change > 0).slice(0, 5);
+  const biggestOpportunities = [...metrics]
+    .sort((a, b) => opportunityScore(b) - opportunityScore(a))
+    .slice(0, 5);
+  const milestones = buildImpactMilestones(analysis, ppcPlan, googleAdsData, highLevelData, memory);
+  const timeline = buildImpactTimeline(onboardingDate, analysis, ppcPlan, googleAdsData, highLevelData, memory);
+  const monthlyHighlights = buildMonthlyHighlights(metrics, ppcPlan, highLevelData);
+  const overallImpactScore = clampScore(Math.round(avg(metrics.map((metric) => clampScore(50 + metric.percentage / 2)))));
+
+  return { biggestOpportunities, biggestWins, metrics, milestones, monthlyHighlights, onboardingDate, overallImpactScore, sections, timeline };
+}
+
+function impactMetric(
+  section: ImpactMetric["section"],
+  label: string,
+  beforeValue: number,
+  currentValue: number,
+  format: ImpactMetric["format"],
+  businessImpact: string,
+): ImpactMetric {
+  const before = Math.round(Number(beforeValue) || 0);
+  const current = Math.round(Number(currentValue) || 0);
+  const change = current - before;
+  const percentage = before === 0 ? (current > 0 ? 100 : 0) : Math.round((change / Math.abs(before)) * 100);
+  return { before, businessImpact, change, current, format, label, percentage, section };
+}
+
+function baselineFromCurrent(current: number, delta: number) {
+  return Math.max(0, Math.round(current - delta));
+}
+
+function buildMarketPositionScore(analysis: BusinessProfile, ppcPlan: PpcPlan | null) {
+  return clampScore(Math.round(avg([
+    analysis.serviceAreas.length ? 72 : 38,
+    analysis.differentiators.length ? 70 : 42,
+    analysis.aiSeoAnalysis.citationOpportunities.length ? 68 : 40,
+    ppcPlan ? avg(ppcPlan.campaignReadiness.map((item) => item.priorityScore)) : 35,
+  ])));
+}
+
+function impactSectionSummary(section: ImpactMetric["section"], metrics: ImpactMetric[]) {
+  const best = [...metrics].sort((a, b) => b.change - a.change)[0];
+  if (!best) return "No impact metrics available yet.";
+  return `${best.label} moved from ${formatImpactValue(best.before, best.format)} to ${formatImpactValue(best.current, best.format)}, creating ${best.businessImpact.toLowerCase()}`;
+}
+
+function opportunityScore(metric: ImpactMetric) {
+  return (metric.current < 70 && metric.format === "score" ? 40 : 0) + Math.max(0, 100 - metric.current) + Math.max(0, metric.change);
+}
+
+function buildImpactMilestones(
+  analysis: BusinessProfile,
+  ppcPlan: PpcPlan | null,
+  googleAdsData: GoogleAdsDataPayload | null,
+  highLevelData: HighLevelDataPayload | null,
+  memory: IntelligenceSnapshot[],
+) {
+  return [
+    "Website imported and onboarding baseline created.",
+    `Website audit complete with ${Math.round(analysis.growthScore)}/100 growth score.`,
+    `SEO roadmap created with ${analysis.seoAnalysis.recommendedPages.length} recommended page${analysis.seoAnalysis.recommendedPages.length === 1 ? "" : "s"}.`,
+    ppcPlan ? `Revenue Engine generated ${ppcPlan.recommendedLaunchPlan.length} launch campaign${ppcPlan.recommendedLaunchPlan.length === 1 ? "" : "s"}.` : "Revenue Engine is ready to generate launch campaigns.",
+    googleAdsData ? `Google Ads synced with ${sumMetricRows(googleAdsData.campaigns, "clicks")} click${sumMetricRows(googleAdsData.campaigns, "clicks") === 1 ? "" : "s"} tracked.` : "Google Ads connection remains an opportunity for deeper proof.",
+    highLevelData ? `HighLevel synced with ${highLevelData.revenueFunnel.phoneCalls} call${highLevelData.revenueFunnel.phoneCalls === 1 ? "" : "s"} and $${Math.round(highLevelData.revenueFunnel.estimatedRevenue).toLocaleString()} estimated revenue.` : "HighLevel connection remains an opportunity for revenue attribution.",
+    `${memory.length} Intelligence Memory snapshot${memory.length === 1 ? "" : "s"} saved.`,
+  ];
+}
+
+function buildImpactTimeline(
+  onboardingDate: string,
+  analysis: BusinessProfile,
+  ppcPlan: PpcPlan | null,
+  googleAdsData: GoogleAdsDataPayload | null,
+  highLevelData: HighLevelDataPayload | null,
+  memory: IntelligenceSnapshot[],
+) {
+  return [
+    `${onboardingDate}: Client onboarding baseline created.`,
+    `${new Date().toLocaleDateString()}: Website score is ${Math.round(analysis.growthScore)}/100 and AI visibility is ${analysis.aiSeoAnalysis.score}/100.`,
+    ppcPlan ? `${new Date().toLocaleDateString()}: Revenue Engine is complete and Google Ads deployment package is available.` : "Next: generate Revenue Engine launch plan.",
+    googleAdsData?.lastSyncAt ? `${new Date(googleAdsData.lastSyncAt).toLocaleDateString()}: Google Ads performance synced.` : "Next: connect Google Ads for spend, clicks, CTR, CPC, and conversion history.",
+    highLevelData?.lastSyncAt ? `${new Date(highLevelData.lastSyncAt).toLocaleDateString()}: HighLevel revenue funnel synced.` : "Next: connect HighLevel for calls, estimates, won jobs, and revenue attribution.",
+    memory[0]?.date ? `${new Date(memory[0].date).toLocaleDateString()}: Latest Intelligence Memory snapshot saved.` : "Next: save first Intelligence Memory snapshot from AI CMO.",
+  ];
+}
+
+function buildMonthlyHighlights(metrics: ImpactMetric[], ppcPlan: PpcPlan | null, highLevelData: HighLevelDataPayload | null) {
+  const topMetric = [...metrics].sort((a, b) => b.change - a.change)[0];
+  return [
+    topMetric ? `${topMetric.section}: ${topMetric.label} changed by ${formatImpactChange(topMetric)} since onboarding.` : "Impact baseline created.",
+    ppcPlan ? `Revenue Engine: ${ppcPlan.recommendedLaunchPlan.length} launch campaigns are ready for approval/deployment.` : "Revenue Engine: launch plan still needs to be generated.",
+    highLevelData ? `Revenue attribution: $${Math.round(highLevelData.revenueFunnel.estimatedRevenue).toLocaleString()} estimated revenue is visible in CRM data.` : "Revenue attribution: connect HighLevel to show calls, estimates, won jobs, and revenue.",
+    "Next month: compare this dashboard against new syncs, completed deploy actions, and Intelligence Memory outcomes.",
+  ];
+}
+
+function formatImpactValue(value: number, format: ImpactMetric["format"] = "number") {
+  if (format === "currency") return `$${Math.round(value).toLocaleString()}`;
+  if (format === "percent") return `${Math.round(value)}%`;
+  if (format === "score") return `${Math.round(value)}/100`;
+  return Math.round(value).toLocaleString();
+}
+
+function formatImpactChange(metric: ImpactMetric) {
+  const prefix = metric.change >= 0 ? "+" : "";
+  return `${prefix}${formatImpactValue(metric.change, metric.format)} (${metric.percentage >= 0 ? "+" : ""}${metric.percentage}%)`;
+}
+
+function fallbackOnboardingDate() {
+  const date = new Date();
+  date.setDate(date.getDate() - 30);
+  return date.toLocaleDateString();
 }
 
 function buildClientHealth(analysis: BusinessProfile, ppcPlan: PpcPlan | null) {
