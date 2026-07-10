@@ -908,6 +908,30 @@ function ResultsView({
   setOffer: (value: string) => void;
   setPpcOverrides: (value: PpcManualOverrides) => void;
 }) {
+  if (activeSection === "service-engine") {
+    return (
+      <div className="py-9">
+        <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div>
+            <button
+              className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-graphite transition hover:text-flame"
+              onClick={onBack}
+              type="button"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              New analysis
+            </button>
+            <Eyebrow>Business Engine</Eyebrow>
+            <h1 className="text-4xl font-black text-ink">Service Engine</h1>
+            <p className="mt-2 text-sm font-medium text-graphite/70">Predictable service growth, from demand through referral.</p>
+          </div>
+        </div>
+        <PlatformNav activeSection={activeSection} onChange={setActiveSection} />
+        <ServiceEngineSection analysis={analysis} setActiveSection={setActiveSection} />
+      </div>
+    );
+  }
+
   function updateBrandColor(field: "primaryColor" | "secondaryColor" | "accentColor", value: string) {
     onUpdateAnalysis({ ...analysis, [field]: value });
   }
@@ -992,10 +1016,6 @@ function ResultsView({
           ppcPlan={ppcPlan}
           setOverrides={setPpcOverrides}
         />
-      )}
-
-      {activeSection === "service-engine" && (
-        <ServiceEngineSection analysis={analysis} setActiveSection={setActiveSection} />
       )}
 
       {activeSection === "google-ads-deployment" && (
