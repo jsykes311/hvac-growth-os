@@ -1253,13 +1253,19 @@ function ServiceEngineSection({
 }) {
   const [notice, setNotice] = useState("Loading HighLevel service data...");
   const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
+  const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
+  const [performanceUploads, setPerformanceUploads] = useState<MarketingUploadsPayload | null>(null);
   const company = analysis.companyName || "Your service department";
   const crmFunnel = highLevelData?.revenueFunnel;
+  const uploadedGoogleAds = performanceUploads?.googleAds ?? null;
+  const uploadedGbp = performanceUploads?.googleBusinessProfile ?? null;
+  const googleAdsClicks = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "clicks") : 0;
+  const googleAdsCost = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "cost") : 0;
   const hasHighLevelData = Boolean(crmFunnel && (crmFunnel.phoneCalls || crmFunnel.crmLeads || crmFunnel.totalOpportunities || crmFunnel.pipelineValue || crmFunnel.estimatedRevenue));
   const sourceRows = crmFunnel?.sourceIntelligence ?? [];
   const unknownSource = sourceRows.find((row) => row.channel === "Unknown");
   const bestSource = sourceRows.find((row) => row.channel !== "Unknown") ?? sourceRows[0];
-  const campaigns = sourceRows.length ? sourceRows.map((row) => {
+  const crmCampaigns = sourceRows.length ? sourceRows.map((row) => {
     const cpa = row.count ? row.value / row.count : 0;
     return [
       row.channel,
@@ -1269,7 +1275,18 @@ function ServiceEngineSection({
       cpa ? `$${Math.round(cpa).toLocaleString()}` : "—",
       row.recommendation,
     ] as const;
-  }) : [
+  }) : [];
+  const campaigns = googleAdsData || crmCampaigns.length ? [
+    ...(googleAdsData ? [[
+      uploadedGoogleAds ? "Google Ads Upload" : "Google Ads",
+      uploadedGoogleAds ? "Uploaded" : "Synced",
+      googleAdsCost ? `$${Math.round(googleAdsCost).toLocaleString()}` : "—",
+      String(googleAdsClicks),
+      googleAdsClicks ? `$${Math.round(googleAdsCost / googleAdsClicks).toLocaleString()}` : "—",
+      "Compare paid traffic against HighLevel calls, opportunities, and revenue.",
+    ] as const] : []),
+    ...crmCampaigns,
+  ] : [
     ["HighLevel", "Waiting", "—", "—", "—", "Refresh HighLevel to load source data"],
   ] as const;
   const deployActions = ["Google Ads", "GBP post", "Social post", "Email campaign", "Review request", "HighLevel workflow"];
@@ -1304,9 +1321,16 @@ function ServiceEngineSection({
       tone: bestSource && bestSource.channel !== "Unknown" ? "teal" as const : "amber" as const,
       value: bestSource?.channel ?? "Unknown",
     },
+    {
+      detail: uploadedGbp ? `${uploadedGbp.calls ?? 0} calls, ${uploadedGbp.websiteClicks ?? 0} website clicks` : uploadedGoogleAds ? "Manual paid data active" : "Upload Ads or GBP files",
+      label: uploadedGbp ? "GBP upload" : "Paid data",
+      tone: (uploadedGbp || uploadedGoogleAds) ? "teal" as const : "amber" as const,
+      value: uploadedGbp ? `${uploadedGbp.interactions ?? 0}` : googleAdsClicks ? String(googleAdsClicks) : "Upload",
+    },
   ];
-  const recommendations = buildServiceEngineRecommendations(crmFunnel);
+  const recommendations = buildServiceEngineRecommendations(crmFunnel, uploadedGoogleAds, uploadedGbp);
   const funnelSteps = [
+    ["Google Ads Clicks", googleAdsClicks],
     ["CRM Leads", crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0],
     ["Phone Calls", crmFunnel?.phoneCalls ?? 0],
     ["Appointments", crmFunnel?.appointments ?? 0],
@@ -1318,22 +1342,28 @@ function ServiceEngineSection({
 
   useEffect(() => {
     let cancelled = false;
-    async function loadHighLevel() {
+    async function loadServiceData() {
       try {
-        const response = await fetch("/api/highlevel/data", { cache: "no-store" });
-        const payload = (await response.json()) as { data?: HighLevelDataPayload } | ApiError;
-        if (!response.ok || !("data" in payload)) throw new Error("HighLevel data is not available yet.");
+        const [highLevelResponse, adsResult, uploadsResult] = await Promise.all([
+          fetch("/api/highlevel/data", { cache: "no-store" }),
+          loadGoogleAdsPerformanceData(),
+          loadMarketingUploads(),
+        ]);
+        const payload = (await highLevelResponse.json()) as { data?: HighLevelDataPayload } | ApiError;
+        if (!highLevelResponse.ok || !("data" in payload)) throw new Error("HighLevel data is not available yet.");
         if (cancelled) return;
         setHighLevelData(payload.data ?? null);
+        setGoogleAdsData(adsResult.data);
+        setPerformanceUploads(uploadsResult);
         const funnel = payload.data?.revenueFunnel;
         setNotice(funnel
-          ? `HighLevel synced: ${funnel.phoneCalls} calls, ${funnel.totalOpportunities} opportunities, ${funnel.wonJobs} won jobs, $${Math.round(funnel.estimatedRevenue || funnel.revenue).toLocaleString()} estimated revenue.`
+          ? `HighLevel synced: ${funnel.phoneCalls} calls, ${funnel.totalOpportunities} opportunities, ${funnel.wonJobs} won jobs, $${Math.round(funnel.estimatedRevenue || funnel.revenue).toLocaleString()} estimated revenue. ${adsResult.source === "Uploaded" ? "Uploaded Google Ads metrics are also active." : ""}`
           : "HighLevel connected, but no funnel data has synced yet.");
       } catch {
         if (!cancelled) setNotice("HighLevel is not synced yet. Connect or refresh HighLevel to power Service Engine with live CRM data.");
       }
     }
-    void loadHighLevel();
+    void loadServiceData();
     return () => {
       cancelled = true;
     };
@@ -1361,7 +1391,7 @@ function ServiceEngineSection({
         </div>
       </Panel>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         {serviceMetrics.map((metric) => (
           <ServiceMetric detail={metric.detail} key={metric.label} label={metric.label} tone={metric.tone} value={metric.value} />
         ))}
@@ -1401,7 +1431,7 @@ function ServiceEngineSection({
   );
 }
 
-function buildServiceEngineRecommendations(funnel?: RevenueFunnelPayload) {
+function buildServiceEngineRecommendations(funnel?: RevenueFunnelPayload, uploadedGoogleAds?: MarketingUploadSummary | null, uploadedGbp?: MarketingUploadSummary | null) {
   if (!funnel) {
     return [
       {
@@ -1425,6 +1455,20 @@ function buildServiceEngineRecommendations(funnel?: RevenueFunnelPayload) {
   const unknown = funnel.sourceIntelligence.find((row) => row.channel === "Unknown");
   const bestSource = funnel.sourceIntelligence.find((row) => row.channel !== "Unknown") ?? funnel.sourceIntelligence[0];
   const recommendations = [];
+  if (uploadedGoogleAds?.clicks && funnel.phoneCalls === 0) {
+    recommendations.push({
+      action: "Compare Google Ads clicks to calls",
+      detail: `${uploadedGoogleAds.clicks} uploaded Google Ads clicks are available, but HighLevel calls are flat for this range. Review landing page call CTA and tracking.`,
+      result: "Google Ads to HighLevel call review added to the action list.",
+    });
+  }
+  if (uploadedGbp?.calls && uploadedGbp.calls > 0 && funnel.totalOpportunities === 0) {
+    recommendations.push({
+      action: "Connect GBP calls to pipeline",
+      detail: `${uploadedGbp.calls} GBP calls were uploaded, but opportunities are not visible. Confirm intake creates opportunities for profile calls.`,
+      result: "GBP call intake review prepared.",
+    });
+  }
   if (funnel.missedCalls > 0) {
     recommendations.push({
       action: "Fix missed-call follow-up",
@@ -2237,6 +2281,8 @@ function MorningBriefSection({
   const [decisionHistory, setDecisionHistory] = useState<ReturnType<typeof loadDecisionMemory>["history"]>([]);
   const [crmFunnel, setCrmFunnel] = useState<RevenueFunnelPayload | null>(null);
   const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
+  const [performanceUploads, setPerformanceUploads] = useState<MarketingUploadsPayload | null>(null);
+  const uploadedGbp = performanceUploads?.googleBusinessProfile ?? null;
   const googleAdsClicks = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "clicks") : 0;
   const googleAdsSpend = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "cost") : 0;
   const googleAdsImpressions = googleAdsData ? sumMetricRows(googleAdsData.campaigns, "impressions") : 0;
@@ -2258,10 +2304,12 @@ function MorningBriefSection({
         .then((response) => response.ok ? response.json() : null)
         .then((payload: { data?: HighLevelDataPayload } | null) => setCrmFunnel(payload?.data?.revenueFunnel ?? null))
         .catch(() => setCrmFunnel(null)),
-      fetch("/api/google-ads/data", { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : null)
-        .then((payload: { data?: GoogleAdsDataPayload } | null) => setGoogleAdsData(payload?.data ?? null))
+      loadGoogleAdsPerformanceData()
+        .then((result) => setGoogleAdsData(result.data))
         .catch(() => setGoogleAdsData(null)),
+      loadMarketingUploads()
+        .then((uploads) => setPerformanceUploads(uploads))
+        .catch(() => setPerformanceUploads(null)),
     ]);
   }, []);
 
@@ -2350,9 +2398,16 @@ function MorningBriefSection({
         <Panel>
           <h3 className="text-lg font-black text-ink">Google Business Profile Summary</h3>
           <p className="mt-2 text-sm leading-6 text-graphite/70">
-            Use today&apos;s demand signal to publish a service-area post. Connect Google Business Profile when ready to improve calls, reviews, and post-performance insights.
+            {uploadedGbp ? `Uploaded GBP performance is active from ${uploadedGbp.metricDate}. Use it with HighLevel outcomes before deciding what to post or request.` : "Use today's demand signal to publish a service-area post. Upload GBP performance or connect GBP when ready to improve calls, reviews, and post-performance insights."}
           </p>
           <div className="mt-4 grid gap-3">
+            {uploadedGbp ? (
+              <>
+                <InfoRow label="GBP Calls" value={String(uploadedGbp.calls ?? 0)} />
+                <InfoRow label="Website Clicks" value={String(uploadedGbp.websiteClicks ?? 0)} />
+                <InfoRow label="Directions" value={String(uploadedGbp.directionRequests ?? 0)} />
+              </>
+            ) : null}
             <InfoRow label="Recommended Post" value={brief.contentRecommendations.find((item) => item.label === "GBP Post")?.detail ?? "Publish a local service update."} />
             <InfoRow label="Review Ask" value="Request reviews from recent completed jobs once CRM outcomes are confirmed." />
           </div>
@@ -2635,9 +2690,8 @@ function DashboardSection({
   useEffect(() => {
     setMemory(loadIntelligenceMemory(intelligenceMemoryKey(analysis, contractorUrl)));
     void Promise.all([
-      fetch("/api/google-ads/data", { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : null)
-        .then((payload: { data?: GoogleAdsDataPayload } | null) => setGoogleAdsData(payload?.data ?? null))
+      loadGoogleAdsPerformanceData()
+        .then((result) => setGoogleAdsData(result.data))
         .catch(() => setGoogleAdsData(null)),
       fetch("/api/highlevel/data", { cache: "no-store" })
         .then((response) => response.ok ? response.json() : null)
@@ -4059,6 +4113,74 @@ function UploadSummary({ summary }: { summary: MarketingUploadSummary }) {
   );
 }
 
+async function loadMarketingUploads() {
+  try {
+    const response = await fetch("/api/uploads/marketing", { cache: "no-store" });
+    const payload = (await response.json()) as { uploads?: MarketingUploadsPayload } & ApiError;
+    return response.ok ? payload.uploads ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadGoogleAdsPerformanceData() {
+  try {
+    const response = await fetch("/api/google-ads/data", { cache: "no-store" });
+    const payload = response.ok ? await response.json() as { data?: GoogleAdsDataPayload } : null;
+    if (payload?.data && (payload.data.campaigns.length || payload.data.conversions.length || payload.data.snapshots.length)) {
+      return { data: payload.data, source: "Connected" as const };
+    }
+  } catch {
+    // Fall back to uploads below.
+  }
+
+  const uploads = await loadMarketingUploads();
+  const uploadedAds = uploads?.googleAds ? googleAdsDataFromUpload(uploads.googleAds) : null;
+  return { data: uploadedAds, source: uploadedAds ? "Uploaded" as const : "" as const };
+}
+
+function googleAdsDataFromUpload(summary: MarketingUploadSummary): GoogleAdsDataPayload {
+  const row: GoogleAdsMetricRow = {
+    adGroup: "",
+    avgCpc: summary.averageCpc ?? 0,
+    campaign: "Uploaded Google Ads Performance",
+    clicks: summary.clicks ?? 0,
+    conversions: summary.conversions ?? 0,
+    cost: summary.cost ?? 0,
+    ctr: summary.ctr ?? 0,
+    id: `upload-${summary.metricDate}`,
+    impressions: summary.impressions ?? 0,
+    name: "Uploaded Google Ads Performance",
+  };
+  return {
+    activeCustomerId: "manual-upload",
+    adGroups: [],
+    ads: [],
+    assets: [],
+    budgets: [{ amount: summary.cost ?? 0, id: `upload-budget-${summary.metricDate}`, name: "Uploaded spend", status: "Uploaded" }],
+    campaigns: [row],
+    conversions: summary.conversions ? [row] : [],
+    keywords: [],
+    lastSyncAt: summary.metricDate,
+    searchTerms: [],
+    snapshots: [{
+      activeCustomerId: "manual-upload",
+      adGroups: 0,
+      ads: 0,
+      avgCpc: summary.averageCpc ?? 0,
+      budgets: 1,
+      campaigns: 1,
+      clicks: summary.clicks ?? 0,
+      conversions: summary.conversions ?? 0,
+      cost: summary.cost ?? 0,
+      impressions: summary.impressions ?? 0,
+      keywords: 0,
+      searchTerms: 0,
+      syncedAt: summary.metricDate,
+    }],
+  };
+}
+
 function ConnectionRequestButton({ appName, currentUser }: { appName: string; currentUser: AuthSession }) {
   const subject = encodeURIComponent(`Connect ${appName} for HVAC Growth OS`);
   const body = encodeURIComponent([
@@ -5000,15 +5122,14 @@ function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
     setIsLoading(true);
     setMessage("");
     try {
-      const [googleStatusResponse, highLevelStatusResponse, googleDataResponse, highLevelDataResponse] = await Promise.all([
+      const [googleStatusResponse, highLevelStatusResponse, googlePerformanceResult, highLevelDataResponse] = await Promise.all([
         fetch("/api/google-ads/status", { cache: "no-store" }),
         fetch("/api/highlevel/status", { cache: "no-store" }),
-        fetch("/api/google-ads/data", { cache: "no-store" }),
+        loadGoogleAdsPerformanceData(),
         fetch("/api/highlevel/data", { cache: "no-store" }),
       ]);
       const googleStatus = googleStatusResponse.ok ? await googleStatusResponse.json() as Pick<ConnectedAppStatus, "googleAds"> : null;
       const highLevelStatus = highLevelStatusResponse.ok ? await highLevelStatusResponse.json() as Pick<ConnectedAppStatus, "highLevel"> : null;
-      const googlePayload = googleDataResponse.ok ? await googleDataResponse.json() as { data?: GoogleAdsDataPayload } : null;
       const highLevelPayload = highLevelDataResponse.ok ? await highLevelDataResponse.json() as { data?: HighLevelDataPayload } : null;
 
       setStatus({
@@ -5016,7 +5137,7 @@ function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
         googleBusinessProfile: emptyGoogleBusinessProfileStatus(),
         highLevel: highLevelStatus?.highLevel ?? emptyHighLevelStatus(),
       });
-      setGoogleAdsData(googlePayload?.data ?? null);
+      setGoogleAdsData(googlePerformanceResult.data);
       setHighLevelData(highLevelPayload?.data ?? null);
     } catch {
       setMessage("Conversion tracking data could not be loaded. Check Connected Apps, then refresh this screen.");
@@ -5574,10 +5695,9 @@ function AiCmoSection({
           setCrmFunnel(payload?.data?.revenueFunnel ?? null);
         })
         .catch(() => setCrmFunnel(null)),
-      fetch("/api/google-ads/data", { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : null)
-        .then((payload: { data?: GoogleAdsDataPayload } | null) => {
-          setGoogleAdsData(payload?.data ?? null);
+      loadGoogleAdsPerformanceData()
+        .then((result) => {
+          setGoogleAdsData(result.data);
         })
         .catch(() => setGoogleAdsData(null)),
     ]);
@@ -6850,10 +6970,9 @@ function PpcPlannerPanel({
           setCrmFunnel(payload?.data?.revenueFunnel ?? null);
         })
         .catch(() => setCrmFunnel(null)),
-      fetch("/api/google-ads/data", { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : null)
-        .then((payload: { data?: GoogleAdsDataPayload } | null) => {
-          setGoogleAdsData(payload?.data ?? null);
+      loadGoogleAdsPerformanceData()
+        .then((result) => {
+          setGoogleAdsData(result.data);
         })
         .catch(() => setGoogleAdsData(null)),
     ]);
