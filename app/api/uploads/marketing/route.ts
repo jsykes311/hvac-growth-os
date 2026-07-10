@@ -19,14 +19,17 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as { csv?: unknown; fileName?: unknown; metricDate?: unknown; source?: unknown };
+    const body = (await request.json()) as { csv?: unknown; fileBase64?: unknown; fileName?: unknown; metricDate?: unknown; source?: unknown };
     const source = body.source === "google_ads" || body.source === "google_business_profile" ? body.source : null;
     if (!source) return NextResponse.json({ error: "Choose Google Ads or Google Business Profile before uploading." }, { status: 400 });
-    if (typeof body.csv !== "string" || !body.csv.trim()) return NextResponse.json({ error: "Upload a CSV file with performance rows." }, { status: 400 });
+    const fileName = typeof body.fileName === "string" ? body.fileName : `${source}-performance.csv`;
+    const isZip = /\.zip$/i.test(fileName);
+    const uploadContent = isZip && typeof body.fileBase64 === "string" ? body.fileBase64 : body.csv;
+    if (typeof uploadContent !== "string" || !uploadContent.trim()) return NextResponse.json({ error: "Upload a CSV or ZIP file with performance rows." }, { status: 400 });
 
     const summary = await saveMarketingPerformanceUpload({
-      csv: body.csv,
-      fileName: typeof body.fileName === "string" ? body.fileName : `${source}-performance.csv`,
+      csv: uploadContent,
+      fileName,
       metricDate: typeof body.metricDate === "string" ? body.metricDate : undefined,
       source: source as MarketingUploadSource,
     });

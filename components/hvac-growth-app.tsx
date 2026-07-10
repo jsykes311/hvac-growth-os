@@ -4276,18 +4276,21 @@ function PerformanceUploadsSection({ globalDateRange, setActiveSection }: { glob
     setMessage("");
     setIsUploading(source);
     try {
-      const csv = await file.text();
+      const isZip = /\.zip$/i.test(file.name);
+      const body = isZip
+        ? { fileBase64: await fileToBase64(file), fileName: file.name, metricDate, source }
+        : { csv: await file.text(), fileName: file.name, metricDate, source };
       const response = await fetch("/api/uploads/marketing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csv, fileName: file.name, metricDate, source }),
+        body: JSON.stringify(body),
       });
       const payload = (await response.json()) as { summary?: MarketingUploadSummary; uploads?: MarketingUploadsPayload } & ApiError;
-      if (!response.ok) throw new Error(payload.error || "The CSV could not be processed.");
+      if (!response.ok) throw new Error(payload.error || "The file could not be processed.");
       setUploads(payload.uploads ?? uploads);
-      setMessage(`${source === "google_ads" ? "Google Ads" : "Google Business Profile"} upload saved: ${payload.summary?.rows ?? 0} rows.`);
+      setMessage(`${source === "google_ads" ? "Google Ads" : "Google Business Profile"} ${isZip ? "ZIP" : "CSV"} upload saved: ${payload.summary?.rows ?? 0} rows.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The CSV could not be processed.");
+      setMessage(error instanceof Error ? error.message : "The file could not be processed.");
     } finally {
       setIsUploading("");
     }
@@ -4328,7 +4331,7 @@ function PerformanceUploadsSection({ globalDateRange, setActiveSection }: { glob
             />
           </label>
           <div className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-sm font-bold leading-6 text-teal-950">
-            Best files to upload: Google Ads campaign/search-term/keyword performance exports and GBP performance exports. CSV is supported in this version.
+            Best files to upload: Google Ads campaign/search-term/keyword performance exports and GBP performance exports. CSV and ZIP packages are supported.
           </div>
         </div>
       </Panel>
@@ -4339,18 +4342,18 @@ function PerformanceUploadsSection({ globalDateRange, setActiveSection }: { glob
 
       <div className="grid gap-5 lg:grid-cols-2">
         <UploadCard
-          accept=".csv,text/csv"
+          accept=".csv,.zip,text/csv,application/zip,application/x-zip-compressed"
           busy={isUploading === "google_ads"}
-          description="Use this for campaign, keyword, search term, or account performance exports. It unlocks spend, clicks, impressions, CTR, CPC, and conversion planning."
+          description="Use this for campaign, keyword, search term, or account performance exports. Upload one CSV or a ZIP containing multiple CSVs."
           icon={<Target className="size-5" aria-hidden="true" />}
           onUpload={(file) => handleUpload("google_ads", file)}
           summary={uploads.googleAds}
           title="Google Ads Metrics"
         />
         <UploadCard
-          accept=".csv,text/csv"
+          accept=".csv,.zip,text/csv,application/zip,application/x-zip-compressed"
           busy={isUploading === "google_business_profile"}
-          description="Use this for Google Business Profile performance exports. It unlocks profile interactions, calls, website clicks, direction requests, messages, and local visibility trends."
+          description="Use this for Google Business Profile performance exports. Upload one CSV or a ZIP containing multiple CSVs."
           icon={<Globe2 className="size-5" aria-hidden="true" />}
           onUpload={(file) => handleUpload("google_business_profile", file)}
           summary={uploads.googleBusinessProfile}
@@ -4395,8 +4398,8 @@ function UploadCard({
       <p className="mt-4 text-sm leading-6 text-graphite/70">{description}</p>
       <label className="mt-5 flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-ink/20 bg-white/70 px-4 py-6 text-center transition hover:border-flame/45 hover:bg-white">
         <Upload className="size-6 text-ink" aria-hidden="true" />
-        <span className="mt-3 text-sm font-black text-ink">{busy ? "Uploading..." : "Choose CSV file"}</span>
-        <span className="mt-1 text-xs font-bold text-graphite/55">Stored to Comfort Guardians history</span>
+        <span className="mt-3 text-sm font-black text-ink">{busy ? "Uploading..." : "Choose CSV or ZIP file"}</span>
+        <span className="mt-1 text-xs font-bold text-graphite/55">ZIPs can contain multiple Google CSV exports</span>
         <input
           accept={accept}
           className="hidden"
@@ -4455,6 +4458,17 @@ async function loadMarketingUploads(dateRange?: Pick<GlobalDateRange, "endDate" 
   } catch {
     return null;
   }
+}
+
+async function fileToBase64(file: File) {
+  const buffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
 }
 
 async function loadGoogleAdsPerformanceData(dateRange?: Pick<GlobalDateRange, "endDate" | "startDate">) {

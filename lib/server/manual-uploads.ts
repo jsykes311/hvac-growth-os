@@ -1,3 +1,4 @@
+import zlib from "zlib";
 import { getComfortGuardiansHistory, recordComfortGuardiansHistoryEvent } from "@/lib/server/history-store";
 
 export type MarketingUploadSource = "google_ads" | "google_business_profile";
@@ -27,8 +28,11 @@ export async function saveMarketingPerformanceUpload(input: {
   metricDate?: string;
   source: MarketingUploadSource;
 }) {
-  const parsed = parseCsv(input.csv);
-  if (!parsed.rows.length) throw new Error("No rows were found in the uploaded CSV.");
+  const parsedFiles = input.fileName.toLowerCase().endsWith(".zip")
+    ? parseZipCsvFiles(Buffer.from(input.csv, "base64"))
+    : [{ fileName: input.fileName, parsed: parseCsv(input.csv) }];
+  const parsed = mergeParsedCsvFiles(parsedFiles);
+  if (!parsed.rows.length) throw new Error(input.fileName.toLowerCase().endsWith(".zip") ? "No CSV rows were found inside the uploaded ZIP." : "No rows were found in the uploaded CSV.");
 
   const summary = summarizeUpload(input.source, parsed.rows, {
     fileName: input.fileName || "uploaded-performance.csv",
@@ -40,6 +44,7 @@ export async function saveMarketingPerformanceUpload(input: {
     metricDate: summary.metricDate,
     payload: {
       columns: parsed.headers,
+      extractedFiles: parsedFiles.map((file) => ({ fileName: file.fileName, rows: file.parsed.rows.length })),
       fileName: summary.fileName,
       rows: parsed.rows.slice(0, 500),
       source: input.source,
@@ -111,6 +116,110 @@ function summarizeUpload(source: MarketingUploadSource, rows: Array<Record<strin
     topRows: topRows(rows, ["business", "location", "date", "search term"], ["interactions", "calls", "website clicks", "directions"]),
     websiteClicks,
   };
+}
+
+function mergeParsedCsvFiles(files: Array<{ fileName: string; parsed: ReturnType<typeof parseCsv> }>) {
+  const headers = [...new Set(files.flatMap((file) => file.parsed.headers))];
+  return {
+    headers,
+    rows: files.flatMap((file) => file.parsed.rows.map((row) => ({
+      ...row,
+      source_file: file.fileName,
+    }))),
+  };
+}
+
+function parseZipCsvFiles(buffer: Buffer) {
+  const files: Array<{ fileName: string; parsed: ReturnType<typeof parseCsv> }> = [];
+  const centralEntries = readZipCentralDirectory(buffer);
+  if (centralEntries.length) {
+    for (const entry of centralEntries) {
+      const content = readZipEntry(buffer, entry);
+      if (content && /\.csv$/i.test(entry.fileName)) {
+        const parsed = parseCsv(stripBom(content.toString("utf8")));
+        if (parsed.rows.length) files.push({ fileName: entry.fileName, parsed });
+      }
+    }
+    if (files.length) return files;
+  }
+
+  let offset = 0;
+
+  while (offset + 30 <= buffer.length) {
+    const signature = buffer.readUInt32LE(offset);
+    if (signature !== 0x04034b50) break;
+
+    const method = buffer.readUInt16LE(offset + 8);
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const uncompressedSize = buffer.readUInt32LE(offset + 22);
+    const fileNameLength = buffer.readUInt16LE(offset + 26);
+    const extraLength = buffer.readUInt16LE(offset + 28);
+    const fileName = buffer.subarray(offset + 30, offset + 30 + fileNameLength).toString("utf8");
+    const dataStart = offset + 30 + fileNameLength + extraLength;
+    const dataEnd = dataStart + compressedSize;
+    if (dataEnd > buffer.length || compressedSize === 0) {
+      offset = Math.max(dataEnd, dataStart);
+      continue;
+    }
+
+    const compressed = buffer.subarray(dataStart, dataEnd);
+    const content = method === 0
+      ? compressed
+      : method === 8
+        ? zlib.inflateRawSync(compressed)
+        : null;
+
+    if (content && /\.csv$/i.test(fileName) && uncompressedSize !== 0) {
+      const parsed = parseCsv(stripBom(content.toString("utf8")));
+      if (parsed.rows.length) files.push({ fileName, parsed });
+    }
+
+    offset = dataEnd;
+  }
+
+  if (!files.length) throw new Error("The ZIP did not contain readable CSV files. Export as CSV files inside a standard ZIP and try again.");
+  return files;
+}
+
+function readZipCentralDirectory(buffer: Buffer) {
+  const entries: Array<{ compressedSize: number; fileName: string; localHeaderOffset: number; method: number; uncompressedSize: number }> = [];
+  let offset = 0;
+  while (offset + 46 <= buffer.length) {
+    const signature = buffer.readUInt32LE(offset);
+    if (signature !== 0x02014b50) {
+      offset += 1;
+      continue;
+    }
+    const method = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const uncompressedSize = buffer.readUInt32LE(offset + 24);
+    const fileNameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
+    const fileName = buffer.subarray(offset + 46, offset + 46 + fileNameLength).toString("utf8");
+    entries.push({ compressedSize, fileName, localHeaderOffset, method, uncompressedSize });
+    offset += 46 + fileNameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function readZipEntry(buffer: Buffer, entry: { compressedSize: number; localHeaderOffset: number; method: number; uncompressedSize: number }) {
+  const offset = entry.localHeaderOffset;
+  if (offset + 30 > buffer.length || buffer.readUInt32LE(offset) !== 0x04034b50) return null;
+  const fileNameLength = buffer.readUInt16LE(offset + 26);
+  const extraLength = buffer.readUInt16LE(offset + 28);
+  const dataStart = offset + 30 + fileNameLength + extraLength;
+  const dataEnd = dataStart + entry.compressedSize;
+  if (dataEnd > buffer.length || entry.compressedSize === 0 || entry.uncompressedSize === 0) return null;
+  const compressed = buffer.subarray(dataStart, dataEnd);
+  if (entry.method === 0) return compressed;
+  if (entry.method === 8) return zlib.inflateRawSync(compressed);
+  return null;
+}
+
+function stripBom(value: string) {
+  return value.replace(/^\uFEFF/, "");
 }
 
 function parseCsv(csv: string) {
