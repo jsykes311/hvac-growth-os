@@ -30,7 +30,7 @@ export function sessionMaxAgeSeconds() {
 
 export async function authenticateApprovedUser(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
-  const user = approvedUsers().find((item) => item.email.toLowerCase() === normalizedEmail);
+  const user = getApprovedUserByEmail(normalizedEmail);
   if (!user) return null;
 
   const expectedHash = user.passwordHash || (user.password ? await sha256(user.password) : "");
@@ -38,6 +38,11 @@ export async function authenticateApprovedUser(email: string, password: string) 
   if (!expectedHash || expectedHash !== receivedHash) return null;
 
   return user;
+}
+
+export function getApprovedUserByEmail(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  return approvedUsers().find((item) => item.email.toLowerCase() === normalizedEmail) ?? null;
 }
 
 export async function createSessionToken(user: ApprovedUser) {
@@ -81,7 +86,7 @@ function approvedUsers(): ApprovedUser[] {
   try {
     const parsed = JSON.parse(raw) as ApprovedUser[];
     return Array.isArray(parsed)
-      ? parsed.filter((user) => user.email && user.name && user.role && (user.password || user.passwordHash))
+      ? parsed.filter((user) => user.email && user.name && user.role)
       : [];
   } catch {
     return [];

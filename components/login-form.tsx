@@ -32,7 +32,19 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
   }
 
   return (
-    <form className="mt-8 grid gap-4" onSubmit={handleSubmit}>
+    <div className="mt-8 grid gap-4">
+      <a
+        className="inline-flex h-12 items-center justify-center rounded-full border border-ink/10 bg-white px-5 text-sm font-black text-ink shadow-[0_18px_42px_rgba(6,57,68,0.08)] transition hover:-translate-y-0.5 hover:border-flame/30"
+        href={`/api/auth/google/connect?next=${encodeURIComponent(nextPath || "/")}`}
+      >
+        Continue with Google
+      </a>
+      <div className="flex items-center gap-3">
+        <span className="h-px flex-1 bg-ink/10" />
+        <span className="text-xs font-black uppercase tracking-[0.16em] text-graphite/45">or use password</span>
+        <span className="h-px flex-1 bg-ink/10" />
+      </div>
+      <form className="grid gap-4" onSubmit={handleSubmit}>
       <label className="grid gap-2">
         <span className="text-sm font-black text-ink">Email</span>
         <input
@@ -67,6 +79,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
           {error}
         </p>
       )}
-    </form>
+      </form>
+    </div>
   );
 }

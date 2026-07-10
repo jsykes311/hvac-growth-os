@@ -43,6 +43,16 @@ HVAC_GROWTH_OS_USERS='[
 
 Supported roles are `Admin`, `TallTwin Team`, `Client`, and `Viewer`. Public signup is disabled; approved users are added manually through `HVAC_GROWTH_OS_USERS`.
 
+Google login variables:
+
+```bash
+GOOGLE_LOGIN_CLIENT_ID=...
+GOOGLE_LOGIN_CLIENT_SECRET=...
+GOOGLE_LOGIN_REDIRECT_URI=https://your-render-domain.onrender.com/api/auth/google/callback
+```
+
+Google login only grants access to emails already listed in `HVAC_GROWTH_OS_USERS`. Password fields are optional for Google-only users; keep `passwordHash` only when you want password fallback.
+
 Google Ads read-only Connected Apps variables:
 
 ```bash
