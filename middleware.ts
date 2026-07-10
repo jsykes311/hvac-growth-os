@@ -3,6 +3,7 @@ import { sessionCookieName, verifySessionToken } from "@/lib/auth";
 
 const PUBLIC_PATHS = [
   "/login",
+  "/api/auth/google",
   "/api/auth/login",
   "/api/auth/logout",
 ];
