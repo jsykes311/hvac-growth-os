@@ -605,7 +605,7 @@ export function HvacGrowthApp({
       const payload = (await response.json()) as { defaultUrl?: string; workspace?: SavedClientWorkspace | null } & ApiError;
       if (payload.defaultUrl) setContractorUrl(payload.defaultUrl);
       setSavedWorkspace(payload.workspace ?? null);
-      if (initialSection === "service-engine" && payload.workspace) applyWorkspace(payload.workspace);
+      if (payload.workspace) applyWorkspace(payload.workspace, initialSection ?? "dashboard");
     } catch {
       setSavedWorkspace(null);
     } finally {
@@ -613,7 +613,7 @@ export function HvacGrowthApp({
     }
   }
 
-  function applyWorkspace(workspace: SavedClientWorkspace) {
+  function applyWorkspace(workspace: SavedClientWorkspace, section: PlatformSection = "dashboard") {
     setContractorUrl(workspace.websiteUrl);
     setAnalysis(workspace.profile);
     setScrapedPages(workspace.scrapedPages);
@@ -621,7 +621,7 @@ export function HvacGrowthApp({
     setCampaignImage(null);
     setPpcPlan(null);
     hydratePpcOverrides(workspace.profile);
-    setActiveSection("dashboard");
+    setActiveSection(section);
     setView("results");
   }
 
@@ -699,7 +699,7 @@ export function HvacGrowthApp({
 
   async function openComfortGuardiansWorkspace() {
     if (savedWorkspace) {
-      applyWorkspace(savedWorkspace);
+      applyWorkspace(savedWorkspace, "dashboard");
       return;
     }
     await analyzeUrl("https://comfortguardianshvac.com");
@@ -814,8 +814,12 @@ export function HvacGrowthApp({
               scrapedPages={scrapedPages}
               activeSection={activeSection}
               onBack={() => {
-                setView("home");
-                setError("");
+                if (savedWorkspace) {
+                  applyWorkspace(savedWorkspace, "dashboard");
+                } else {
+                  setView("home");
+                  setError("");
+                }
               }}
               onCreateCampaign={handleCreateCampaign}
               onCreatePpcPlan={handleCreatePpcPlan}
@@ -1016,7 +1020,7 @@ function ResultsView({
               type="button"
             >
               <ArrowLeft className="size-4" aria-hidden="true" />
-              New analysis
+              Client workspace
             </button>
             <Eyebrow>Business Engine</Eyebrow>
             <h1 className="text-4xl font-black text-ink">Service Engine</h1>
@@ -1055,7 +1059,7 @@ function ResultsView({
             type="button"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
-            New analysis
+            Client workspace
           </button>
           <Eyebrow>Business Profile</Eyebrow>
           <h1 className="text-4xl font-black text-ink">{analysis.companyName || "Unknown HVAC Company"}</h1>
