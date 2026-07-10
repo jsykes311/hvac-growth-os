@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 
-type CredentialProvider = "google_ads" | "highlevel";
+type CredentialProvider = "google_ads" | "google_business_profile" | "highlevel";
 
 let pool: Pool | null = null;
 let initialized = false;

@@ -186,6 +186,26 @@ type DeploymentRecord = {
 };
 type PermissionMode = "Read Only" | "Draft Mode" | "Agency Mode" | "Owner Mode";
 type ConnectedAppStatus = {
+  googleBusinessProfile: {
+    activeAccountId: string;
+    activeLocationId: string;
+    accountIds: string[];
+    averageRating: number;
+    connected: boolean;
+    configured: boolean;
+    credentialStorage: string;
+    lastSyncAt: string;
+    locationIds: string[];
+    permissionMode: PermissionMode;
+    posts: number;
+    reviews: number;
+    setup: {
+      items: Array<{ configured: boolean; detail: string; envVar: string; label: string }>;
+      missingItems: string[];
+      ready: boolean;
+    };
+    tokenStored: boolean;
+  };
   googleAds: {
     activeCustomerId: string;
     connected: boolean;
@@ -269,6 +289,26 @@ type GoogleAdsDataPayload = {
   budgets: Array<{ id: string; name: string; amount: number; status: string }>;
   conversions: GoogleAdsMetricRow[];
   snapshots: GoogleAdsSnapshot[];
+};
+type GoogleBusinessProfileRecord = {
+  id: string;
+  name: string;
+  status?: string;
+  detail?: string;
+  createdAt?: string;
+  rating?: number;
+};
+type GoogleBusinessProfileDataPayload = {
+  activeAccountId: string;
+  activeLocationId: string;
+  accounts: GoogleBusinessProfileRecord[];
+  averageRating: number;
+  lastSyncAt: string;
+  locations: GoogleBusinessProfileRecord[];
+  posts: GoogleBusinessProfileRecord[];
+  reviews: GoogleBusinessProfileRecord[];
+  snapshots: Array<{ accounts: number; averageRating: number; locations: number; posts: number; reviews: number; syncedAt: string }>;
+  syncAlerts: string[];
 };
 type HighLevelRecord = {
   id: string;
@@ -1329,6 +1369,7 @@ function intelligenceLevel(connectedCount: number) {
 }
 
 function buildProgressiveIntelligenceItems(status: {
+  googleBusinessProfile?: ConnectedAppStatus["googleBusinessProfile"];
   googleAds?: ConnectedAppStatus["googleAds"];
   highLevel?: ConnectedAppStatus["highLevel"];
 } = {}): IntelligenceUpgradeItem[] {
@@ -1361,11 +1402,11 @@ function buildProgressiveIntelligenceItems(status: {
       unlocks: "Calls, leads, appointments, estimates, won jobs, pipeline value, and revenue attribution.",
     },
     {
-      buttonLabel: "Connect when ready",
+      buttonLabel: status.googleBusinessProfile?.connected ? "Connected" : "Connect when ready",
       gain: "+12 intelligence",
       key: "gbp",
       level: "Level 2",
-      status: "Optional",
+      status: connectionUpgradeStatus(status.googleBusinessProfile?.connected, status.googleBusinessProfile?.configured),
       title: "Google Business Profile",
       unlocks: "Local visibility, reviews, posts, calls, service activity, and profile health.",
     },
@@ -2924,6 +2965,7 @@ function DeployCenter({
 
 function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
   const [status, setStatus] = useState<ConnectedAppStatus | null>(null);
+  const [googleBusinessProfileData, setGoogleBusinessProfileData] = useState<GoogleBusinessProfileDataPayload | null>(null);
   const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
   const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
   const [highLevelEndDate, setHighLevelEndDate] = useState(todayInputValue());
@@ -2932,6 +2974,7 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
   const [activeHighLevelTable, setActiveHighLevelTable] = useState<keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "formSubmissions" | "tags" | "workflows" | "customFields">>("contacts");
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncingGoogleBusinessProfile, setIsSyncingGoogleBusinessProfile] = useState(false);
   const [isSyncingHighLevel, setIsSyncingHighLevel] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -2940,6 +2983,13 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
     const payload = (await response.json()) as { data?: GoogleAdsDataPayload } & ApiError;
     if (!response.ok) throw new Error("Google Ads can be connected when you are ready to add campaign performance insights.");
     setGoogleAdsData(payload.data ?? null);
+  }, []);
+
+  const loadGoogleBusinessProfileData = useCallback(async () => {
+    const response = await fetch("/api/google-business-profile/data", { cache: "no-store" });
+    const payload = (await response.json()) as { data?: GoogleBusinessProfileDataPayload } & ApiError;
+    if (!response.ok) throw new Error("Google Business Profile can be connected when you are ready to add reviews, posts, and local profile insights.");
+    setGoogleBusinessProfileData(payload.data ?? null);
   }, []);
 
   const loadHighLevelData = useCallback(async () => {
@@ -2957,25 +3007,28 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
     setIsLoading(true);
     setMessage("");
     try {
-      const [googleResponse, highLevelResponse] = await Promise.all([
+      const [googleResponse, googleBusinessProfileResponse, highLevelResponse] = await Promise.all([
         fetch("/api/google-ads/status", { cache: "no-store" }),
+        fetch("/api/google-business-profile/status", { cache: "no-store" }),
         fetch("/api/highlevel/status", { cache: "no-store" }),
       ]);
       const googlePayload = (await googleResponse.json()) as Pick<ConnectedAppStatus, "googleAds"> & ApiError;
+      const googleBusinessProfilePayload = (await googleBusinessProfileResponse.json()) as Pick<ConnectedAppStatus, "googleBusinessProfile"> & ApiError;
       const highLevelPayload = (await highLevelResponse.json()) as Pick<ConnectedAppStatus, "highLevel"> & ApiError;
-      if (!googleResponse.ok || !highLevelResponse.ok) throw new Error("Connected Apps setup could not be loaded. Please refresh the page.");
-      setStatus({ googleAds: googlePayload.googleAds, highLevel: highLevelPayload.highLevel });
+      if (!googleResponse.ok || !googleBusinessProfileResponse.ok || !highLevelResponse.ok) throw new Error("Connected Apps setup could not be loaded. Please refresh the page.");
+      setStatus({ googleAds: googlePayload.googleAds, googleBusinessProfile: googleBusinessProfilePayload.googleBusinessProfile, highLevel: highLevelPayload.highLevel });
       await Promise.all([
         googlePayload.googleAds.connected ? loadGoogleAdsData().catch(() => setGoogleAdsData(null)) : Promise.resolve(),
+        googleBusinessProfilePayload.googleBusinessProfile.connected ? loadGoogleBusinessProfileData().catch(() => setGoogleBusinessProfileData(null)) : Promise.resolve(),
         highLevelPayload.highLevel.connected ? loadHighLevelData().catch(() => setHighLevelData(null)) : Promise.resolve(),
       ]);
     } catch (caughtError) {
-      setStatus({ googleAds: emptyGoogleAdsStatus(), highLevel: emptyHighLevelStatus() });
+      setStatus({ googleAds: emptyGoogleAdsStatus(), googleBusinessProfile: emptyGoogleBusinessProfileStatus(), highLevel: emptyHighLevelStatus() });
       setMessage("Website intelligence is still active. Optional integrations can be configured when you are ready to improve accuracy.");
     } finally {
       setIsLoading(false);
     }
-  }, [loadGoogleAdsData, loadHighLevelData]);
+  }, [loadGoogleAdsData, loadGoogleBusinessProfileData, loadHighLevelData]);
 
   useEffect(() => {
     void refreshConnectedApps();
@@ -2995,6 +3048,23 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
       setMessage(caughtError instanceof Error ? caughtError.message : "Google Ads is not ready to sync yet. Review the setup checklist below, then try again.");
     } finally {
       setIsSyncing(false);
+    }
+  }
+
+  async function syncGoogleBusinessProfile() {
+    setIsSyncingGoogleBusinessProfile(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/google-business-profile/sync", { method: "POST" });
+      const payload = (await response.json()) as { data?: GoogleBusinessProfileDataPayload } & ApiError;
+      if (!response.ok) throw new Error("Google Business Profile is not ready to sync yet. Review the setup checklist below, then try again.");
+      setGoogleBusinessProfileData(payload.data ?? null);
+      await refreshConnectedApps();
+      setMessage("Google Business Profile data refreshed in read-only mode.");
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Google Business Profile is not ready to sync yet. Review the setup checklist below, then try again.");
+    } finally {
+      setIsSyncingGoogleBusinessProfile(false);
     }
   }
 
@@ -3036,6 +3106,7 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
   }
 
   const googleAds = status?.googleAds;
+  const googleBusinessProfile = status?.googleBusinessProfile;
   const highLevel = status?.highLevel;
   const canManageSetup = canManageConnectedApps(currentUser);
   const tableRows = googleAdsData?.[activeTable] ?? [];
@@ -3065,7 +3136,7 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
         </div>
       </Panel>
 
-      <ProgressiveIntelligencePanel items={buildProgressiveIntelligenceItems({ googleAds, highLevel })} />
+      <ProgressiveIntelligencePanel items={buildProgressiveIntelligenceItems({ googleAds, googleBusinessProfile, highLevel })} />
 
       {message && (
         <div className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-bold text-graphite/75 shadow-soft">
@@ -3110,10 +3181,26 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
           title="HighLevel"
           unlocks="Calls, forms, contacts, opportunities, appointments, estimates, won jobs, and revenue attribution."
         />
+        <ConnectedAppCard
+          configured={Boolean(googleBusinessProfile?.configured)}
+          connected={Boolean(googleBusinessProfile?.connected)}
+          description="Connect Google Business Profile to improve local visibility recommendations, review prompts, and post strategy."
+          gain="+12 intelligence"
+          mode={googleBusinessProfile?.permissionMode ?? "Read Only"}
+          primaryAction={!canManageSetup && !googleBusinessProfile?.connected ? (
+            <ConnectionRequestButton appName="Google Business Profile" currentUser={currentUser} />
+          ) : googleBusinessProfile?.configured ? (
+            <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-4 text-sm font-black text-white" href="/api/google-business-profile/connect" rel="noreferrer" target="_blank">Connect GBP</a>
+          ) : (
+            <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink/10 px-4 text-sm font-black text-ink" href="#google-business-profile-setup">Open Setup</a>
+          )}
+          secondaryAction={<Button disabled={!googleBusinessProfile?.connected || isSyncingGoogleBusinessProfile} onClick={syncGoogleBusinessProfile} variant="secondary">{isSyncingGoogleBusinessProfile ? "Syncing..." : "Refresh Data"}</Button>}
+          title="Google Business Profile"
+          unlocks="Profile locations, reviews, ratings, posts, local freshness, and future GBP deployment readiness."
+        />
         {[
           ["Google Analytics", "Website traffic, events, source quality, and conversion paths.", "+10 intelligence"],
           ["Google Search Console", "Search Console improves SEO query insights, indexing visibility, and page-level opportunity scoring.", "+12 intelligence"],
-          ["Google Business Profile", "GBP improves local visibility insights, review prompts, post recommendations, and profile activity analysis.", "+12 intelligence"],
           ["Meta / Facebook / Instagram", "Meta improves social recommendations, engagement memory, and campaign creative timing.", "+8 intelligence"],
           ["LinkedIn", "LinkedIn adds professional visibility, page engagement, and B2B referral signals.", "+4 intelligence"],
           ["Weather Data", "Weather improves demand timing for heat waves, cold snaps, seasonal service pushes, and daily budget recommendations.", "+8 intelligence"],
@@ -3135,10 +3222,11 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
       {canManageSetup ? (
         <>
           <GoogleAdsSetupWizard googleAds={googleAds} />
+          <GoogleBusinessProfileSetupWizard googleBusinessProfile={googleBusinessProfile} />
           <HighLevelSetupWizard highLevel={highLevel} onConfigured={refreshConnectedApps} />
         </>
       ) : (
-        <ClientConnectionSetupPanel currentUser={currentUser} googleAds={googleAds} highLevel={highLevel} />
+        <ClientConnectionSetupPanel currentUser={currentUser} googleAds={googleAds} googleBusinessProfile={googleBusinessProfile} highLevel={highLevel} />
       )}
 
       <Panel>
@@ -3213,6 +3301,52 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
             </div>
           </div>
         ) : null}
+      </Panel>
+
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+          <div>
+            <h3 className="text-lg font-black text-ink">Google Business Profile Connection</h3>
+            <p className="mt-2 text-sm leading-6 text-graphite/70">
+              Current permission mode is read-only. HVAC Growth OS can read profile, review, and post data when available, but cannot publish posts, update services, or reply to reviews.
+            </p>
+          </div>
+          <PermissionModePills activeMode={googleBusinessProfile?.permissionMode ?? "Read Only"} />
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-4">
+          <InfoTile label="Connection" value={googleBusinessProfile?.connected ? "Connected" : googleBusinessProfile?.configured ? "Ready when you are" : "Optional setup"} />
+          <InfoTile label="Credential storage" value={googleBusinessProfile?.credentialStorage || "Optional upgrade"} />
+          <InfoTile label="Last sync" value={googleBusinessProfile?.lastSyncAt ? new Date(googleBusinessProfile.lastSyncAt).toLocaleString() : "Never synced"} />
+          <InfoTile label="Active location" value={googleBusinessProfile?.activeLocationId || "None selected"} />
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          <InfoTile label="Locations" value={`${googleBusinessProfileData?.locations.length ?? googleBusinessProfile?.locationIds.length ?? 0}`} />
+          <InfoTile label="Reviews synced" value={`${googleBusinessProfile?.reviews ?? 0}`} />
+          <InfoTile label="Average rating" value={googleBusinessProfile?.averageRating ? googleBusinessProfile.averageRating.toFixed(1) : "Waiting on sync"} />
+        </div>
+        {googleBusinessProfileData?.syncAlerts.length ? (
+          <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
+            {googleBusinessProfileData.syncAlerts.slice(0, 3).join(" ")}
+          </div>
+        ) : null}
+        {googleBusinessProfileData?.locations.length ? (
+          <div className="mt-5 grid gap-3">
+            <FieldLabel>Synced Google Business Profile locations</FieldLabel>
+            {googleBusinessProfileData.locations.map((location) => (
+              <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={location.id}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-black text-ink">{location.name}</p>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-graphite/70">{location.status || "Synced"}</span>
+                </div>
+                {location.detail && <p className="mt-2 text-sm leading-6 text-graphite/70">{location.detail}</p>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-5 rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">
+            Connect Google Business Profile when you want local profile, reviews, ratings, and post insights to improve AI CMO recommendations.
+          </p>
+        )}
       </Panel>
 
       <Panel>
@@ -3372,10 +3506,12 @@ function ConnectionRequestButton({ appName, currentUser }: { appName: string; cu
 function ClientConnectionSetupPanel({
   currentUser,
   googleAds,
+  googleBusinessProfile,
   highLevel,
 }: {
   currentUser: AuthSession;
   googleAds?: ConnectedAppStatus["googleAds"];
+  googleBusinessProfile?: ConnectedAppStatus["googleBusinessProfile"];
   highLevel?: ConnectedAppStatus["highLevel"];
 }) {
   const requestedSubject = encodeURIComponent("Set up my HVAC Growth OS connected apps");
@@ -3386,6 +3522,7 @@ function ClientConnectionSetupPanel({
     "",
     "Apps needed:",
     `- Google Ads: ${googleAds?.connected ? "already connected" : "needs setup"}`,
+    `- Google Business Profile: ${googleBusinessProfile?.connected ? "already connected" : "needs setup"}`,
     `- HighLevel: ${highLevel?.connected ? "already connected" : "needs setup"}`,
     "",
     "I want TallTwin to handle the secure backend setup and tell me what access invitations are needed.",
@@ -3416,6 +3553,11 @@ function ClientConnectionSetupPanel({
           detail={highLevel?.connected ? "CRM calls, leads, and opportunities can be used in recommendations." : "TallTwin needs approved HighLevel location access before this data can sync."}
           status={highLevel?.connected ? "Connected" : "Setup Needed"}
           title="HighLevel"
+        />
+        <EndUserConnectionCard
+          detail={googleBusinessProfile?.connected ? "Profile reviews, posts, and local signals can be used in recommendations." : "TallTwin needs approved Google Business Profile access before this data can sync."}
+          status={googleBusinessProfile?.connected ? "Connected" : "Setup Needed"}
+          title="Google Business Profile"
         />
       </div>
 
@@ -3612,6 +3754,129 @@ function GoogleAdsSetupWizard({ googleAds }: { googleAds?: ConnectedAppStatus["g
           <div className="mt-5">
             {ready ? (
               <a className="inline-flex h-11 items-center justify-center rounded-full bg-white px-4 text-sm font-black text-ink" href="/api/google-ads/connect" rel="noreferrer" target="_blank">Connect Google Ads</a>
+            ) : (
+              <button className="inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-full bg-white/15 px-4 py-2 text-left text-sm font-black text-white/65" disabled type="button">
+                Add missing Render env vars first
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function GoogleBusinessProfileSetupWizard({ googleBusinessProfile }: { googleBusinessProfile?: ConnectedAppStatus["googleBusinessProfile"] }) {
+  const setupItems = googleBusinessProfile?.setup.items ?? [];
+  const missingItems = googleBusinessProfile?.setup.missingItems ?? [];
+  const ready = Boolean(googleBusinessProfile?.setup.ready);
+  const connected = Boolean(googleBusinessProfile?.connected);
+  const temporaryCredentialStore = googleBusinessProfile?.credentialStorage === "In-app temporary token store";
+  const [origin, setOrigin] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") setOrigin(window.location.origin);
+  }, []);
+
+  const redirectUri = origin ? `${origin}/api/google-business-profile/callback` : "https://app.talltwin.com/api/google-business-profile/callback";
+  const envTemplate = [
+    "GBP_GOOGLE_CLIENT_ID=",
+    "GBP_GOOGLE_CLIENT_SECRET=",
+    `GBP_GOOGLE_OAUTH_REDIRECT_URI=${redirectUri}`,
+    "GBP_TOKEN_ENCRYPTION_KEY=",
+    "DATABASE_URL=",
+  ].join("\n");
+
+  async function copyGoogleBusinessProfileTemplate() {
+    try {
+      await navigator.clipboard.writeText(envTemplate);
+      setCopyMessage("Copied Google Business Profile Render env template.");
+    } catch {
+      setCopyMessage("Copy failed. Select the template text and copy it manually.");
+    }
+  }
+
+  return (
+    <Panel className="scroll-mt-28" id="google-business-profile-setup">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <Eyebrow>Google Business Profile Setup</Eyebrow>
+          <h3 className="text-xl font-black text-ink">Connect Comfort Guardians GBP safely in read-only mode.</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
+            This uses Google OAuth with the Business Profile scope. HVAC Growth OS reads accounts, locations, reviews, and posts where Google grants access. It does not publish posts, update services, or reply to reviews.
+          </p>
+        </div>
+        <span className={`rounded-full border px-3 py-2 text-xs font-black ${connected ? "border-green-200 bg-green-50 text-green-700" : ready ? "border-teal-200 bg-teal-50 text-teal-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+          {connected ? "Connected" : ready ? "Ready to connect" : `${missingItems.length || 4} setup item${(missingItems.length || 4) === 1 ? "" : "s"} missing`}
+        </span>
+      </div>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+        <div className="grid gap-3">
+          <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-[0.12em] text-teal-800">What to do now</h4>
+                <p className="mt-2 text-sm font-bold leading-6 text-teal-950">
+                  Add these GBP values in Render, enable the Google Business Profile APIs in Google Cloud, redeploy, then return here to connect the profile.
+                </p>
+              </div>
+              <Button onClick={copyGoogleBusinessProfileTemplate} type="button" variant="secondary">Copy Env Template</Button>
+            </div>
+            <pre className="mt-4 overflow-x-auto rounded-xl border border-teal-200 bg-white p-4 text-xs font-bold leading-6 text-ink">{envTemplate}</pre>
+            {copyMessage && <p className="mt-3 text-xs font-black text-teal-800">{copyMessage}</p>}
+          </div>
+
+          {temporaryCredentialStore && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
+              Google Business Profile is connected through a temporary file-backed token store. Add <span className="font-mono">DATABASE_URL</span> on Render so OAuth tokens are saved in the encrypted database credential store.
+            </p>
+          )}
+          {(setupItems.length ? setupItems : defaultGoogleBusinessProfileSetupItems()).map((item) => (
+            <div className="flex gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={item.envVar}>
+              <CheckCircle2 className={`mt-0.5 size-5 shrink-0 ${item.configured ? "text-green-600" : "text-copper"}`} aria-hidden="true" />
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-black text-ink">{item.label}</p>
+                  <span className={`rounded-full px-2 py-1 text-[11px] font-black ${item.configured ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+                    {item.configured ? "Configured" : "Missing"}
+                  </span>
+                </div>
+                <p className="mt-1 font-mono text-xs font-bold text-graphite/60">{item.envVar}</p>
+                <p className="mt-2 text-sm leading-5 text-graphite/70">{item.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-2xl border border-ink/10 bg-ink p-5 text-white">
+          <h4 className="text-lg font-black">Connection checklist</h4>
+          <div className="mt-4 grid gap-3 text-sm leading-6 text-white/75">
+            <p>1. Use a Google user that has access to the Comfort Guardians Business Profile.</p>
+            <p>2. In Google Cloud, enable Business Profile Account Management API and Business Profile Business Information API.</p>
+            <p>3. Add this authorized redirect URI: <span className="font-mono text-white">{redirectUri}</span></p>
+            <p>4. Add the Render env vars shown on the left and redeploy.</p>
+            <p>5. Return here, connect GBP, then refresh data.</p>
+          </div>
+          {missingItems.length ? (
+            <div className="mt-5 rounded-xl bg-white/8 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-white/55">Still missing</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {missingItems.map((item) => (
+                  <span className="rounded-md bg-white/10 px-2 py-1 font-mono text-xs font-bold text-white/80" key={item}>{item}</span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-5 rounded-xl bg-white/8 p-4">
+            <p className="text-xs font-black uppercase tracking-[0.12em] text-white/55">Current mode</p>
+            <p className="mt-1 text-sm font-black">Read Only</p>
+            <p className="mt-2 text-sm leading-5 text-white/65">No posts, services, profile fields, or review replies can be changed from this connector.</p>
+          </div>
+          <div className="mt-5">
+            {ready ? (
+              <a className="inline-flex h-11 items-center justify-center rounded-full bg-white px-4 text-sm font-black text-ink" href="/api/google-business-profile/connect" rel="noreferrer" target="_blank">Connect GBP</a>
             ) : (
               <button className="inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-full bg-white/15 px-4 py-2 text-left text-sm font-black text-white/65" disabled type="button">
                 Add missing Render env vars first
@@ -4138,6 +4403,7 @@ function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
 
       setStatus({
         googleAds: googleStatus?.googleAds ?? emptyGoogleAdsStatus(),
+        googleBusinessProfile: emptyGoogleBusinessProfileStatus(),
         highLevel: highLevelStatus?.highLevel ?? emptyHighLevelStatus(),
       });
       setGoogleAdsData(googlePayload?.data ?? null);
@@ -4387,6 +4653,15 @@ function defaultHighLevelSetupItems() {
   ];
 }
 
+function defaultGoogleBusinessProfileSetupItems() {
+  return [
+    { configured: false, detail: "Required to send users to Google OAuth consent for Business Profile access.", envVar: "GBP_GOOGLE_CLIENT_ID or GOOGLE_CLIENT_ID", label: "Google OAuth client ID" },
+    { configured: false, detail: "Required to exchange the authorization code for tokens.", envVar: "GBP_GOOGLE_CLIENT_SECRET or GOOGLE_CLIENT_SECRET", label: "Google OAuth client secret" },
+    { configured: false, detail: "Must match the authorized redirect URI in Google Cloud.", envVar: "GBP_GOOGLE_OAUTH_REDIRECT_URI", label: "GBP OAuth redirect URI" },
+    { configured: false, detail: "Required to encrypt the stored refresh token.", envVar: "GBP_TOKEN_ENCRYPTION_KEY or GOOGLE_TOKEN_ENCRYPTION_KEY", label: "Token encryption key" },
+  ];
+}
+
 function emptyGoogleAdsStatus(): ConnectedAppStatus["googleAds"] {
   return {
     activeCustomerId: "",
@@ -4397,6 +4672,25 @@ function emptyGoogleAdsStatus(): ConnectedAppStatus["googleAds"] {
     lastSyncAt: "",
     permissionMode: "Read Only",
     setup: { items: defaultGoogleAdsSetupItems(), missingItems: [], ready: false },
+    tokenStored: false,
+  };
+}
+
+function emptyGoogleBusinessProfileStatus(): ConnectedAppStatus["googleBusinessProfile"] {
+  return {
+    activeAccountId: "",
+    activeLocationId: "",
+    accountIds: [],
+    averageRating: 0,
+    connected: false,
+    configured: false,
+    credentialStorage: "Optional upgrade",
+    lastSyncAt: "",
+    locationIds: [],
+    permissionMode: "Read Only",
+    posts: 0,
+    reviews: 0,
+    setup: { items: defaultGoogleBusinessProfileSetupItems(), missingItems: [], ready: false },
     tokenStored: false,
   };
 }
