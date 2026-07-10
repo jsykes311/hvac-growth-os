@@ -50,6 +50,7 @@ type PlatformSection =
   | "conversion-tracking"
   | "ai-cmo"
   | "revenue-engine"
+  | "service-engine"
   | "google-ads-deployment"
   | "marketing-intelligence"
   | "market-intelligence"
@@ -436,6 +437,7 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "conversion-tracking", label: "Conversion Tracking" },
   { id: "ai-cmo", label: "AI CMO" },
   { id: "revenue-engine", label: "Revenue Engine" },
+  { id: "service-engine", label: "Service Engine" },
   { id: "google-ads-deployment", label: "Google Ads Deployment" },
   { id: "marketing-intelligence", label: "Marketing Intelligence" },
   { id: "market-intelligence", label: "Market Intelligence" },
@@ -983,6 +985,10 @@ function ResultsView({
         />
       )}
 
+      {activeSection === "service-engine" && (
+        <ServiceEngineSection analysis={analysis} setActiveSection={setActiveSection} />
+      )}
+
       {activeSection === "google-ads-deployment" && (
         <GoogleAdsDeploymentEngine
           analysis={analysis}
@@ -1109,6 +1115,96 @@ function CampaignForm({
       {error && <div className="mt-4"><ErrorMessage message={error} /></div>}
     </Panel>
   );
+}
+
+function ServiceEngineSection({
+  analysis,
+  setActiveSection,
+}: {
+  analysis: BusinessProfile;
+  setActiveSection: (section: PlatformSection) => void;
+}) {
+  const [notice, setNotice] = useState("High demand detected: Emergency AC searches are up 42% this week.");
+  const company = analysis.companyName || "Your service department";
+  const campaigns = [
+    ["Emergency AC", "Live", "$186", "14", "$13.29", "High intent demand"],
+    ["AC Repair", "Live", "$142", "9", "$15.78", "Repair calls"],
+    ["Maintenance", "Paused", "—", "—", "—", "Capacity protected"],
+    ["Membership", "Live", "$68", "6", "$11.33", "Recurring revenue"],
+    ["Heating Repair", "Standby", "—", "—", "—", "Seasonal standby"],
+  ] as const;
+  const deployActions = ["Google Ads", "GBP post", "Social post", "Email campaign", "Review request", "HighLevel workflow"];
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <Eyebrow>Service Department Operating System</Eyebrow>
+          <h2 className="text-3xl font-black text-ink">Service Engine</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/75">
+            Turn service marketing into a predictable system for repairs, memberships, replacements, reviews, and referrals at {company}.
+          </p>
+        </div>
+        <Button onClick={() => setActiveSection("deploy-center")} variant="secondary">
+          <Rocket className="size-4" aria-hidden="true" /> Open Deploy Center
+        </Button>
+      </div>
+
+      <Panel className="border-teal-300 bg-gradient-to-r from-teal-50 via-white to-amber-50">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-full bg-teal-500 text-white"><CloudSun className="size-5" /></span><div><p className="text-sm font-black text-ink">Demand signal</p><p className="text-sm text-graphite/75">{notice}</p></div></div>
+          <button className="text-sm font-black text-teal-700 hover:text-ink" onClick={() => setNotice("Demand report refreshed: heat index 103°, technician capacity 94% through Monday.")} type="button">Refresh signal</button>
+        </div>
+      </Panel>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <ServiceMetric label="Service revenue" value="$42,680" detail="↑ 18.4% vs. prior 30 days" tone="teal" />
+        <ServiceMetric label="Repair revenue" value="$31,254" detail="84 repairs completed" tone="amber" />
+        <ServiceMetric label="Memberships sold" value="31" detail="$1,426 new monthly recurring" tone="teal" />
+        <ServiceMetric label="Replacement opportunities" value="17" detail="6 need comfort advisor follow-up" tone="amber" />
+        <ServiceMetric label="Reviews generated" value="42" detail="4.8 average rating this month" tone="teal" />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+        <Panel>
+          <div className="flex items-start justify-between gap-4"><div><Eyebrow>Market Intelligence</Eyebrow><h3 className="text-xl font-black text-ink">Demand Monitor</h3></div><div className="rounded-2xl bg-teal-50 px-4 py-3 text-center"><strong className="block text-2xl font-black text-teal-700">82</strong><span className="text-[10px] font-black uppercase tracking-wider text-teal-800">Demand score</span></div></div>
+          <p className="mt-3 text-sm text-graphite/75">Service demand is high. Emergency AC and AC repair are the best near-term acquisition opportunities.</p>
+          <div className="mt-5 space-y-4">{[["Weather", 92, "Heat index 103°"], ["Search demand", 78, "Emergency AC up 42%"], ["Seasonality", 76, "Peak cooling window"]].map(([label, score, detail]) => <div key={String(label)}><div className="mb-2 flex justify-between text-sm"><span className="font-black text-ink">{label}</span><span className="font-bold text-graphite/70">{detail} · {score}/100</span></div><div className="h-2 overflow-hidden rounded-full bg-teal-50"><div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-amber-400" style={{ width: `${score}%` }} /></div></div>)}</div>
+        </Panel>
+        <Panel>
+          <div className="flex items-start justify-between gap-4"><div><Eyebrow>AI Priorities</Eyebrow><h3 className="text-xl font-black text-ink">Today&apos;s recommendations</h3></div><Bot className="size-6 text-teal-600" /></div>
+          <div className="mt-4 space-y-3">
+            <ServiceRecommendation action="Increase Emergency AC budget" detail="Search demand is outpacing spend by 34%." onApply={() => setNotice("Emergency AC budget increase prepared for review in Deploy Center.")} />
+            <ServiceRecommendation action="Pause Maintenance campaign" detail="Technicians are at 94% capacity through Monday." onApply={() => setNotice("Maintenance campaign marked for pause; booked call capacity is protected.")} />
+            <ServiceRecommendation action="Launch tune-up campaign next week" detail="Demand forecast rises 28% starting Tuesday." onApply={() => setNotice("Tune-up launch campaign drafted for next Tuesday.")} />
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+        <Panel>
+          <div className="flex items-start justify-between gap-4"><div><Eyebrow>Acquisition Control</Eyebrow><h3 className="text-xl font-black text-ink">Service Campaign Manager</h3></div><button className="text-sm font-black text-teal-700 hover:text-ink" onClick={() => setActiveSection("google-ads-deployment")} type="button">Manage campaigns →</button></div>
+          <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[580px] text-left text-sm"><thead className="border-b border-ink/10 text-[10px] font-black uppercase tracking-[.14em] text-graphite/55"><tr><th className="pb-3">Campaign</th><th className="pb-3">Status</th><th className="pb-3">Spend</th><th className="pb-3">Leads</th><th className="pb-3">CPA</th><th className="pb-3">Purpose</th></tr></thead><tbody>{campaigns.map(([name,status,spend,leads,cpa,purpose]) => <tr className="border-b border-ink/5 last:border-0" key={name}><td className="py-3 font-black text-ink">{name}</td><td className={`py-3 font-black ${status === "Live" ? "text-teal-700" : "text-graphite/55"}`}>● {status}</td><td className="py-3 text-graphite/75">{spend}</td><td className="py-3 text-graphite/75">{leads}</td><td className="py-3 text-graphite/75">{cpa}</td><td className="py-3 text-graphite/75">{purpose}</td></tr>)}</tbody></table></div>
+        </Panel>
+        <Panel>
+          <Eyebrow>Last 30 Days</Eyebrow><h3 className="text-xl font-black text-ink">Service-to-referral funnel</h3>
+          <div className="mt-4 space-y-3">{[["Google Ads",296],["Calls",134],["Booked",108],["Technician",103],["Repair",84],["Membership",31],["Replacement opportunity",17],["Review",42],["Referral",9]].map(([label,value]) => <div className="grid grid-cols-[132px_1fr_36px] items-center gap-3 text-xs" key={String(label)}><span className="font-bold text-graphite/75">{label}</span><div className="h-4 rounded bg-teal-50"><div className="h-full rounded bg-gradient-to-r from-teal-600 to-teal-400" style={{width:`${Math.max(8, Number(value) / 296 * 100)}%`}} /></div><span className="text-right font-black text-ink">{value}</span></div>)}</div>
+        </Panel>
+      </div>
+
+      <Panel className="bg-gradient-to-br from-ink to-[#087b84] text-white">
+        <div className="grid gap-6 lg:grid-cols-[.65fr_1.35fr] lg:items-center"><div><Eyebrow>Deploy Actions</Eyebrow><h3 className="text-2xl font-black">Turn insight into action.</h3><p className="mt-2 text-sm leading-6 text-white/70">Generate reviewable, channel-ready assets from today&apos;s demand signals.</p></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{deployActions.map((action) => <button className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-left text-sm font-black transition hover:-translate-y-0.5 hover:bg-white/20" key={action} onClick={() => setNotice(`${action} draft generated and ready in Deploy Center.`)} type="button">{action}<span className="float-right text-amber-300">→</span></button>)}</div></div>
+      </Panel>
+    </section>
+  );
+}
+
+function ServiceMetric({ detail, label, tone, value }: { detail: string; label: string; tone: "teal" | "amber"; value: string }) {
+  return <Panel className="p-5"><p className="text-xs font-black uppercase tracking-[.12em] text-graphite/60">{label}</p><p className="mt-3 text-3xl font-black text-ink">{value}</p><p className={`mt-2 text-xs font-bold ${tone === "teal" ? "text-teal-700" : "text-amber-700"}`}>{detail}</p></Panel>;
+}
+
+function ServiceRecommendation({ action, detail, onApply }: { action: string; detail: string; onApply: () => void }) {
+  return <div className="flex items-center gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-3"><Gauge className="size-5 shrink-0 text-amber-500" /><div className="min-w-0 flex-1"><p className="text-sm font-black text-ink">{action}</p><p className="mt-1 text-xs text-graphite/70">{detail}</p></div><button className="rounded-full border border-teal-300 px-3 py-1.5 text-xs font-black text-teal-700 hover:bg-teal-50" onClick={onApply} type="button">Apply</button></div>;
 }
 
 function PlatformNav({
