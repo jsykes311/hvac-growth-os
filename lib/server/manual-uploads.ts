@@ -51,14 +51,24 @@ export async function saveMarketingPerformanceUpload(input: {
   return summary;
 }
 
-export async function getLatestMarketingPerformanceUploads() {
+export async function getLatestMarketingPerformanceUploads(range: { endDate?: string; startDate?: string } = {}) {
   const events = await getComfortGuardiansHistory(250);
-  const googleAds = events.find((event) => event.eventType === "google_ads_upload")?.summary as MarketingUploadSummary | undefined;
-  const googleBusinessProfile = events.find((event) => event.eventType === "google_business_profile_upload")?.summary as MarketingUploadSummary | undefined;
+  const filteredEvents = events.filter((event) => eventMatchesRange(event.metricDate, range));
+  const googleAds = filteredEvents.find((event) => event.eventType === "google_ads_upload")?.summary as MarketingUploadSummary | undefined;
+  const googleBusinessProfile = filteredEvents.find((event) => event.eventType === "google_business_profile_upload")?.summary as MarketingUploadSummary | undefined;
   return {
     googleAds: googleAds || null,
     googleBusinessProfile: googleBusinessProfile || null,
   };
+}
+
+function eventMatchesRange(metricDate: string, range: { endDate?: string; startDate?: string }) {
+  if (!range.startDate && !range.endDate) return true;
+  const date = Date.parse(`${metricDate}T00:00:00.000Z`);
+  if (Number.isNaN(date)) return true;
+  if (range.startDate && date < Date.parse(`${range.startDate}T00:00:00.000Z`)) return false;
+  if (range.endDate && date > Date.parse(`${range.endDate}T23:59:59.999Z`)) return false;
+  return true;
 }
 
 function summarizeUpload(source: MarketingUploadSource, rows: Array<Record<string, string>>, metadata: { fileName: string; metricDate: string }): MarketingUploadSummary {

@@ -3,9 +3,11 @@ import { getLatestMarketingPerformanceUploads, saveMarketingPerformanceUpload, t
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    return NextResponse.json({ uploads: await getLatestMarketingPerformanceUploads() });
+    const startDate = request.nextUrl.searchParams.get("startDate") || undefined;
+    const endDate = request.nextUrl.searchParams.get("endDate") || undefined;
+    return NextResponse.json({ uploads: await getLatestMarketingPerformanceUploads({ endDate, startDate }) });
   } catch (error) {
     console.error("Marketing uploads load failed", error);
     return NextResponse.json(

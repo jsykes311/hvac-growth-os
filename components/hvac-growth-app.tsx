@@ -41,6 +41,11 @@ import type {
 import { Button, Eyebrow, FieldLabel, Panel } from "@/components/ui";
 
 type View = "home" | "results";
+type GlobalDateRange = {
+  endDate: string;
+  preset: "7d" | "30d" | "90d" | "custom";
+  startDate: string;
+};
 type PlatformSection =
   | "morning-brief"
   | "dashboard"
@@ -574,6 +579,11 @@ export function HvacGrowthApp({
   });
   const [goal, setGoal] = useState(CAMPAIGN_GOALS[0]);
   const [offer, setOffer] = useState("");
+  const [globalDateRange, setGlobalDateRange] = useState<GlobalDateRange>({
+    endDate: todayInputValue(),
+    preset: "30d",
+    startDate: daysAgoInputValue(30),
+  });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
   const [isCreatingPpcPlan, setIsCreatingPpcPlan] = useState(false);
@@ -806,6 +816,7 @@ export function HvacGrowthApp({
               currentUser={currentUser}
               error={error}
               goal={goal}
+              globalDateRange={globalDateRange}
               isCreatingCampaign={isCreatingCampaign}
               isCreatingPpcPlan={isCreatingPpcPlan}
               offer={offer}
@@ -824,6 +835,7 @@ export function HvacGrowthApp({
               onCreateCampaign={handleCreateCampaign}
               onCreatePpcPlan={handleCreatePpcPlan}
               setActiveSection={setActiveSection}
+              setGlobalDateRange={setGlobalDateRange}
               onUpdateAnalysis={(nextAnalysis) => {
                 setAnalysis(nextAnalysis);
                 setCampaign(null);
@@ -970,6 +982,7 @@ function ResultsView({
   currentUser,
   error,
   goal,
+  globalDateRange,
   isCreatingCampaign,
   isCreatingPpcPlan,
   offer,
@@ -982,6 +995,7 @@ function ResultsView({
   onCreatePpcPlan,
   onUpdateAnalysis,
   setActiveSection,
+  setGlobalDateRange,
   setGoal,
   setOffer,
   setPpcOverrides,
@@ -993,6 +1007,7 @@ function ResultsView({
   currentUser: AuthSession;
   error: string;
   goal: string;
+  globalDateRange: GlobalDateRange;
   isCreatingCampaign: boolean;
   isCreatingPpcPlan: boolean;
   offer: string;
@@ -1005,6 +1020,7 @@ function ResultsView({
   onCreatePpcPlan: (event: FormEvent<HTMLFormElement>) => void;
   onUpdateAnalysis: (analysis: BusinessProfile) => void;
   setActiveSection: (section: PlatformSection) => void;
+  setGlobalDateRange: (range: GlobalDateRange) => void;
   setGoal: (value: string) => void;
   setOffer: (value: string) => void;
   setPpcOverrides: (value: PpcManualOverrides) => void;
@@ -1027,8 +1043,9 @@ function ResultsView({
             <p className="mt-2 text-sm font-medium text-graphite/70">Predictable service growth, from demand through referral.</p>
           </div>
         </div>
+        <GlobalDateRangeControl range={globalDateRange} setRange={setGlobalDateRange} />
         <PlatformNav activeSection={activeSection} onChange={setActiveSection} />
-        <ServiceEngineSection analysis={analysis} setActiveSection={setActiveSection} />
+        <ServiceEngineSection analysis={analysis} dateRange={globalDateRange} setActiveSection={setActiveSection} />
       </div>
     );
   }
@@ -1067,6 +1084,7 @@ function ResultsView({
         </div>
       </div>
 
+      <GlobalDateRangeControl range={globalDateRange} setRange={setGlobalDateRange} />
       <PlatformNav activeSection={activeSection} onChange={setActiveSection} />
 
       {activeSection === "morning-brief" && (
@@ -1074,6 +1092,7 @@ function ResultsView({
           analysis={analysis}
           contractorUrl={contractorUrl}
           currentUser={currentUser}
+          dateRange={globalDateRange}
           ppcPlan={ppcPlan}
           setActiveSection={setActiveSection}
         />
@@ -1084,6 +1103,7 @@ function ResultsView({
           analysis={analysis}
           clientHealth={clientHealth}
           contractorUrl={contractorUrl}
+          dateRange={globalDateRange}
           ppcPlan={ppcPlan}
           setActiveSection={setActiveSection}
         />
@@ -1101,18 +1121,19 @@ function ResultsView({
 
       {activeSection === "seo" && <SeoAnalysisPanel analysis={analysis} />}
       {activeSection === "ai-visibility" && <AiSeoAnalysisPanel analysis={analysis} />}
-      {activeSection === "connected-apps" && <ConnectedAppsSection currentUser={currentUser} />}
-      {activeSection === "uploads" && <PerformanceUploadsSection setActiveSection={setActiveSection} />}
-      {activeSection === "conversion-tracking" && <ConversionTrackingCenter analysis={analysis} />}
+      {activeSection === "connected-apps" && <ConnectedAppsSection currentUser={currentUser} globalDateRange={globalDateRange} />}
+      {activeSection === "uploads" && <PerformanceUploadsSection globalDateRange={globalDateRange} setActiveSection={setActiveSection} />}
+      {activeSection === "conversion-tracking" && <ConversionTrackingCenter analysis={analysis} dateRange={globalDateRange} />}
 
       {activeSection === "ai-cmo" && (
-        <AiCmoSection analysis={analysis} contractorUrl={contractorUrl} ppcPlan={ppcPlan} />
+        <AiCmoSection analysis={analysis} contractorUrl={contractorUrl} dateRange={globalDateRange} ppcPlan={ppcPlan} />
       )}
 
       {activeSection === "revenue-engine" && (
         <PpcPlannerPanel
           analysis={analysis}
           isCreatingPpcPlan={isCreatingPpcPlan}
+          dateRange={globalDateRange}
           onCreatePpcPlan={onCreatePpcPlan}
           overrides={ppcOverrides}
           ppcPlan={ppcPlan}
@@ -1250,9 +1271,11 @@ function CampaignForm({
 
 function ServiceEngineSection({
   analysis,
+  dateRange,
   setActiveSection,
 }: {
   analysis: BusinessProfile;
+  dateRange: GlobalDateRange;
   setActiveSection: (section: PlatformSection) => void;
 }) {
   const [notice, setNotice] = useState("Loading HighLevel service data...");
@@ -1349,12 +1372,12 @@ function ServiceEngineSection({
     async function loadServiceData() {
       try {
         const [highLevelResponse, adsResult, uploadsResult] = await Promise.all([
-          fetch("/api/highlevel/data", { cache: "no-store" }),
-          loadGoogleAdsPerformanceData(),
-          loadMarketingUploads(),
+          loadHighLevelDataForRange(dateRange),
+          loadGoogleAdsPerformanceData(dateRange),
+          loadMarketingUploads(dateRange),
         ]);
-        const payload = (await highLevelResponse.json()) as { data?: HighLevelDataPayload } | ApiError;
-        if (!highLevelResponse.ok || !("data" in payload)) throw new Error("HighLevel data is not available yet.");
+        const payload = highLevelResponse;
+        if (!payload?.data) throw new Error("HighLevel data is not available yet.");
         if (cancelled) return;
         setHighLevelData(payload.data ?? null);
         setGoogleAdsData(adsResult.data);
@@ -1371,7 +1394,7 @@ function ServiceEngineSection({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [dateRange.endDate, dateRange.startDate]);
 
   return (
     <section className="space-y-5">
@@ -1560,6 +1583,69 @@ function PlatformNav({
         ))}
       </div>
     </nav>
+  );
+}
+
+function GlobalDateRangeControl({
+  range,
+  setRange,
+}: {
+  range: GlobalDateRange;
+  setRange: (range: GlobalDateRange) => void;
+}) {
+  function applyPreset(preset: GlobalDateRange["preset"]) {
+    if (preset === "custom") return setRange({ ...range, preset });
+    const days = preset === "7d" ? 7 : preset === "90d" ? 90 : 30;
+    setRange({
+      endDate: todayInputValue(),
+      preset,
+      startDate: daysAgoInputValue(days),
+    });
+  }
+
+  return (
+    <Panel className="mb-4 p-4">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-copper">Date Filter</p>
+          <p className="mt-1 text-sm font-bold text-graphite/70">
+            Performance modules use this window for HighLevel, uploaded Google Ads, uploaded GBP, attribution, and daily recommendations.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex rounded-full border border-ink/10 bg-[#fbfbfa] p-1">
+            {(["7d", "30d", "90d"] as const).map((preset) => (
+              <button
+                className={`rounded-full px-3 py-2 text-xs font-black transition ${range.preset === preset ? "bg-ink text-white" : "text-graphite hover:bg-white"}`}
+                key={preset}
+                onClick={() => applyPreset(preset)}
+                type="button"
+              >
+                {preset === "7d" ? "7 Days" : preset === "30d" ? "30 Days" : "90 Days"}
+              </button>
+            ))}
+          </div>
+          <label className="grid gap-1">
+            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-graphite/50">Start</span>
+            <input
+              className="h-10 rounded-md border border-ink/15 bg-white px-3 text-sm font-bold text-ink outline-none focus:border-flame focus:ring-4 focus:ring-flame/15"
+              onChange={(event) => setRange({ ...range, preset: "custom", startDate: event.target.value })}
+              type="date"
+              value={range.startDate}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-graphite/50">End</span>
+            <input
+              className="h-10 rounded-md border border-ink/15 bg-white px-3 text-sm font-bold text-ink outline-none focus:border-flame focus:ring-4 focus:ring-flame/15"
+              onChange={(event) => setRange({ ...range, preset: "custom", endDate: event.target.value })}
+              type="date"
+              value={range.endDate}
+            />
+          </label>
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -2270,12 +2356,14 @@ function MorningBriefSection({
   analysis,
   contractorUrl,
   currentUser,
+  dateRange,
   ppcPlan,
   setActiveSection,
 }: {
   analysis: BusinessProfile;
   contractorUrl: string;
   currentUser: AuthSession;
+  dateRange: GlobalDateRange;
   ppcPlan: PpcPlan | null;
   setActiveSection: (section: PlatformSection) => void;
 }) {
@@ -2304,18 +2392,17 @@ function MorningBriefSection({
 
   useEffect(() => {
     void Promise.all([
-      fetch("/api/highlevel/data", { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : null)
+      loadHighLevelDataForRange(dateRange)
         .then((payload: { data?: HighLevelDataPayload } | null) => setCrmFunnel(payload?.data?.revenueFunnel ?? null))
         .catch(() => setCrmFunnel(null)),
-      loadGoogleAdsPerformanceData()
+      loadGoogleAdsPerformanceData(dateRange)
         .then((result) => setGoogleAdsData(result.data))
         .catch(() => setGoogleAdsData(null)),
-      loadMarketingUploads()
+      loadMarketingUploads(dateRange)
         .then((uploads) => setPerformanceUploads(uploads))
         .catch(() => setPerformanceUploads(null)),
     ]);
-  }, []);
+  }, [dateRange.endDate, dateRange.startDate]);
 
   return (
     <div className="grid gap-5">
@@ -2678,12 +2765,14 @@ function DashboardSection({
   analysis,
   clientHealth,
   contractorUrl,
+  dateRange,
   ppcPlan,
   setActiveSection,
 }: {
   analysis: BusinessProfile;
   clientHealth: ReturnType<typeof buildClientHealth>;
   contractorUrl: string;
+  dateRange: GlobalDateRange;
   ppcPlan: PpcPlan | null;
   setActiveSection: (section: PlatformSection) => void;
 }) {
@@ -2694,15 +2783,14 @@ function DashboardSection({
   useEffect(() => {
     setMemory(loadIntelligenceMemory(intelligenceMemoryKey(analysis, contractorUrl)));
     void Promise.all([
-      loadGoogleAdsPerformanceData()
+      loadGoogleAdsPerformanceData(dateRange)
         .then((result) => setGoogleAdsData(result.data))
         .catch(() => setGoogleAdsData(null)),
-      fetch("/api/highlevel/data", { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : null)
+      loadHighLevelDataForRange(dateRange)
         .then((payload: { data?: HighLevelDataPayload } | null) => setHighLevelData(payload?.data ?? null))
         .catch(() => setHighLevelData(null)),
     ]);
-  }, [analysis, contractorUrl]);
+  }, [analysis, contractorUrl, dateRange.endDate, dateRange.startDate]);
 
   const impact = buildImpactDashboard(analysis, contractorUrl, ppcPlan, memory, googleAdsData, highLevelData);
 
@@ -3342,13 +3430,13 @@ function DeployCenter({
   );
 }
 
-function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
+function ConnectedAppsSection({ currentUser, globalDateRange }: { currentUser: AuthSession; globalDateRange: GlobalDateRange }) {
   const [status, setStatus] = useState<ConnectedAppStatus | null>(null);
   const [googleBusinessProfileData, setGoogleBusinessProfileData] = useState<GoogleBusinessProfileDataPayload | null>(null);
   const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
   const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
-  const [highLevelEndDate, setHighLevelEndDate] = useState(todayInputValue());
-  const [highLevelStartDate, setHighLevelStartDate] = useState(daysAgoInputValue(30));
+  const [highLevelEndDate, setHighLevelEndDate] = useState(globalDateRange.endDate);
+  const [highLevelStartDate, setHighLevelStartDate] = useState(globalDateRange.startDate);
   const [activeTable, setActiveTable] = useState<keyof Pick<GoogleAdsDataPayload, "campaigns" | "adGroups" | "keywords" | "searchTerms" | "ads" | "assets" | "conversions">>("campaigns");
   const [activeHighLevelTable, setActiveHighLevelTable] = useState<keyof Pick<HighLevelDataPayload, "contacts" | "opportunities" | "opportunityStages" | "pipelines" | "conversations" | "calls" | "calendars" | "forms" | "formSubmissions" | "tags" | "workflows" | "customFields">>("contacts");
   const [isLoading, setIsLoading] = useState(true);
@@ -3372,15 +3460,14 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
   }, []);
 
   const loadHighLevelData = useCallback(async () => {
-    const response = await fetch("/api/highlevel/data", { cache: "no-store" });
-    const payload = (await response.json()) as { data?: HighLevelDataPayload } & ApiError;
-    if (!response.ok) throw new Error("HighLevel can be connected when you are ready to unlock revenue attribution.");
+    const payload = await loadHighLevelDataForRange({ endDate: highLevelEndDate, startDate: highLevelStartDate });
+    if (!payload?.data) throw new Error("HighLevel can be connected when you are ready to unlock revenue attribution.");
     if (payload.data?.syncRange) {
       setHighLevelEndDate(payload.data.syncRange.endDate);
       setHighLevelStartDate(payload.data.syncRange.startDate);
     }
     setHighLevelData(payload.data ?? null);
-  }, []);
+  }, [highLevelEndDate, highLevelStartDate]);
 
   const refreshConnectedApps = useCallback(async () => {
     setIsLoading(true);
@@ -3408,6 +3495,11 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
       setIsLoading(false);
     }
   }, [loadGoogleAdsData, loadGoogleBusinessProfileData, loadHighLevelData]);
+
+  useEffect(() => {
+    setHighLevelStartDate(globalDateRange.startDate);
+    setHighLevelEndDate(globalDateRange.endDate);
+  }, [globalDateRange.endDate, globalDateRange.startDate]);
 
   useEffect(() => {
     void refreshConnectedApps();
@@ -3917,7 +4009,7 @@ function canManageConnectedApps(currentUser: AuthSession) {
   return currentUser.role === "Admin" || currentUser.role === "TallTwin Team";
 }
 
-function PerformanceUploadsSection({ setActiveSection }: { setActiveSection: (section: PlatformSection) => void }) {
+function PerformanceUploadsSection({ globalDateRange, setActiveSection }: { globalDateRange: GlobalDateRange; setActiveSection: (section: PlatformSection) => void }) {
   const [uploads, setUploads] = useState<MarketingUploadsPayload>({ googleAds: null, googleBusinessProfile: null });
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -3926,15 +4018,12 @@ function PerformanceUploadsSection({ setActiveSection }: { setActiveSection: (se
 
   useEffect(() => {
     void loadUploads();
-  }, []);
+  }, [globalDateRange.endDate, globalDateRange.startDate]);
 
   async function loadUploads() {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/uploads/marketing", { cache: "no-store" });
-      const payload = (await response.json()) as { uploads?: MarketingUploadsPayload } & ApiError;
-      if (!response.ok) throw new Error(payload.error || "Uploads are not available yet.");
-      setUploads(payload.uploads ?? { googleAds: null, googleBusinessProfile: null });
+      setUploads(await loadMarketingUploads(globalDateRange) ?? { googleAds: null, googleBusinessProfile: null });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Uploads are not available yet.");
     } finally {
@@ -4117,9 +4206,10 @@ function UploadSummary({ summary }: { summary: MarketingUploadSummary }) {
   );
 }
 
-async function loadMarketingUploads() {
+async function loadMarketingUploads(dateRange?: Pick<GlobalDateRange, "endDate" | "startDate">) {
   try {
-    const response = await fetch("/api/uploads/marketing", { cache: "no-store" });
+    const query = dateRange ? `?startDate=${encodeURIComponent(dateRange.startDate)}&endDate=${encodeURIComponent(dateRange.endDate)}` : "";
+    const response = await fetch(`/api/uploads/marketing${query}`, { cache: "no-store" });
     const payload = (await response.json()) as { uploads?: MarketingUploadsPayload } & ApiError;
     return response.ok ? payload.uploads ?? null : null;
   } catch {
@@ -4127,7 +4217,7 @@ async function loadMarketingUploads() {
   }
 }
 
-async function loadGoogleAdsPerformanceData() {
+async function loadGoogleAdsPerformanceData(dateRange?: Pick<GlobalDateRange, "endDate" | "startDate">) {
   try {
     const response = await fetch("/api/google-ads/data", { cache: "no-store" });
     const payload = response.ok ? await response.json() as { data?: GoogleAdsDataPayload } : null;
@@ -4138,9 +4228,31 @@ async function loadGoogleAdsPerformanceData() {
     // Fall back to uploads below.
   }
 
-  const uploads = await loadMarketingUploads();
+  const uploads = await loadMarketingUploads(dateRange);
   const uploadedAds = uploads?.googleAds ? googleAdsDataFromUpload(uploads.googleAds) : null;
   return { data: uploadedAds, source: uploadedAds ? "Uploaded" as const : "" as const };
+}
+
+async function loadHighLevelDataForRange(dateRange?: Pick<GlobalDateRange, "endDate" | "startDate">) {
+  try {
+    if (dateRange?.startDate && dateRange?.endDate) {
+      const response = await fetch("/api/highlevel/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endDate: dateRange.endDate, startDate: dateRange.startDate }),
+      });
+      if (response.ok) return await response.json() as { data?: HighLevelDataPayload };
+    }
+  } catch {
+    // Fall back to stored data below.
+  }
+
+  try {
+    const response = await fetch("/api/highlevel/data", { cache: "no-store" });
+    return response.ok ? await response.json() as { data?: HighLevelDataPayload } : null;
+  } catch {
+    return null;
+  }
 }
 
 function googleAdsDataFromUpload(summary: MarketingUploadSummary): GoogleAdsDataPayload {
@@ -5115,7 +5227,7 @@ function InfoTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
+function ConversionTrackingCenter({ analysis, dateRange }: { analysis: BusinessProfile; dateRange: GlobalDateRange }) {
   const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
   const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
   const [status, setStatus] = useState<ConnectedAppStatus | null>(null);
@@ -5129,12 +5241,12 @@ function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
       const [googleStatusResponse, highLevelStatusResponse, googlePerformanceResult, highLevelDataResponse] = await Promise.all([
         fetch("/api/google-ads/status", { cache: "no-store" }),
         fetch("/api/highlevel/status", { cache: "no-store" }),
-        loadGoogleAdsPerformanceData(),
-        fetch("/api/highlevel/data", { cache: "no-store" }),
+        loadGoogleAdsPerformanceData(dateRange),
+        loadHighLevelDataForRange(dateRange),
       ]);
       const googleStatus = googleStatusResponse.ok ? await googleStatusResponse.json() as Pick<ConnectedAppStatus, "googleAds"> : null;
       const highLevelStatus = highLevelStatusResponse.ok ? await highLevelStatusResponse.json() as Pick<ConnectedAppStatus, "highLevel"> : null;
-      const highLevelPayload = highLevelDataResponse.ok ? await highLevelDataResponse.json() as { data?: HighLevelDataPayload } : null;
+      const highLevelPayload = highLevelDataResponse;
 
       setStatus({
         googleAds: googleStatus?.googleAds ?? emptyGoogleAdsStatus(),
@@ -5148,7 +5260,7 @@ function ConversionTrackingCenter({ analysis }: { analysis: BusinessProfile }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [dateRange.endDate, dateRange.startDate]);
 
   useEffect(() => {
     void refreshTrackingData();
@@ -5661,10 +5773,12 @@ function highLevelTableLabel(table: keyof Pick<HighLevelDataPayload, "contacts" 
 function AiCmoSection({
   analysis,
   contractorUrl,
+  dateRange,
   ppcPlan,
 }: {
   analysis: BusinessProfile;
   contractorUrl: string;
+  dateRange: GlobalDateRange;
   ppcPlan: PpcPlan | null;
 }) {
   const memoryKey = intelligenceMemoryKey(analysis, contractorUrl);
@@ -5693,19 +5807,18 @@ function AiCmoSection({
 
   useEffect(() => {
     void Promise.all([
-      fetch("/api/highlevel/data", { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : null)
+      loadHighLevelDataForRange(dateRange)
         .then((payload: { data?: HighLevelDataPayload } | null) => {
           setCrmFunnel(payload?.data?.revenueFunnel ?? null);
         })
         .catch(() => setCrmFunnel(null)),
-      loadGoogleAdsPerformanceData()
+      loadGoogleAdsPerformanceData(dateRange)
         .then((result) => {
           setGoogleAdsData(result.data);
         })
         .catch(() => setGoogleAdsData(null)),
     ]);
-  }, []);
+  }, [dateRange.endDate, dateRange.startDate]);
 
   function saveSnapshot() {
     const withoutToday = memory.filter((snapshot) => snapshot.date !== currentSnapshot.date);
@@ -6948,6 +7061,7 @@ function DeployCard({ title, items }: { title: string; items: Array<{ label: str
 
 function PpcPlannerPanel({
   analysis,
+  dateRange,
   isCreatingPpcPlan,
   onCreatePpcPlan,
   overrides,
@@ -6955,6 +7069,7 @@ function PpcPlannerPanel({
   setOverrides,
 }: {
   analysis: BusinessProfile;
+  dateRange: GlobalDateRange;
   isCreatingPpcPlan: boolean;
   onCreatePpcPlan: (event: FormEvent<HTMLFormElement>) => void;
   overrides: PpcManualOverrides;
@@ -6968,19 +7083,18 @@ function PpcPlannerPanel({
 
   useEffect(() => {
     void Promise.all([
-      fetch("/api/highlevel/data", { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : null)
+      loadHighLevelDataForRange(dateRange)
         .then((payload: { data?: HighLevelDataPayload } | null) => {
           setCrmFunnel(payload?.data?.revenueFunnel ?? null);
         })
         .catch(() => setCrmFunnel(null)),
-      loadGoogleAdsPerformanceData()
+      loadGoogleAdsPerformanceData(dateRange)
         .then((result) => {
           setGoogleAdsData(result.data);
         })
         .catch(() => setGoogleAdsData(null)),
     ]);
-  }, []);
+  }, [dateRange.endDate, dateRange.startDate]);
 
   function updateOverride<K extends keyof PpcManualOverrides>(field: K, value: PpcManualOverrides[K]) {
     setOverrides({ ...overrides, [field]: value });
