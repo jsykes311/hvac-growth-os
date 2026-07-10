@@ -1279,6 +1279,8 @@ function ServiceEngineSection({
   setActiveSection: (section: PlatformSection) => void;
 }) {
   const [notice, setNotice] = useState("Loading HighLevel service data...");
+  const [activeDeployAction, setActiveDeployAction] = useState<ServiceDeployActionLabel | null>(null);
+  const [copyMessage, setCopyMessage] = useState("");
   const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
   const [googleAdsData, setGoogleAdsData] = useState<GoogleAdsDataPayload | null>(null);
   const [performanceUploads, setPerformanceUploads] = useState<MarketingUploadsPayload | null>(null);
@@ -1316,7 +1318,8 @@ function ServiceEngineSection({
   ] : [
     ["HighLevel", "Waiting", "—", "—", "—", "Refresh HighLevel to load source data"],
   ] as const;
-  const deployActions = ["Google Ads", "GBP post", "Social post", "Email campaign", "Review request", "HighLevel workflow"];
+  const deployActions: ServiceDeployActionLabel[] = ["Google Ads", "GBP post", "Social post", "Email campaign", "Review request", "HighLevel workflow"];
+  const deployDraft = activeDeployAction ? buildServiceDeployDraft(activeDeployAction, analysis, crmFunnel, bestSource, dateRange) : null;
   const serviceMetrics = [
     {
       detail: hasHighLevelData ? `${crmFunnel?.wonJobs ?? 0} won job${(crmFunnel?.wonJobs ?? 0) === 1 ? "" : "s"} tracked` : "Refresh HighLevel to calculate revenue",
@@ -1452,7 +1455,72 @@ function ServiceEngineSection({
       </div>
 
       <Panel className="bg-gradient-to-br from-ink to-[#087b84] text-white">
-        <div className="grid gap-6 lg:grid-cols-[.65fr_1.35fr] lg:items-center"><div><Eyebrow>Deploy Actions</Eyebrow><h3 className="text-2xl font-black">Turn insight into action.</h3><p className="mt-2 text-sm leading-6 text-white/70">Generate reviewable, channel-ready assets from today&apos;s demand signals.</p></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{deployActions.map((action) => <button className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-left text-sm font-black transition hover:-translate-y-0.5 hover:bg-white/20" key={action} onClick={() => setNotice(`${action} draft generated and ready in Deploy Center.`)} type="button">{action}<span className="float-right text-amber-300">→</span></button>)}</div></div>
+        <div className="grid gap-6 lg:grid-cols-[.65fr_1.35fr] lg:items-center">
+          <div>
+            <Eyebrow>Deploy Actions</Eyebrow>
+            <h3 className="text-2xl font-black">Turn insight into action.</h3>
+            <p className="mt-2 text-sm leading-6 text-white/70">Generate reviewable, channel-ready assets from today&apos;s demand signals.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {deployActions.map((action) => (
+              <button
+                className={`rounded-xl border px-4 py-3 text-left text-sm font-black transition hover:-translate-y-0.5 ${activeDeployAction === action ? "border-amber-300 bg-white/20" : "border-white/15 bg-white/10 hover:bg-white/20"}`}
+                key={action}
+                onClick={() => {
+                  setActiveDeployAction(action);
+                  setCopyMessage("");
+                  setNotice(`${action} draft opened below for review and copy/paste.`);
+                }}
+                type="button"
+              >
+                {action}<span className="float-right text-amber-300">→</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {deployDraft ? (
+          <div className="mt-6 rounded-2xl border border-white/15 bg-white/10 p-4">
+            <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-200">{deployDraft.label}</p>
+                <h4 className="mt-2 text-xl font-black text-white">{deployDraft.title}</h4>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-white/70">{deployDraft.reason}</p>
+              </div>
+              <button
+                className="rounded-full border border-amber-200/60 bg-amber-200 px-4 py-2 text-sm font-black text-ink transition hover:bg-amber-100"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(deployDraft.copyText);
+                    setCopyMessage("Copied draft to clipboard.");
+                  } catch {
+                    setCopyMessage("Copy failed. Select the text below and copy it manually.");
+                  }
+                }}
+                type="button"
+              >
+                Copy Draft
+              </button>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_.8fr]">
+              <div className="rounded-xl border border-white/10 bg-white/95 p-4 text-ink">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-copper">Copy / Paste Draft</p>
+                <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-[#fbfbfa] p-4 text-sm leading-6 text-ink">{deployDraft.copyText}</pre>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/95 p-4 text-ink">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-copper">Walkthrough</p>
+                <ol className="mt-3 space-y-3">
+                  {deployDraft.steps.map((step, index) => (
+                    <li className="grid grid-cols-[28px_1fr] gap-3 text-sm leading-6 text-graphite" key={step}>
+                      <span className="flex size-7 items-center justify-center rounded-full bg-ink text-xs font-black text-white">{index + 1}</span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+            {copyMessage ? <p className="mt-3 text-sm font-black text-amber-200">{copyMessage}</p> : null}
+          </div>
+        ) : null}
       </Panel>
     </section>
   );
@@ -1557,6 +1625,178 @@ function ServiceMetric({ detail, label, tone, value }: { detail: string; label: 
 
 function ServiceRecommendation({ action, detail, onApply }: { action: string; detail: string; onApply: () => void }) {
   return <div className="flex items-center gap-3 rounded-xl border border-ink/10 bg-[#fbfbfa] p-3"><Gauge className="size-5 shrink-0 text-amber-500" /><div className="min-w-0 flex-1"><p className="text-sm font-black text-ink">{action}</p><p className="mt-1 text-xs text-graphite/70">{detail}</p></div><button className="rounded-full border border-teal-300 px-3 py-1.5 text-xs font-black text-teal-700 hover:bg-teal-50" onClick={onApply} type="button">Apply</button></div>;
+}
+
+type ServiceDeployActionLabel = "Google Ads" | "GBP post" | "Social post" | "Email campaign" | "Review request" | "HighLevel workflow";
+
+function buildServiceDeployDraft(
+  action: ServiceDeployActionLabel,
+  analysis: BusinessProfile,
+  funnel: RevenueFunnelPayload | undefined,
+  bestSource: RevenueFunnelPayload["sourceIntelligence"][number] | undefined,
+  dateRange: GlobalDateRange,
+) {
+  const company = analysis.companyName || "Comfort Guardians";
+  const city = analysis.serviceAreas[0] || "your area";
+  const phone = analysis.phone || "Call us today";
+  const calls = funnel?.phoneCalls ?? 0;
+  const missed = funnel?.missedCalls ?? 0;
+  const wonJobs = funnel?.wonJobs ?? funnel?.wonOpportunities ?? 0;
+  const revenue = Math.round(funnel?.estimatedRevenue ?? funnel?.revenue ?? 0);
+  const source = bestSource?.channel && bestSource.channel !== "Unknown" ? bestSource.channel : "current service demand";
+  const range = `${dateRange.startDate} to ${dateRange.endDate}`;
+
+  const drafts: Record<ServiceDeployActionLabel, { copyText: string; label: string; reason: string; steps: string[]; title: string }> = {
+    "Google Ads": {
+      label: "Google Ads",
+      title: `Paused campaign review for ${city}`,
+      reason: `Use this as a copy/paste brief before creating or updating Google Ads. Campaigns should remain paused until tracking and owner approval are confirmed.`,
+      copyText: [
+        `Google Ads Launch Review - ${company}`,
+        `Date range reviewed: ${range}`,
+        "",
+        `Recommended focus: AC Repair / HVAC Repair in ${city}`,
+        `Current CRM signal: ${calls} calls, ${missed} missed calls, ${wonJobs} won jobs, $${revenue.toLocaleString()} estimated revenue.`,
+        `Best visible source: ${source}`,
+        "",
+        "Campaign build notes:",
+        "- Create campaigns in PAUSED status.",
+        "- Prioritize exact and phrase match keywords.",
+        "- Confirm phone number and call tracking before posting.",
+        "- Add starter HVAC negative keywords before launch.",
+        "- Review landing page CTA and service-area relevance.",
+        "",
+        "Suggested next step: import/review the Google Ads Editor package, then approve launch only after tracking is confirmed.",
+      ].join("\n"),
+      steps: [
+        "Open Google Ads Editor or the Google Ads Deployment module.",
+        "Create or review the recommended campaigns in paused status.",
+        "Confirm phone tracking, form tracking, location targeting, and negative keywords.",
+        "Send the draft for owner approval before posting anything live.",
+      ],
+    },
+    "GBP post": {
+      label: "Google Business Profile",
+      title: `GBP service update for ${city}`,
+      reason: "Use this as a practical Google Business Profile post draft tied to current service demand.",
+      copyText: [
+        `${company} service update`,
+        "",
+        `Homeowners in ${city}: if your system is struggling to keep up, making unusual noises, or running longer than normal, it may be time to schedule service before the issue gets worse. 🏠❄️`,
+        "",
+        `Our team can help with AC repair, HVAC repair, maintenance, and comfort concerns across the service area.`,
+        "",
+        `Call ${phone} to request service.`,
+        "",
+        "#HVACService #ACRepair #HomeComfort #LocalHVAC",
+      ].join("\n"),
+      steps: [
+        "Open the Google Business Profile dashboard.",
+        "Create a new update post.",
+        "Paste the draft, review for accuracy, and add a relevant service image if available.",
+        "Publish only after confirming the phone number and service area are correct.",
+      ],
+    },
+    "Social post": {
+      label: "Social Media",
+      title: `Owner-friendly social post for ${city}`,
+      reason: "Use this for Facebook, Instagram, or LinkedIn. It builds trust without making unsupported claims.",
+      copyText: [
+        `Is your HVAC system working harder than usual? 🌡️`,
+        "",
+        `Small issues can turn into uncomfortable days fast, especially when temperatures climb. If you notice weak airflow, warm air, short cycling, or unusual sounds, it is worth getting it checked.`,
+        "",
+        `${company} helps homeowners in ${city} with practical HVAC service and repair options.`,
+        "",
+        `Call ${phone} to request service.`,
+        "",
+        "#ACRepair #HVACService #HomeComfort #CoolingSeason #LocalBusiness",
+      ].join("\n"),
+      steps: [
+        "Open the preferred social channel.",
+        "Paste the draft and add a real team, truck, thermostat, or job-site image.",
+        "Keep comments monitored for service questions.",
+        "If a homeowner asks for help, move them into HighLevel immediately.",
+      ],
+    },
+    "Email campaign": {
+      label: "Email Campaign",
+      title: `Service reminder email for ${company}`,
+      reason: "Use this as a simple customer email draft. It avoids guarantees and focuses on timely maintenance or repair action.",
+      copyText: [
+        "Subject: Is your HVAC system ready for the next stretch of weather?",
+        "",
+        `Hi {{contact.first_name}},`,
+        "",
+        `If your HVAC system has been running longer than usual, blowing warm air, or making new noises, now is a good time to schedule service before a small issue becomes more disruptive.`,
+        "",
+        `${company} can help with HVAC repair, AC service, maintenance, and comfort concerns in ${city}.`,
+        "",
+        `Call ${phone} or reply to this email to request service.`,
+        "",
+        "Thank you,",
+        company,
+      ].join("\n"),
+      steps: [
+        "Open HighLevel email builder or your email platform.",
+        "Paste the subject and body.",
+        "Send to recent customers or active homeowner contacts, not cold purchased lists.",
+        "Track replies, calls, and booked appointments back to HighLevel.",
+      ],
+    },
+    "Review request": {
+      label: "Review Request",
+      title: `Review request for completed jobs`,
+      reason: `${wonJobs} won job${wonJobs === 1 ? "" : "s"} are visible in the selected range. Completed work is the best review opportunity.`,
+      copyText: [
+        `Hi {{contact.first_name}}, this is ${company}. Thank you for trusting us with your HVAC service.`,
+        "",
+        "If everything went well, would you mind leaving us a quick Google review? It helps local homeowners know who they can call when they need help.",
+        "",
+        "{{review_link}}",
+        "",
+        "Thank you again.",
+      ].join("\n"),
+      steps: [
+        "Open HighLevel contacts or opportunities marked completed/won.",
+        "Use only customers with completed work and a good service outcome.",
+        "Paste the message into SMS or email with the correct review link.",
+        "Do not pressure customers or offer incentives for reviews.",
+      ],
+    },
+    "HighLevel workflow": {
+      label: "HighLevel Workflow",
+      title: "Missed-call follow-up workflow draft",
+      reason: `${missed} missed call${missed === 1 ? "" : "s"} are visible in the selected range. This should be reviewed before scaling spend.`,
+      copyText: [
+        "Workflow Draft: Missed Call Follow-Up",
+        "",
+        "Trigger:",
+        "- Customer call status = missed / unanswered / no answer",
+        "",
+        "Step 1: Send SMS immediately",
+        `"Hi {{contact.first_name}}, this is ${company}. Sorry we missed your call. Do you still need help with your HVAC system? Reply here or call ${phone} and we will help as soon as possible."`,
+        "",
+        "Step 2: Create internal task",
+        "- Task title: Return missed HVAC call",
+        "- Due: immediately",
+        "- Assigned to: CSR / office team",
+        "",
+        "Step 3: If no response after 15 minutes",
+        "- Send internal notification to follow up again.",
+        "",
+        "Status: Draft / inactive until reviewed.",
+      ].join("\n"),
+      steps: [
+        "Open HighLevel Workflows.",
+        "Create a new workflow in draft/inactive status.",
+        "Add the missed-call trigger and paste the SMS/task steps.",
+        "Test with one internal record before enabling.",
+      ],
+    },
+  };
+
+  return drafts[action];
 }
 
 function PlatformNav({
