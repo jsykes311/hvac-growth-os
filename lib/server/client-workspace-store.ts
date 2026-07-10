@@ -3,6 +3,7 @@ import os from "os";
 import path from "path";
 import { Pool } from "pg";
 import type { AnalyzedPage, BusinessProfile } from "@/lib/types";
+import { recordComfortGuardiansHistoryEvent } from "@/lib/server/history-store";
 
 export type SavedClientWorkspace = {
   clientId: string;
@@ -93,12 +94,37 @@ async function saveClientWorkspace(input: {
        do update set payload = excluded.payload, updated_at = now()`,
       [input.clientId, workspace],
     );
+    await recordWorkspaceScan(workspace);
     return workspace;
   }
 
   await mkdir(path.dirname(fileStorePath(input.clientId)), { recursive: true });
   await writeFile(fileStorePath(input.clientId), JSON.stringify(workspace, null, 2), "utf8");
+  await recordWorkspaceScan(workspace);
   return workspace;
+}
+
+async function recordWorkspaceScan(workspace: SavedClientWorkspace) {
+  await recordComfortGuardiansHistoryEvent({
+    eventType: "website_scan",
+    payload: {
+      profile: workspace.profile,
+      scrapedPages: workspace.scrapedPages,
+      websiteUrl: workspace.websiteUrl,
+    },
+    source: "Website Scan",
+    summary: {
+      aiVisibilityScore: workspace.profile.aiSeoAnalysis?.score ?? 0,
+      companyName: workspace.profile.companyName,
+      growthScore: workspace.profile.growthScore,
+      pageCount: workspace.scrapedPages.length,
+      phone: workspace.profile.phone,
+      serviceAreaCount: workspace.profile.serviceAreas.length,
+      serviceCount: workspace.profile.services.length,
+      seoScore: workspace.profile.seoAnalysis?.score ?? 0,
+      websiteUrl: workspace.websiteUrl,
+    },
+  });
 }
 
 async function ensureClientWorkspaceTable() {

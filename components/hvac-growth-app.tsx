@@ -66,6 +66,21 @@ type SavedClientWorkspace = {
   updatedAt: string;
   websiteUrl: string;
 };
+type HistoryEvent = {
+  id: string;
+  clientId: string;
+  createdAt: string;
+  eventType: string;
+  metricDate: string;
+  source: string;
+  summary: Record<string, unknown>;
+};
+type HistorySummary = {
+  clientId: string;
+  eventCounts: Record<string, number>;
+  latestEvents: HistoryEvent[];
+  totalEvents: number;
+};
 type ReadinessItem = {
   complete: boolean;
   detail: string;
@@ -2758,6 +2773,7 @@ function ClientWorkspace({
       </Panel>
       <div className="grid gap-5">
         <ClientTimeline ppcPlan={ppcPlan} />
+        <ComfortGuardiansHistoryPanel />
         <Panel>
           <h2 className="text-lg font-black text-ink">Workspace Architecture</h2>
           <BulletList
@@ -2772,6 +2788,114 @@ function ClientWorkspace({
       </div>
     </div>
   );
+}
+
+function ComfortGuardiansHistoryPanel() {
+  const [events, setEvents] = useState<HistoryEvent[]>([]);
+  const [summary, setSummary] = useState<HistorySummary | null>(null);
+  const [message, setMessage] = useState("Loading history...");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHistory() {
+      try {
+        const response = await fetch("/api/history?limit=25", { cache: "no-store" });
+        const payload = (await response.json()) as { events?: HistoryEvent[]; summary?: HistorySummary; error?: string };
+        if (!response.ok) throw new Error(payload.error || "History could not be loaded.");
+        if (cancelled) return;
+        setEvents(payload.events ?? []);
+        setSummary(payload.summary ?? null);
+        setMessage("");
+      } catch (error) {
+        if (cancelled) return;
+        setEvents([]);
+        setSummary(null);
+        setMessage(error instanceof Error ? error.message : "History could not be loaded.");
+      }
+    }
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const counts = summary?.eventCounts ?? {};
+
+  return (
+    <Panel>
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <div>
+          <h2 className="text-lg font-black text-ink">Comfort Guardians Storage History</h2>
+          <p className="mt-2 text-sm leading-6 text-graphite/70">
+            Durable Supabase/Postgres history for scans, platform syncs, and future Intelligence Memory events.
+          </p>
+        </div>
+        <span className="rounded-full border border-ink/10 bg-[#fbfbfa] px-3 py-2 text-xs font-black text-copper">
+          {summary?.totalEvents ?? 0} saved event{(summary?.totalEvents ?? 0) === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <InfoTile label="Website scans" value={`${counts.website_scan ?? 0}`} />
+        <InfoTile label="Google Ads syncs" value={`${counts.google_ads_sync ?? 0}`} />
+        <InfoTile label="HighLevel syncs" value={`${counts.highlevel_sync ?? 0}`} />
+        <InfoTile label="GBP syncs" value={`${counts.google_business_profile_sync ?? 0}`} />
+      </div>
+      {message ? (
+        <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
+          {message}
+        </p>
+      ) : (
+        <div className="mt-4 grid gap-3">
+          {events.slice(0, 5).map((event) => (
+            <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={event.id}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-ink">{historyEventLabel(event.eventType)}</p>
+                  <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-graphite/55">
+                    {event.source} | {new Date(event.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-graphite/70">{event.metricDate}</span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-graphite/70">{historySummaryText(event)}</p>
+            </div>
+          ))}
+          {!events.length && (
+            <p className="rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">
+              No saved history yet. Save a workspace scan or refresh a connected app to create the first Comfort Guardians history event.
+            </p>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function historyEventLabel(eventType: string) {
+  const labels: Record<string, string> = {
+    google_ads_sync: "Google Ads performance snapshot",
+    google_business_profile_sync: "Google Business Profile snapshot",
+    highlevel_sync: "HighLevel revenue snapshot",
+    website_scan: "Website intelligence scan",
+  };
+  return labels[eventType] || eventType.replace(/_/g, " ");
+}
+
+function historySummaryText(event: HistoryEvent) {
+  const summary = event.summary;
+  if (event.eventType === "website_scan") {
+    return `Growth ${summary.growthScore ?? 0}, SEO ${summary.seoScore ?? 0}, AI visibility ${summary.aiVisibilityScore ?? 0}, ${summary.pageCount ?? 0} page(s) saved.`;
+  }
+  if (event.eventType === "google_ads_sync") {
+    return `${summary.campaigns ?? 0} campaign(s), ${summary.clicks ?? 0} clicks, $${Number(summary.cost ?? 0).toLocaleString()} spend, ${summary.conversions ?? 0} conversion(s).`;
+  }
+  if (event.eventType === "highlevel_sync") {
+    return `${summary.calls ?? 0} calls, ${summary.missedCalls ?? 0} missed calls, ${summary.opportunities ?? 0} opportunities, ${summary.wonJobs ?? 0} won job(s), $${Number(summary.revenue ?? 0).toLocaleString()} revenue.`;
+  }
+  if (event.eventType === "google_business_profile_sync") {
+    return `${summary.locations ?? 0} location(s), ${summary.reviews ?? 0} reviews, ${Number(summary.averageRating ?? 0).toFixed(1)} average rating, ${summary.posts ?? 0} post(s).`;
+  }
+  return "History event saved for future Intelligence Memory.";
 }
 
 function DeployCenter({

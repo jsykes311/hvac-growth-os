@@ -43,6 +43,16 @@ HVAC_GROWTH_OS_USERS='[
 
 Supported roles are `Admin`, `TallTwin Team`, `Client`, and `Viewer`. Public signup is disabled; approved users are added manually through `HVAC_GROWTH_OS_USERS`.
 
+Comfort Guardians storage:
+
+When `DATABASE_URL` or `POSTGRES_URL` points to Supabase Postgres, HVAC Growth OS stores Comfort Guardians history in durable tables:
+
+- `hvac_growth_os_client_workspaces`: latest saved website scan, profile, and scraped page list
+- `hvac_growth_os_credential_stores`: encrypted connector payloads for Google Ads, GBP, and HighLevel
+- `hvac_growth_os_history_events`: append-only scan and performance snapshots for Intelligence Memory
+
+History events are currently written for website scans, Google Ads syncs, HighLevel syncs, and Google Business Profile syncs. If no database URL is configured, the app falls back to temporary files in `/tmp`, which can be lost on Render restarts.
+
 Google login variables:
 
 ```bash
