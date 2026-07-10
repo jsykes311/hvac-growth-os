@@ -4271,24 +4271,30 @@ function PerformanceUploadsSection({ globalDateRange, setActiveSection }: { glob
     }
   }
 
-  async function handleUpload(source: "google_ads" | "google_business_profile", file: File | null) {
-    if (!file || isUploading) return;
+  async function handleUpload(source: "google_ads" | "google_business_profile", files: File[] | FileList | null) {
+    const fileList = Array.from(files ?? []);
+    if (!fileList.length || isUploading) return;
     setMessage("");
     setIsUploading(source);
     try {
-      const isZip = /\.zip$/i.test(file.name);
-      const body = isZip
-        ? { fileBase64: await fileToBase64(file), fileName: file.name, metricDate, source }
-        : { csv: await file.text(), fileName: file.name, metricDate, source };
+      const uploadFiles = await Promise.all(fileList.map(async (file) => ({
+        content: /\.zip$/i.test(file.name) ? await fileToBase64(file) : await file.text(),
+        fileName: file.name,
+      })));
       const response = await fetch("/api/uploads/marketing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          fileName: fileList.length === 1 ? fileList[0].name : `${source}-performance-package`,
+          files: uploadFiles,
+          metricDate,
+          source,
+        }),
       });
       const payload = (await response.json()) as { summary?: MarketingUploadSummary; uploads?: MarketingUploadsPayload } & ApiError;
       if (!response.ok) throw new Error(payload.error || "The file could not be processed.");
       setUploads(payload.uploads ?? uploads);
-      setMessage(`${source === "google_ads" ? "Google Ads" : "Google Business Profile"} ${isZip ? "ZIP" : "CSV"} upload saved: ${payload.summary?.rows ?? 0} rows.`);
+      setMessage(`${source === "google_ads" ? "Google Ads" : "Google Business Profile"} upload saved: ${payload.summary?.rows ?? 0} rows from ${fileList.length} file${fileList.length === 1 ? "" : "s"}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The file could not be processed.");
     } finally {
@@ -4346,7 +4352,7 @@ function PerformanceUploadsSection({ globalDateRange, setActiveSection }: { glob
           busy={isUploading === "google_ads"}
           description="Use this for campaign, keyword, search term, or account performance exports. Upload one CSV or a ZIP containing multiple CSVs."
           icon={<Target className="size-5" aria-hidden="true" />}
-          onUpload={(file) => handleUpload("google_ads", file)}
+          onUpload={(files) => handleUpload("google_ads", files)}
           summary={uploads.googleAds}
           title="Google Ads Metrics"
         />
@@ -4355,7 +4361,7 @@ function PerformanceUploadsSection({ globalDateRange, setActiveSection }: { glob
           busy={isUploading === "google_business_profile"}
           description="Use this for Google Business Profile performance exports. Upload one CSV or a ZIP containing multiple CSVs."
           icon={<Globe2 className="size-5" aria-hidden="true" />}
-          onUpload={(file) => handleUpload("google_business_profile", file)}
+          onUpload={(files) => handleUpload("google_business_profile", files)}
           summary={uploads.googleBusinessProfile}
           title="GBP Performance"
         />
@@ -4377,10 +4383,12 @@ function UploadCard({
   busy: boolean;
   description: string;
   icon: ReactNode;
-  onUpload: (file: File | null) => void;
+  onUpload: (files: File[] | FileList | null) => void;
   summary: MarketingUploadSummary | null;
   title: string;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
+
   return (
     <Panel>
       <div className="flex items-start justify-between gap-4">
@@ -4396,15 +4404,35 @@ function UploadCard({
         </span>
       </div>
       <p className="mt-4 text-sm leading-6 text-graphite/70">{description}</p>
-      <label className="mt-5 flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-ink/20 bg-white/70 px-4 py-6 text-center transition hover:border-flame/45 hover:bg-white">
+      <label
+        className={`mt-5 flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center transition ${isDragging ? "border-flame bg-amber-50" : "border-ink/20 bg-white/70 hover:border-flame/45 hover:bg-white"}`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setIsDragging(false);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setIsDragging(false);
+          onUpload(Array.from(event.dataTransfer.files));
+        }}
+      >
         <Upload className="size-6 text-ink" aria-hidden="true" />
-        <span className="mt-3 text-sm font-black text-ink">{busy ? "Uploading..." : "Choose CSV or ZIP file"}</span>
-        <span className="mt-1 text-xs font-bold text-graphite/55">ZIPs can contain multiple Google CSV exports</span>
+        <span className="mt-3 text-sm font-black text-ink">{busy ? "Uploading..." : "Drop CSV/ZIP files here"}</span>
+        <span className="mt-1 text-xs font-bold text-graphite/55">or click to choose one or many files</span>
         <input
           accept={accept}
           className="hidden"
           disabled={busy}
-          onChange={(event) => onUpload(event.currentTarget.files?.[0] ?? null)}
+          multiple
+          onChange={(event) => onUpload(event.currentTarget.files)}
           type="file"
         />
       </label>

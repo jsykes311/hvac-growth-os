@@ -24,18 +24,18 @@ export type MarketingUploadSummary = {
 
 export async function saveMarketingPerformanceUpload(input: {
   csv: string;
+  files?: Array<{ content: string; fileName: string }>;
   fileName: string;
   metricDate?: string;
   source: MarketingUploadSource;
 }) {
-  const parsedFiles = input.fileName.toLowerCase().endsWith(".zip")
-    ? parseZipCsvFiles(Buffer.from(input.csv, "base64"))
-    : [{ fileName: input.fileName, parsed: parseCsv(input.csv) }];
+  const uploadFiles = input.files?.length ? input.files : [{ content: input.csv, fileName: input.fileName }];
+  const parsedFiles = uploadFiles.flatMap((file) => parseUploadFile(file.content, file.fileName));
   const parsed = mergeParsedCsvFiles(parsedFiles);
-  if (!parsed.rows.length) throw new Error(input.fileName.toLowerCase().endsWith(".zip") ? "No CSV rows were found inside the uploaded ZIP." : "No rows were found in the uploaded CSV.");
+  if (!parsed.rows.length) throw new Error("No CSV rows were found in the uploaded file package.");
 
   const summary = summarizeUpload(input.source, parsed.rows, {
-    fileName: input.fileName || "uploaded-performance.csv",
+    fileName: uploadFiles.length > 1 ? `${input.fileName || "performance-upload"} (${uploadFiles.length} files)` : input.fileName || "uploaded-performance.csv",
     metricDate: input.metricDate || new Date().toISOString().slice(0, 10),
   });
 
@@ -54,6 +54,12 @@ export async function saveMarketingPerformanceUpload(input: {
   });
 
   return summary;
+}
+
+function parseUploadFile(content: string, fileName: string) {
+  return fileName.toLowerCase().endsWith(".zip")
+    ? parseZipCsvFiles(Buffer.from(content, "base64"))
+    : [{ fileName, parsed: parseCsv(content) }];
 }
 
 export async function getLatestMarketingPerformanceUploads(range: { endDate?: string; startDate?: string } = {}) {
