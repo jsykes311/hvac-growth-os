@@ -37,6 +37,7 @@ export type HighLevelRecord = {
   stage?: string;
   value?: number;
   createdAt?: string;
+  rawText?: string;
   type?: string;
 };
 
@@ -775,7 +776,21 @@ function firstArray(payload: any, keys: string[]) {
 function normalizeRecord(item: any): HighLevelRecord {
   const firstName = item.firstName || item.first_name || "";
   const lastName = item.lastName || item.last_name || "";
-  const type = item.type || item.messageType || item.message_type || item.eventType || item.callStatus || item.call_status || item.direction || "";
+  const callSignalText = highLevelSignalText(item);
+  const direction = firstValue(item.direction, item.callDirection, item.call_direction, item.messageDirection, item.message_direction);
+  const callStatus = firstValue(
+    item.callStatus,
+    item.call_status,
+    item.callResult,
+    item.call_result,
+    item.callOutcome,
+    item.call_outcome,
+    item.disposition,
+    item.result,
+    item.outcome,
+  );
+  const messageStatus = firstValue(item.messageStatus, item.message_status, item.deliveryStatus, item.delivery_status);
+  const type = firstValue(item.type, item.messageType, item.message_type, item.eventType, item.event_type, item.communicationType, item.communication_type, callStatus, direction);
   const name = item.name || item.fullName || item.title || item.body || item.subject || [firstName, lastName].filter(Boolean).join(" ") || item.email || item.phone || item.id || item._id || "Unnamed";
   return {
     createdAt: item.createdAt || item.dateAdded || item.created_at || item.updatedAt || "",
@@ -783,14 +798,15 @@ function normalizeRecord(item: any): HighLevelRecord {
     name: String(name),
     source: item.source || item.contactSource || item.attributionSource || item.campaignName || item.campaign || "",
     stage: item.pipelineStageId || item.stageId || item.status || item.stage || item.pipelineStageName || "",
-    status: item.status || item.callStatus || item.call_status || item.messageStatus || item.message_status || item.type || item.eventType || "",
+    rawText: callSignalText,
+    status: firstValue(item.status, callStatus, messageStatus, item.type, item.eventType, item.event_type),
     type: String(type),
     value: Number(item.monetaryValue ?? item.value ?? item.pipelineValue ?? item.opportunityValue ?? 0),
   };
 }
 
 function isCallRecord(record: HighLevelRecord) {
-  return /call|phone|voicemail|missed/i.test(`${record.type} ${record.status} ${record.name} ${record.source}`);
+  return /call|phone|voicemail|missed|inbound|outbound|type_phone/i.test(`${record.type} ${record.status} ${record.name} ${record.source} ${record.rawText}`);
 }
 
 function uniqueRecords(records: HighLevelRecord[]) {
@@ -972,7 +988,45 @@ function sourceRecommendation(channel: RevenueFunnelPayload["sourceIntelligence"
 }
 
 function countMissedCalls(calls: HighLevelRecord[]) {
-  return calls.filter((item) => /missed|no answer|unanswered/i.test(`${item.type} ${item.status} ${item.name} ${item.source}`)).length;
+  return calls.filter(isMissedCallRecord).length;
+}
+
+function isMissedCallRecord(item: HighLevelRecord) {
+  const text = `${item.type} ${item.status} ${item.name} ${item.source} ${item.rawText}`.toLowerCase();
+  if (/missed|no[\s_-]?answer|unanswered|not[\s_-]?answered|did[\s_-]?not[\s_-]?answer|abandoned|voicemail|voice[\s_-]?mail|busy|failed/.test(text)) return true;
+
+  const inbound = /\binbound\b|incoming|call_inbound|inbound_call|direction[\s":_-]+inbound|type_phone/.test(text);
+  const answeredFalse = /answered[\s":_-]+false|isanswered[\s":_-]+false|callanswered[\s":_-]+false|answeredby[\s":_-]+none/.test(text);
+  const completedFalse = /completed[\s":_-]+false|connected[\s":_-]+false/.test(text);
+  const zeroDuration = /duration[\s":_-]+0|callduration[\s":_-]+0|call_duration[\s":_-]+0|talktime[\s":_-]+0|talk_time[\s":_-]+0/.test(text);
+  return inbound && (answeredFalse || completedFalse || zeroDuration);
+}
+
+function firstValue(...values: unknown[]) {
+  const value = values.find((item) => item !== undefined && item !== null && String(item).trim() !== "");
+  return value === undefined ? "" : String(value);
+}
+
+function highLevelSignalText(item: any, depth = 0): string {
+  if (!item || depth > 3) return "";
+  if (typeof item !== "object") return String(item);
+
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(item)) {
+    const normalizedKey = key.toLowerCase();
+    const signalKey = /call|phone|status|direction|answer|answered|duration|talk|voicemail|voice|result|outcome|disposition|recording|type|message/.test(normalizedKey);
+    if (value === undefined || value === null) continue;
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      const stringValue = String(value);
+      if (signalKey || /missed|no answer|unanswered|voicemail|inbound|outbound|type_phone|answered|busy|failed/i.test(stringValue)) {
+        parts.push(`${normalizedKey}:${stringValue}`);
+      }
+    } else if (signalKey || depth < 2) {
+      const nested = highLevelSignalText(value, depth + 1);
+      if (nested) parts.push(`${normalizedKey}:{${nested}}`);
+    }
+  }
+  return parts.join(" ");
 }
 
 function buildSnapshots(
