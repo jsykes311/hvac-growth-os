@@ -8,8 +8,10 @@ const COMFORT_GUARDIANS_CLIENT_ID = "comfort-guardians";
 export type HistoryEventType =
   | "website_scan"
   | "google_ads_sync"
+  | "google_ads_upload"
   | "highlevel_sync"
   | "google_business_profile_sync"
+  | "google_business_profile_upload"
   | "decision"
   | "deployment"
   | "intelligence_memory";

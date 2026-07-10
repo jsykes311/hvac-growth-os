@@ -104,6 +104,15 @@ export type HighLevelSnapshot = {
   wonJobs: number;
 };
 
+export type HighLevelSyncDiagnostic = {
+  endpoint: string;
+  label: string;
+  message: string;
+  pages: number;
+  records: number;
+  status: "OK" | "Empty" | "Error";
+};
+
 export type HighLevelDataPayload = {
   activeLocationId: string;
   connectedLocation: string;
@@ -128,6 +137,7 @@ export type HighLevelDataPayload = {
   revenueFunnel: RevenueFunnelPayload;
   snapshots: HighLevelSnapshot[];
   syncAlerts: string[];
+  syncDiagnostics: HighLevelSyncDiagnostic[];
 };
 
 type HighLevelStore = {
@@ -418,33 +428,41 @@ async function fetchHighLevelData(
   syncRange: Required<HighLevelDateRange>,
 ): Promise<HighLevelDataPayload> {
   const dateQuery = highLevelDateQuery(syncRange);
+  const diagnostics: HighLevelSyncDiagnostic[] = [];
   const [
     location,
-    contacts,
-    opportunities,
+    contactsRead,
+    opportunitiesRead,
     pipelines,
-    conversations,
-    calls,
+    conversationsRead,
+    callsRead,
     calendars,
     forms,
-    formSubmissions,
+    formSubmissionsRead,
     tags,
     workflows,
     customFields,
   ] = await Promise.all([
     highLevelGet(accessToken, `/locations/${locationId}`),
-    highLevelGet(accessToken, `/contacts/?locationId=${encodeURIComponent(locationId)}${dateQuery}`),
-    highLevelGet(accessToken, `/opportunities/search?location_id=${encodeURIComponent(locationId)}${dateQuery}`),
+    highLevelGetCollection(accessToken, "Contacts", `/contacts/?locationId=${encodeURIComponent(locationId)}${dateQuery}`, ["contacts"]),
+    highLevelGetCollection(accessToken, "Opportunities", `/opportunities/search?location_id=${encodeURIComponent(locationId)}${dateQuery}`, ["opportunities"]),
     highLevelGet(accessToken, `/opportunities/pipelines?locationId=${encodeURIComponent(locationId)}`),
-    highLevelGet(accessToken, `/conversations/search?locationId=${encodeURIComponent(locationId)}${dateQuery}`),
-    highLevelGet(accessToken, `/conversations/search?locationId=${encodeURIComponent(locationId)}&type=CALL${dateQuery}`),
+    highLevelGetCollection(accessToken, "Conversations", `/conversations/search?locationId=${encodeURIComponent(locationId)}${dateQuery}`, ["conversations"]),
+    highLevelGetCollection(accessToken, "Calls", `/conversations/search?locationId=${encodeURIComponent(locationId)}&type=CALL${dateQuery}`, ["conversations", "calls", "messages"]),
     highLevelGet(accessToken, `/calendars/?locationId=${encodeURIComponent(locationId)}`),
     highLevelGet(accessToken, `/forms/?locationId=${encodeURIComponent(locationId)}`),
-    highLevelGet(accessToken, `/forms/submissions?locationId=${encodeURIComponent(locationId)}${dateQuery}`),
+    highLevelGetCollection(accessToken, "Form submissions", `/forms/submissions?locationId=${encodeURIComponent(locationId)}${dateQuery}`, ["submissions", "formSubmissions", "forms"]),
     highLevelGet(accessToken, `/locations/${locationId}/tags`),
     highLevelGet(accessToken, `/workflows/?locationId=${encodeURIComponent(locationId)}`),
     highLevelGet(accessToken, `/locations/${locationId}/customFields`),
   ]);
+  diagnostics.push(contactsRead.diagnostic, opportunitiesRead.diagnostic, conversationsRead.diagnostic, callsRead.diagnostic, formSubmissionsRead.diagnostic);
+
+  const contacts = contactsRead.payload;
+  const opportunities = opportunitiesRead.payload;
+  const conversations = conversationsRead.payload;
+  const calls = callsRead.payload;
+  const formSubmissions = formSubmissionsRead.payload;
 
   const locationRecord = normalizeRecords(location, ["location", "locations"])[0] ?? { id: locationId, name: locationId };
   const normalizedContacts = filterRecordsByDateRange(normalizeRecords(contacts, ["contacts"]), syncRange);
@@ -463,8 +481,11 @@ async function fetchHighLevelData(
     stage: stageNameLookup.get(opportunity.stage || "") || opportunity.stage || opportunity.status || "",
   }));
   const syncAlerts = [
+    ...(normalizedContacts.length ? [] : ["No contacts returned for this date range. Try a wider range, or confirm the token can read contacts for this location."]),
+    ...(opportunitiesWithStageNames.length ? [] : ["No opportunities returned for this date range. If Comfort Guardians uses custom pipelines, confirm opportunities are stored in this location and the token has opportunities read access."]),
     ...(normalizedCalls.length ? [] : [`No call data found. HVAC Growth OS read ${normalizedConversations.length} conversations, but HighLevel did not expose call-type events from conversation search or message history.`]),
     ...(normalizedFormSubmissions.length ? [] : ["No form submission data found. Confirm forms are connected to this location or that form-submission access is available."]),
+    ...diagnostics.filter((item) => item.status === "Error").map((item) => `${item.label}: ${item.message}`),
   ];
   const revenueFunnel = buildRevenueFunnel(normalizedContacts, opportunitiesWithStageNames, normalizedCalls, normalizedFormSubmissions, normalizedConversations);
   const lastSyncAt = new Date().toISOString();
@@ -496,6 +517,15 @@ async function fetchHighLevelData(
     snapshots,
     syncRange,
     syncAlerts,
+    syncDiagnostics: [
+      ...diagnostics,
+      diagnosticFromPayload("Pipelines", `/opportunities/pipelines?locationId=${encodeURIComponent(locationId)}`, pipelines, ["pipelines"]),
+      diagnosticFromPayload("Calendars", `/calendars/?locationId=${encodeURIComponent(locationId)}`, calendars, ["calendars"]),
+      diagnosticFromPayload("Forms", `/forms/?locationId=${encodeURIComponent(locationId)}`, forms, ["forms"]),
+      diagnosticFromPayload("Tags", `/locations/${locationId}/tags`, tags, ["tags"]),
+      diagnosticFromPayload("Workflows", `/workflows/?locationId=${encodeURIComponent(locationId)}`, workflows, ["workflows"]),
+      diagnosticFromPayload("Custom fields", `/locations/${locationId}/customFields`, customFields, ["customFields", "custom_fields"]),
+    ],
     tags: normalizeRecords(tags, ["tags"]),
     workflows: normalizeRecords(workflows, ["workflows"]),
   };
@@ -572,14 +602,100 @@ async function highLevelGet(accessToken: string, endpoint: string) {
       if (response.status === 403) throw new HighLevelSyncError("Missing location access. The connected HighLevel user or token cannot read this Comfort Guardians location.", 403);
       if (response.status === 404 && endpoint.startsWith("/locations/")) throw new HighLevelSyncError("Missing location access. The configured HighLevel location ID was not found for this token.", 404);
       if (response.status === 429) throw new HighLevelSyncError("API rate limited. HighLevel asked HVAC Growth OS to slow down. Wait a few minutes, then refresh data again.", 429);
-      return {};
+      return { __highLevelError: humanReadableHighLevelPayload(payload) || `HighLevel returned ${response.status}.`, __highLevelStatus: response.status };
     }
     return payload;
   } catch (error) {
     if (error instanceof HighLevelSyncError) throw error;
     console.error("HighLevel read failed", endpoint, error);
-    return {};
+    return { __highLevelError: "HighLevel could not be reached for this data set.", __highLevelStatus: 0 };
   }
+}
+
+async function highLevelGetCollection(accessToken: string, label: string, endpoint: string, keys: string[]) {
+  const records: any[] = [];
+  const seen = new Set<string>();
+  let pages = 0;
+  let errorMessage = "";
+  const limit = 100;
+  const maxPages = 12;
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const pagedEndpoint = withPagination(endpoint, page, limit);
+    const payload = await highLevelGet(accessToken, pagedEndpoint);
+    pages += 1;
+
+    if (payload?.__highLevelError) {
+      errorMessage = String(payload.__highLevelError);
+      break;
+    }
+
+    const pageRecords = firstArray(payload, keys);
+    const newRecords = pageRecords.filter((item: any) => {
+      const key = String(item?.id || item?._id || item?.messageId || item?.conversationId || `${item?.name || item?.fullName || ""}-${item?.createdAt || item?.dateAdded || ""}`);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    records.push(...newRecords);
+
+    if (!pageRecords.length || pageRecords.length < limit || !collectionMayHaveMore(payload, page, limit, records.length)) break;
+  }
+
+  return {
+    diagnostic: {
+      endpoint,
+      label,
+      message: errorMessage || (records.length ? `Read ${records.length} record${records.length === 1 ? "" : "s"} across ${pages} page${pages === 1 ? "" : "s"}.` : "No records returned for this date range."),
+      pages,
+      records: records.length,
+      status: errorMessage ? "Error" as const : records.length ? "OK" as const : "Empty" as const,
+    },
+    payload: { [keys[0]]: records },
+  };
+}
+
+function withPagination(endpoint: string, page: number, limit: number) {
+  const [pathPart, queryPart = ""] = endpoint.split("?");
+  const params = new URLSearchParams(queryPart);
+  if (!params.has("limit")) params.set("limit", String(limit));
+  if (!params.has("page")) params.set("page", String(page));
+  return `${pathPart}?${params.toString()}`;
+}
+
+function collectionMayHaveMore(payload: any, page: number, limit: number, recordsRead: number) {
+  const total = Number(payload?.meta?.total ?? payload?.total ?? payload?.count ?? payload?.totalCount ?? 0);
+  if (total > 0) return recordsRead < total;
+  const nextPage = payload?.meta?.nextPage || payload?.nextPage || payload?.nextPageUrl;
+  if (nextPage) return true;
+  return page === 1 && recordsRead >= limit;
+}
+
+function diagnosticFromPayload(label: string, endpoint: string, payload: any, keys: string[]): HighLevelSyncDiagnostic {
+  if (payload?.__highLevelError) {
+    return {
+      endpoint,
+      label,
+      message: String(payload.__highLevelError),
+      pages: 1,
+      records: 0,
+      status: "Error",
+    };
+  }
+  const records = firstArray(payload, keys).length;
+  return {
+    endpoint,
+    label,
+    message: records ? `Read ${records} record${records === 1 ? "" : "s"}.` : "No records returned.",
+    pages: 1,
+    records,
+    status: records ? "OK" : "Empty",
+  };
+}
+
+function humanReadableHighLevelPayload(payload: any) {
+  if (!payload || typeof payload !== "object") return "";
+  return String(payload.message || payload.error || payload.error_description || payload.msg || "");
 }
 
 async function getFreshHighLevelAccessToken(store: HighLevelStore) {
@@ -984,6 +1100,7 @@ function emptyHighLevelData(activeLocationId: string, connectedLocation: string,
     snapshots,
     syncRange,
     syncAlerts: [],
+    syncDiagnostics: [],
     tags: [],
     workflows: [],
   };

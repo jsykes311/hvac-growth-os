@@ -10,6 +10,7 @@ import {
   ClipboardList,
   CloudSun,
   Download,
+  Upload,
   FileText,
   FileSearch,
   Gauge,
@@ -47,6 +48,7 @@ type PlatformSection =
   | "seo"
   | "ai-visibility"
   | "connected-apps"
+  | "uploads"
   | "conversion-tracking"
   | "ai-cmo"
   | "revenue-engine"
@@ -422,6 +424,36 @@ type HighLevelDataPayload = {
   revenueFunnel: RevenueFunnelPayload;
   snapshots: HighLevelSnapshot[];
   syncAlerts: string[];
+  syncDiagnostics: Array<{
+    endpoint: string;
+    label: string;
+    message: string;
+    pages: number;
+    records: number;
+    status: "OK" | "Empty" | "Error";
+  }>;
+};
+type MarketingUploadSummary = {
+  averageCpc?: number;
+  calls?: number;
+  clicks?: number;
+  conversions?: number;
+  cost?: number;
+  ctr?: number;
+  directionRequests?: number;
+  fileName: string;
+  impressions?: number;
+  interactions?: number;
+  messages?: number;
+  metricDate: string;
+  rows: number;
+  source: "google_ads" | "google_business_profile";
+  topRows: Array<Record<string, string | number>>;
+  websiteClicks?: number;
+};
+type MarketingUploadsPayload = {
+  googleAds: MarketingUploadSummary | null;
+  googleBusinessProfile: MarketingUploadSummary | null;
 };
 type TrackingIssueStatus = "Ready" | "Needs Work" | "Missing";
 type TrackingRecommendation = {
@@ -498,6 +530,7 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "seo", label: "SEO" },
   { id: "ai-visibility", label: "AI Visibility" },
   { id: "connected-apps", label: "Connected Apps" },
+  { id: "uploads", label: "Uploads" },
   { id: "conversion-tracking", label: "Conversion Tracking" },
   { id: "ai-cmo", label: "AI CMO" },
   { id: "revenue-engine", label: "Revenue Engine" },
@@ -521,9 +554,9 @@ export function HvacGrowthApp({
   initialSection?: PlatformSection;
 }) {
   const [contractorUrl, setContractorUrl] = useState("https://comfortguardianshvac.com");
-  const [view, setView] = useState<View>(initialSection === "service-engine" ? "results" : "home");
+  const [view, setView] = useState<View>(initialSection ? "results" : "home");
   const [activeSection, setActiveSection] = useState<PlatformSection>(initialSection ?? "morning-brief");
-  const [analysis, setAnalysis] = useState<BusinessProfile | null>(initialSection === "service-engine" ? SERVICE_ENGINE_FALLBACK_PROFILE : null);
+  const [analysis, setAnalysis] = useState<BusinessProfile | null>(initialSection ? SERVICE_ENGINE_FALLBACK_PROFILE : null);
   const [scrapedPages, setScrapedPages] = useState<AnalyzedPage[]>([]);
   const [savedWorkspace, setSavedWorkspace] = useState<SavedClientWorkspace | null>(null);
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true);
@@ -1065,6 +1098,7 @@ function ResultsView({
       {activeSection === "seo" && <SeoAnalysisPanel analysis={analysis} />}
       {activeSection === "ai-visibility" && <AiSeoAnalysisPanel analysis={analysis} />}
       {activeSection === "connected-apps" && <ConnectedAppsSection currentUser={currentUser} />}
+      {activeSection === "uploads" && <PerformanceUploadsSection setActiveSection={setActiveSection} />}
       {activeSection === "conversion-tracking" && <ConversionTrackingCenter analysis={analysis} />}
 
       {activeSection === "ai-cmo" && (
@@ -3761,6 +3795,28 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
             ))}
           </div>
         ) : null}
+        {highLevelData?.syncDiagnostics?.length ? (
+          <div className="mt-5 rounded-2xl border border-ink/10 bg-[#fbfbfa] p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h4 className="text-sm font-black text-ink">HighLevel Sync Diagnostics</h4>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-graphite/60">{highLevelData.syncDiagnostics.length} endpoints</span>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {highLevelData.syncDiagnostics.map((item) => (
+                <div className="rounded-xl border border-ink/10 bg-white p-3" key={`${item.label}-${item.endpoint}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-black text-ink">{item.label}</p>
+                    <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${item.status === "OK" ? "bg-teal-100 text-teal-800" : item.status === "Error" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs font-bold text-graphite/65">{item.records} records across {item.pages} page{item.pages === 1 ? "" : "s"}</p>
+                  <p className="mt-1 text-xs leading-5 text-graphite/55">{item.message}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <HighLevelSourceIntelligencePanel rows={highLevelData?.revenueFunnel.sourceIntelligence ?? []} />
           <MiniAttributionTable rows={(highLevel?.leadSources ?? highLevelData?.revenueFunnel.leadSources ?? []).map((row) => [row.source, String(row.count), `$${Math.round(row.value).toLocaleString()}`])} title="Lead Sources" />
@@ -3801,6 +3857,206 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
 
 function canManageConnectedApps(currentUser: AuthSession) {
   return currentUser.role === "Admin" || currentUser.role === "TallTwin Team";
+}
+
+function PerformanceUploadsSection({ setActiveSection }: { setActiveSection: (section: PlatformSection) => void }) {
+  const [uploads, setUploads] = useState<MarketingUploadsPayload>({ googleAds: null, googleBusinessProfile: null });
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState<"google_ads" | "google_business_profile" | "">("");
+  const [metricDate, setMetricDate] = useState(new Date().toISOString().slice(0, 10));
+
+  useEffect(() => {
+    void loadUploads();
+  }, []);
+
+  async function loadUploads() {
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/uploads/marketing", { cache: "no-store" });
+      const payload = (await response.json()) as { uploads?: MarketingUploadsPayload } & ApiError;
+      if (!response.ok) throw new Error(payload.error || "Uploads are not available yet.");
+      setUploads(payload.uploads ?? { googleAds: null, googleBusinessProfile: null });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Uploads are not available yet.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleUpload(source: "google_ads" | "google_business_profile", file: File | null) {
+    if (!file || isUploading) return;
+    setMessage("");
+    setIsUploading(source);
+    try {
+      const csv = await file.text();
+      const response = await fetch("/api/uploads/marketing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv, fileName: file.name, metricDate, source }),
+      });
+      const payload = (await response.json()) as { summary?: MarketingUploadSummary; uploads?: MarketingUploadsPayload } & ApiError;
+      if (!response.ok) throw new Error(payload.error || "The CSV could not be processed.");
+      setUploads(payload.uploads ?? uploads);
+      setMessage(`${source === "google_ads" ? "Google Ads" : "Google Business Profile"} upload saved: ${payload.summary?.rows ?? 0} rows.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The CSV could not be processed.");
+    } finally {
+      setIsUploading("");
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Panel>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+          <div>
+            <Eyebrow>Manual Performance Data</Eyebrow>
+            <h2 className="text-3xl font-black text-ink">Uploads</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-graphite/70">
+              Upload Google Ads and Google Business Profile CSV reports while HighLevel stays connected as the revenue source of truth. HVAC Growth OS stores each upload in Comfort Guardians history and uses it to improve recommendations.
+            </p>
+          </div>
+          <Button onClick={() => setActiveSection("service-engine")} variant="secondary">
+            Open Service Engine
+          </Button>
+        </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-4">
+          <InfoTile label="HighLevel role" value="Calls, leads, opportunities, revenue" />
+          <InfoTile label="Google Ads upload" value="Spend, CTR, CPC, conversions" />
+          <InfoTile label="GBP upload" value="Calls, clicks, directions, visibility" />
+          <InfoTile label="History" value={isLoading ? "Loading..." : `${Number(Boolean(uploads.googleAds)) + Number(Boolean(uploads.googleBusinessProfile))} active source(s)`} />
+        </div>
+      </Panel>
+
+      <Panel>
+        <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+          <label className="space-y-2">
+            <FieldLabel>Report date</FieldLabel>
+            <input
+              className="h-12 w-full rounded-md border border-ink/15 bg-white px-3 text-sm font-semibold text-ink outline-none focus:border-flame focus:ring-4 focus:ring-flame/15"
+              onChange={(event) => setMetricDate(event.target.value)}
+              type="date"
+              value={metricDate}
+            />
+          </label>
+          <div className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-sm font-bold leading-6 text-teal-950">
+            Best files to upload: Google Ads campaign/search-term/keyword performance exports and GBP performance exports. CSV is supported in this version.
+          </div>
+        </div>
+      </Panel>
+
+      {message ? (
+        <p className="rounded-xl border border-ink/10 bg-white/85 px-4 py-3 text-sm font-bold text-ink shadow-soft">{message}</p>
+      ) : null}
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <UploadCard
+          accept=".csv,text/csv"
+          busy={isUploading === "google_ads"}
+          description="Use this for campaign, keyword, search term, or account performance exports. It unlocks spend, clicks, impressions, CTR, CPC, and conversion planning."
+          icon={<Target className="size-5" aria-hidden="true" />}
+          onUpload={(file) => handleUpload("google_ads", file)}
+          summary={uploads.googleAds}
+          title="Google Ads Metrics"
+        />
+        <UploadCard
+          accept=".csv,text/csv"
+          busy={isUploading === "google_business_profile"}
+          description="Use this for Google Business Profile performance exports. It unlocks profile interactions, calls, website clicks, direction requests, messages, and local visibility trends."
+          icon={<Globe2 className="size-5" aria-hidden="true" />}
+          onUpload={(file) => handleUpload("google_business_profile", file)}
+          summary={uploads.googleBusinessProfile}
+          title="GBP Performance"
+        />
+      </div>
+    </div>
+  );
+}
+
+function UploadCard({
+  accept,
+  busy,
+  description,
+  icon,
+  onUpload,
+  summary,
+  title,
+}: {
+  accept: string;
+  busy: boolean;
+  description: string;
+  icon: ReactNode;
+  onUpload: (file: File | null) => void;
+  summary: MarketingUploadSummary | null;
+  title: string;
+}) {
+  return (
+    <Panel>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="flex size-11 items-center justify-center rounded-2xl bg-ink text-white">{icon}</span>
+          <div>
+            <h3 className="text-xl font-black text-ink">{title}</h3>
+            <p className="mt-1 text-xs font-black uppercase tracking-[0.14em] text-graphite/45">{summary ? `Last upload: ${summary.metricDate}` : "No upload yet"}</p>
+          </div>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-black ${summary ? "bg-teal-100 text-teal-800" : "bg-amber-100 text-amber-800"}`}>
+          {summary ? "Stored" : "Optional"}
+        </span>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-graphite/70">{description}</p>
+      <label className="mt-5 flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-ink/20 bg-white/70 px-4 py-6 text-center transition hover:border-flame/45 hover:bg-white">
+        <Upload className="size-6 text-ink" aria-hidden="true" />
+        <span className="mt-3 text-sm font-black text-ink">{busy ? "Uploading..." : "Choose CSV file"}</span>
+        <span className="mt-1 text-xs font-bold text-graphite/55">Stored to Comfort Guardians history</span>
+        <input
+          accept={accept}
+          className="hidden"
+          disabled={busy}
+          onChange={(event) => onUpload(event.currentTarget.files?.[0] ?? null)}
+          type="file"
+        />
+      </label>
+      {summary ? <UploadSummary summary={summary} /> : null}
+    </Panel>
+  );
+}
+
+function UploadSummary({ summary }: { summary: MarketingUploadSummary }) {
+  const rows = summary.source === "google_ads"
+    ? [
+        ["Rows", summary.rows],
+        ["Clicks", summary.clicks ?? 0],
+        ["Impressions", summary.impressions ?? 0],
+        ["CTR", `${summary.ctr ?? 0}%`],
+        ["Avg CPC", `$${Number(summary.averageCpc ?? 0).toLocaleString()}`],
+        ["Cost", `$${Number(summary.cost ?? 0).toLocaleString()}`],
+        ["Conversions", summary.conversions ?? 0],
+      ]
+    : [
+        ["Rows", summary.rows],
+        ["Interactions", summary.interactions ?? 0],
+        ["Impressions / views", summary.impressions ?? 0],
+        ["Calls", summary.calls ?? 0],
+        ["Website clicks", summary.websiteClicks ?? 0],
+        ["Directions", summary.directionRequests ?? 0],
+        ["Messages", summary.messages ?? 0],
+      ];
+
+  return (
+    <div className="mt-5">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {rows.map(([label, value]) => (
+          <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-3" key={String(label)}>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-graphite/45">{label}</p>
+            <p className="mt-1 text-lg font-black text-ink">{value}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-xs font-bold text-graphite/55">File: {summary.fileName}</p>
+    </div>
+  );
 }
 
 function ConnectionRequestButton({ appName, currentUser }: { appName: string; currentUser: AuthSession }) {
@@ -9985,6 +10241,10 @@ function buildDecisionRecommendations(
     "connected-apps": [
       decision("connected-google-ads", "Google Ads", "Connect Google Ads in read-only mode", "High", "Lets HVAC Growth OS use real spend, search terms, CPC, CTR, and conversion data.", annualHigh, baseConfidence + 4, "Moderate", "30 minutes", ["Google OAuth access", "Google Ads developer token"], "Connected Apps is the bridge from generated recommendations to performance-aware decisions."),
       decision("connected-customer-sync", "CRM", "Select the active Google Ads customer account and refresh data", "High", "Prevents recommendations from using stale or wrong-account performance data.", annualHigh, baseConfidence + 3, "Easy", "10 minutes", ["Connected Google Ads account"], "The platform needs one active customer account before it can compare campaigns, search terms, and deployment readiness."),
+    ],
+    uploads: [
+      decision("uploads-google-ads", "Google Ads", "Upload the latest Google Ads performance CSV", "High", "Adds spend, CTR, CPC, conversion, keyword, and search-term evidence without waiting on OAuth.", annualHigh, baseConfidence + 3, "Easy", "10 minutes", ["Google Ads report export"], "Uploads give HVAC Growth OS platform performance data while HighLevel remains the revenue source of truth."),
+      decision("uploads-gbp", "Google Business Profile", "Upload the latest Google Business Profile performance CSV", "Medium", "Adds calls, website clicks, directions, and local visibility signals to daily recommendations.", annualMedium, baseConfidence + 1, "Easy", "10 minutes", ["GBP performance export"], "GBP uploads help compare local profile activity against HighLevel calls and opportunities."),
     ],
     "conversion-tracking": [
       decision("tracking-click-id", "CRM", "Confirm GCLID, GBRAID, and WBRAID capture in HighLevel", "High", "Enables offline conversion imports and source-level revenue attribution.", annualHigh, baseConfidence + 5, "Moderate", "45 minutes", ["HighLevel custom fields", "Website form tracking"], "Conversion Tracking should prove which clicks turn into qualified opportunities and revenue before spend is increased."),
