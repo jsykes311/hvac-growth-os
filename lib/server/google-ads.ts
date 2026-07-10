@@ -121,8 +121,8 @@ export function googleAdsSetupStatus() {
       label: "Google Ads login customer ID",
     },
     {
-      configured: Boolean(config.redirectUri),
-      detail: "Must match the authorized redirect URI in Google Cloud.",
+      configured: true,
+      detail: "Optional. If omitted, HVAC Growth OS uses the current app URL plus /api/google-ads/callback. That URI must still be authorized in Google Cloud.",
       envVar: "GOOGLE_OAUTH_REDIRECT_URI",
       label: "OAuth redirect URI",
     },

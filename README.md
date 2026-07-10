@@ -61,7 +61,7 @@ GOOGLE_LOGIN_CLIENT_SECRET=...
 GOOGLE_LOGIN_REDIRECT_URI=https://your-render-domain.onrender.com/api/auth/google/callback
 ```
 
-Google login only grants access to emails already listed in `HVAC_GROWTH_OS_USERS`. Password fields are optional for Google-only users; keep `passwordHash` only when you want password fallback.
+Google login only grants access to emails already listed in `HVAC_GROWTH_OS_USERS`. Password fields are optional for Google-only users; keep `passwordHash` only when you want password fallback. If `GOOGLE_LOGIN_REDIRECT_URI` is omitted, HVAC Growth OS uses the current app URL plus `/api/auth/google/callback`; that exact URI still needs to be authorized in Google Cloud.
 
 Google Ads read-only Connected Apps variables:
 
@@ -89,6 +89,8 @@ GBP_TOKEN_STORE_PATH=/tmp/hvac-growth-os-google-business-profile-store.json
 ```
 
 The Google Business Profile connector uses the `https://www.googleapis.com/auth/business.manage` OAuth scope. In Google Cloud, enable the Business Profile Account Management API and Business Profile Business Information API for the OAuth project. The connector is read-only in this phase: it reads accounts, locations, reviews, and posts where Google grants access, but it does not publish posts, update services, or reply to reviews.
+
+When the connected Google user has multiple Business Profile accounts or locations, Connected Apps shows a location selector after sync so Comfort Guardians can be chosen explicitly.
 
 HighLevel read-only Connected Apps variables:
 

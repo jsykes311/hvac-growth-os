@@ -31,7 +31,7 @@ export function googleLoginSetupStatus() {
       label: "Google login client secret",
     },
     {
-      configured: Boolean(config.redirectUri),
+      configured: true,
       envVar: "GOOGLE_LOGIN_REDIRECT_URI",
       label: "Google login redirect URI",
     },

@@ -31,6 +31,7 @@ type GoogleBusinessProfileStore = {
 };
 
 export type GoogleBusinessProfileRecord = {
+  accountId?: string;
   id: string;
   name: string;
   status?: string;
@@ -91,8 +92,8 @@ export function googleBusinessProfileSetupStatus() {
       label: "Google OAuth client secret",
     },
     {
-      configured: Boolean(config.redirectUri),
-      detail: "Must match the authorized redirect URI in Google Cloud.",
+      configured: true,
+      detail: "Optional. If omitted, HVAC Growth OS uses the current app URL plus /api/google-business-profile/callback. That URI must still be authorized in Google Cloud.",
       envVar: "GBP_GOOGLE_OAUTH_REDIRECT_URI",
       label: "GBP OAuth redirect URI",
     },
@@ -253,12 +254,16 @@ async function fetchGoogleBusinessProfileData(
   const syncAlerts: string[] = [];
   const accountsPayload = await googleBusinessProfileGet(accessToken, "https://mybusinessaccountmanagement.googleapis.com/v1/accounts", syncAlerts);
   const accounts = normalizeAccounts(accountsPayload);
-  const activeAccountId = preferredAccountId || accounts[0]?.id || "";
-  const locationsPayload = activeAccountId
-    ? await googleBusinessProfileGet(accessToken, `https://mybusinessbusinessinformation.googleapis.com/v1/accounts/${activeAccountId}/locations?readMask=name,title,storefrontAddress,phoneNumbers,websiteUri,regularHours,profile,categories,metadata`, syncAlerts)
-    : {};
-  const locations = normalizeLocations(locationsPayload);
-  const activeLocationId = preferredLocationId || locations[0]?.id || "";
+  const locationPayloads = await Promise.all(accounts.map(async (account) => ({
+    accountId: account.id,
+    payload: await googleBusinessProfileGet(accessToken, `https://mybusinessbusinessinformation.googleapis.com/v1/accounts/${account.id}/locations?readMask=name,title,storefrontAddress,phoneNumbers,websiteUri,regularHours,profile,categories,metadata`, syncAlerts),
+  })));
+  const locations = locationPayloads.flatMap((item) => normalizeLocations(item.payload, item.accountId));
+  const selectedLocation = locations.find((location) => location.id === preferredLocationId)
+    || locations.find((location) => location.name.toLowerCase().includes("comfort guardians"))
+    || locations[0];
+  const activeAccountId = selectedLocation?.accountId || preferredAccountId || accounts[0]?.id || "";
+  const activeLocationId = selectedLocation?.id || preferredLocationId || "";
   const legacyAccount = activeAccountId ? `accounts/${activeAccountId}` : "";
   const legacyLocation = activeLocationId ? `locations/${activeLocationId}` : "";
   const reviewsPayload = legacyAccount && legacyLocation
@@ -448,12 +453,13 @@ function normalizeAccounts(payload: any): GoogleBusinessProfileRecord[] {
   });
 }
 
-function normalizeLocations(payload: any): GoogleBusinessProfileRecord[] {
+function normalizeLocations(payload: any, accountId: string): GoogleBusinessProfileRecord[] {
   return firstArray(payload, ["locations"]).map((location: any) => {
     const title = String(location.title || location.locationName || location.name || "Business Profile location");
     const phone = location.phoneNumbers?.primaryPhone || "";
     const address = location.storefrontAddress?.addressLines?.join(", ") || "";
     return {
+      accountId,
       detail: [phone, address, location.websiteUri].filter(Boolean).join(" | "),
       id: cleanResourceId(location.name || location.locationId || title),
       name: title,

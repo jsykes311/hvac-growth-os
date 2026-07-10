@@ -37,7 +37,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
         className="inline-flex h-12 items-center justify-center rounded-full border border-ink/10 bg-white px-5 text-sm font-black text-ink shadow-[0_18px_42px_rgba(6,57,68,0.08)] transition hover:-translate-y-0.5 hover:border-flame/30"
         href={`/api/auth/google/connect?next=${encodeURIComponent(nextPath || "/")}`}
       >
-        Continue with Google
+        Sign in with Google
       </a>
       <div className="flex items-center gap-3">
         <span className="h-px flex-1 bg-ink/10" />

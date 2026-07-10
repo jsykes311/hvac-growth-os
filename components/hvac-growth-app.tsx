@@ -306,6 +306,7 @@ type GoogleAdsDataPayload = {
   snapshots: GoogleAdsSnapshot[];
 };
 type GoogleBusinessProfileRecord = {
+  accountId?: string;
   id: string;
   name: string;
   status?: string;
@@ -3229,6 +3230,24 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
     }
   }
 
+  async function selectGoogleBusinessProfileLocation(value: string) {
+    const [accountId, locationId] = value.split(":");
+    setMessage("");
+    try {
+      const response = await fetch("/api/google-business-profile/active-location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId, locationId }),
+      });
+      const payload = (await response.json()) as ApiError;
+      if (!response.ok) throw new Error(payload.error || "That Google Business Profile location could not be selected.");
+      await syncGoogleBusinessProfile();
+      setMessage("Google Business Profile location selected and refreshed.");
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "That Google Business Profile location could not be selected.");
+    }
+  }
+
   const googleAds = status?.googleAds;
   const googleBusinessProfile = status?.googleBusinessProfile;
   const highLevel = status?.highLevel;
@@ -3455,6 +3474,18 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
         ) : null}
         {googleBusinessProfileData?.locations.length ? (
           <div className="mt-5 grid gap-3">
+            <FieldLabel>Select active Google Business Profile location</FieldLabel>
+            <select
+              className="h-11 rounded-md border border-ink/15 bg-white px-3 text-sm font-bold text-ink outline-none transition focus:border-flame focus:ring-4 focus:ring-flame/15"
+              onChange={(event) => selectGoogleBusinessProfileLocation(event.target.value)}
+              value={`${googleBusinessProfileData.locations.find((location) => location.id === googleBusinessProfile?.activeLocationId)?.accountId || googleBusinessProfile?.activeAccountId || googleBusinessProfileData.activeAccountId}:${googleBusinessProfile?.activeLocationId || googleBusinessProfileData.activeLocationId}`}
+            >
+              {googleBusinessProfileData.locations.map((location) => (
+                <option key={`${location.accountId || googleBusinessProfileData.activeAccountId}:${location.id}`} value={`${location.accountId || googleBusinessProfileData.activeAccountId}:${location.id}`}>
+                  {location.name} ({location.id})
+                </option>
+              ))}
+            </select>
             <FieldLabel>Synced Google Business Profile locations</FieldLabel>
             {googleBusinessProfileData.locations.map((location) => (
               <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4" key={location.id}>
