@@ -447,11 +447,19 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "settings", label: "Settings" },
 ];
 
-export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
+const SERVICE_ENGINE_FALLBACK_PROFILE = { companyName: "Comfort Guardians" } as BusinessProfile;
+
+export function HvacGrowthApp({
+  currentUser,
+  initialSection,
+}: {
+  currentUser: AuthSession;
+  initialSection?: PlatformSection;
+}) {
   const [contractorUrl, setContractorUrl] = useState("https://comfortguardianshvac.com");
-  const [view, setView] = useState<View>("home");
-  const [activeSection, setActiveSection] = useState<PlatformSection>("morning-brief");
-  const [analysis, setAnalysis] = useState<BusinessProfile | null>(null);
+  const [view, setView] = useState<View>(initialSection === "service-engine" ? "results" : "home");
+  const [activeSection, setActiveSection] = useState<PlatformSection>(initialSection ?? "morning-brief");
+  const [analysis, setAnalysis] = useState<BusinessProfile | null>(initialSection === "service-engine" ? SERVICE_ENGINE_FALLBACK_PROFILE : null);
   const [scrapedPages, setScrapedPages] = useState<AnalyzedPage[]>([]);
   const [savedWorkspace, setSavedWorkspace] = useState<SavedClientWorkspace | null>(null);
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true);
@@ -500,6 +508,7 @@ export function HvacGrowthApp({ currentUser }: { currentUser: AuthSession }) {
       const payload = (await response.json()) as { defaultUrl?: string; workspace?: SavedClientWorkspace | null } & ApiError;
       if (payload.defaultUrl) setContractorUrl(payload.defaultUrl);
       setSavedWorkspace(payload.workspace ?? null);
+      if (initialSection === "service-engine" && payload.workspace) applyWorkspace(payload.workspace);
     } catch {
       setSavedWorkspace(null);
     } finally {
