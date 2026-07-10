@@ -1217,16 +1217,93 @@ function ServiceEngineSection({
   analysis: BusinessProfile;
   setActiveSection: (section: PlatformSection) => void;
 }) {
-  const [notice, setNotice] = useState("High demand detected: Emergency AC searches are up 42% this week.");
+  const [notice, setNotice] = useState("Loading HighLevel service data...");
+  const [highLevelData, setHighLevelData] = useState<HighLevelDataPayload | null>(null);
   const company = analysis.companyName || "Your service department";
-  const campaigns = [
-    ["Emergency AC", "Live", "$186", "14", "$13.29", "High intent demand"],
-    ["AC Repair", "Live", "$142", "9", "$15.78", "Repair calls"],
-    ["Maintenance", "Paused", "—", "—", "—", "Capacity protected"],
-    ["Membership", "Live", "$68", "6", "$11.33", "Recurring revenue"],
-    ["Heating Repair", "Standby", "—", "—", "—", "Seasonal standby"],
+  const crmFunnel = highLevelData?.revenueFunnel;
+  const hasHighLevelData = Boolean(crmFunnel && (crmFunnel.phoneCalls || crmFunnel.crmLeads || crmFunnel.totalOpportunities || crmFunnel.pipelineValue || crmFunnel.estimatedRevenue));
+  const sourceRows = crmFunnel?.sourceIntelligence ?? [];
+  const unknownSource = sourceRows.find((row) => row.channel === "Unknown");
+  const bestSource = sourceRows.find((row) => row.channel !== "Unknown") ?? sourceRows[0];
+  const campaigns = sourceRows.length ? sourceRows.map((row) => {
+    const cpa = row.count ? row.value / row.count : 0;
+    return [
+      row.channel,
+      row.channel === "Unknown" ? "Needs Cleanup" : "Active Source",
+      row.value ? `$${Math.round(row.value).toLocaleString()}` : "—",
+      String(row.count),
+      cpa ? `$${Math.round(cpa).toLocaleString()}` : "—",
+      row.recommendation,
+    ] as const;
+  }) : [
+    ["HighLevel", "Waiting", "—", "—", "—", "Refresh HighLevel to load source data"],
   ] as const;
   const deployActions = ["Google Ads", "GBP post", "Social post", "Email campaign", "Review request", "HighLevel workflow"];
+  const serviceMetrics = [
+    {
+      detail: hasHighLevelData ? `${crmFunnel?.wonJobs ?? 0} won job${(crmFunnel?.wonJobs ?? 0) === 1 ? "" : "s"} tracked` : "Refresh HighLevel to calculate revenue",
+      label: "Estimated revenue",
+      tone: "teal" as const,
+      value: `$${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()}`,
+    },
+    {
+      detail: `${crmFunnel?.missedCalls ?? 0} missed call${(crmFunnel?.missedCalls ?? 0) === 1 ? "" : "s"}`,
+      label: "Phone calls",
+      tone: (crmFunnel?.missedCalls ?? 0) ? "amber" as const : "teal" as const,
+      value: String(crmFunnel?.phoneCalls ?? 0),
+    },
+    {
+      detail: `${crmFunnel?.appointments ?? 0} appointments, ${crmFunnel?.estimates ?? 0} estimates`,
+      label: "CRM leads",
+      tone: "teal" as const,
+      value: String(crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0),
+    },
+    {
+      detail: `$${Math.round(crmFunnel?.openPipelineValue ?? 0).toLocaleString()} open pipeline`,
+      label: "Opportunities",
+      tone: "amber" as const,
+      value: String(crmFunnel?.totalOpportunities ?? 0),
+    },
+    {
+      detail: bestSource ? `${bestSource.confidence}% confidence` : "Waiting on source fields",
+      label: "Best source",
+      tone: bestSource && bestSource.channel !== "Unknown" ? "teal" as const : "amber" as const,
+      value: bestSource?.channel ?? "Unknown",
+    },
+  ];
+  const recommendations = buildServiceEngineRecommendations(crmFunnel);
+  const funnelSteps = [
+    ["CRM Leads", crmFunnel?.crmLeads ?? crmFunnel?.leads ?? 0],
+    ["Phone Calls", crmFunnel?.phoneCalls ?? 0],
+    ["Appointments", crmFunnel?.appointments ?? 0],
+    ["Estimates", crmFunnel?.estimates ?? 0],
+    ["Won Jobs", crmFunnel?.wonJobs ?? crmFunnel?.wonOpportunities ?? 0],
+    ["Revenue", `$${Math.round(crmFunnel?.estimatedRevenue ?? crmFunnel?.revenue ?? 0).toLocaleString()}`],
+  ] as const;
+  const maxFunnelValue = Math.max(1, ...funnelSteps.map(([, value]) => typeof value === "number" ? value : 0));
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHighLevel() {
+      try {
+        const response = await fetch("/api/highlevel/data", { cache: "no-store" });
+        const payload = (await response.json()) as { data?: HighLevelDataPayload } | ApiError;
+        if (!response.ok || !("data" in payload)) throw new Error("HighLevel data is not available yet.");
+        if (cancelled) return;
+        setHighLevelData(payload.data ?? null);
+        const funnel = payload.data?.revenueFunnel;
+        setNotice(funnel
+          ? `HighLevel synced: ${funnel.phoneCalls} calls, ${funnel.totalOpportunities} opportunities, ${funnel.wonJobs} won jobs, $${Math.round(funnel.estimatedRevenue || funnel.revenue).toLocaleString()} estimated revenue.`
+          : "HighLevel connected, but no funnel data has synced yet.");
+      } catch {
+        if (!cancelled) setNotice("HighLevel is not synced yet. Connect or refresh HighLevel to power Service Engine with live CRM data.");
+      }
+    }
+    void loadHighLevel();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <section className="space-y-5">
@@ -1246,30 +1323,28 @@ function ServiceEngineSection({
       <Panel className="border-teal-300 bg-gradient-to-r from-teal-50 via-white to-amber-50">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-full bg-teal-500 text-white"><CloudSun className="size-5" /></span><div><p className="text-sm font-black text-ink">Demand signal</p><p className="text-sm text-graphite/75">{notice}</p></div></div>
-          <button className="text-sm font-black text-teal-700 hover:text-ink" onClick={() => setNotice("Demand report refreshed: heat index 103°, technician capacity 94% through Monday.")} type="button">Refresh signal</button>
+          <button className="text-sm font-black text-teal-700 hover:text-ink" onClick={() => setActiveSection("connected-apps")} type="button">Refresh in Connected Apps</button>
         </div>
       </Panel>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <ServiceMetric label="Service revenue" value="$42,680" detail="↑ 18.4% vs. prior 30 days" tone="teal" />
-        <ServiceMetric label="Repair revenue" value="$31,254" detail="84 repairs completed" tone="amber" />
-        <ServiceMetric label="Memberships sold" value="31" detail="$1,426 new monthly recurring" tone="teal" />
-        <ServiceMetric label="Replacement opportunities" value="17" detail="6 need comfort advisor follow-up" tone="amber" />
-        <ServiceMetric label="Reviews generated" value="42" detail="4.8 average rating this month" tone="teal" />
+        {serviceMetrics.map((metric) => (
+          <ServiceMetric detail={metric.detail} key={metric.label} label={metric.label} tone={metric.tone} value={metric.value} />
+        ))}
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
         <Panel>
-          <div className="flex items-start justify-between gap-4"><div><Eyebrow>Market Intelligence</Eyebrow><h3 className="text-xl font-black text-ink">Demand Monitor</h3></div><div className="rounded-2xl bg-teal-50 px-4 py-3 text-center"><strong className="block text-2xl font-black text-teal-700">82</strong><span className="text-[10px] font-black uppercase tracking-wider text-teal-800">Demand score</span></div></div>
-          <p className="mt-3 text-sm text-graphite/75">Service demand is high. Emergency AC and AC repair are the best near-term acquisition opportunities.</p>
-          <div className="mt-5 space-y-4">{[["Weather", 92, "Heat index 103°"], ["Search demand", 78, "Emergency AC up 42%"], ["Seasonality", 76, "Peak cooling window"]].map(([label, score, detail]) => <div key={String(label)}><div className="mb-2 flex justify-between text-sm"><span className="font-black text-ink">{label}</span><span className="font-bold text-graphite/70">{detail} · {score}/100</span></div><div className="h-2 overflow-hidden rounded-full bg-teal-50"><div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-amber-400" style={{ width: `${score}%` }} /></div></div>)}</div>
+          <div className="flex items-start justify-between gap-4"><div><Eyebrow>HighLevel Intelligence</Eyebrow><h3 className="text-xl font-black text-ink">Source Monitor</h3></div><div className="rounded-2xl bg-teal-50 px-4 py-3 text-center"><strong className="block text-2xl font-black text-teal-700">{sourceRows.length}</strong><span className="text-[10px] font-black uppercase tracking-wider text-teal-800">Sources</span></div></div>
+          <p className="mt-3 text-sm text-graphite/75">{bestSource ? `${bestSource.channel} is the strongest attributed source in HighLevel for this sync range.` : "Refresh HighLevel to identify source-level performance."}</p>
+          <div className="mt-5 space-y-4">{(sourceRows.length ? sourceRows.slice(0, 4) : [{ channel: "Waiting on HighLevel", confidence: 0, count: 0, value: 0, recommendation: "Connect HighLevel.", rawSources: [] }]).map((row) => <div key={row.channel}><div className="mb-2 flex justify-between text-sm"><span className="font-black text-ink">{row.channel}</span><span className="font-bold text-graphite/70">{row.count} records · {row.confidence}/100</span></div><div className="h-2 overflow-hidden rounded-full bg-teal-50"><div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-amber-400" style={{ width: `${Math.max(4, row.confidence)}%` }} /></div></div>)}</div>
         </Panel>
         <Panel>
           <div className="flex items-start justify-between gap-4"><div><Eyebrow>AI Priorities</Eyebrow><h3 className="text-xl font-black text-ink">Today&apos;s recommendations</h3></div><Bot className="size-6 text-teal-600" /></div>
           <div className="mt-4 space-y-3">
-            <ServiceRecommendation action="Increase Emergency AC budget" detail="Search demand is outpacing spend by 34%." onApply={() => setNotice("Emergency AC budget increase prepared for review in Deploy Center.")} />
-            <ServiceRecommendation action="Pause Maintenance campaign" detail="Technicians are at 94% capacity through Monday." onApply={() => setNotice("Maintenance campaign marked for pause; booked call capacity is protected.")} />
-            <ServiceRecommendation action="Launch tune-up campaign next week" detail="Demand forecast rises 28% starting Tuesday." onApply={() => setNotice("Tune-up launch campaign drafted for next Tuesday.")} />
+            {recommendations.map((recommendation) => (
+              <ServiceRecommendation action={recommendation.action} detail={recommendation.detail} key={recommendation.action} onApply={() => setNotice(recommendation.result)} />
+            ))}
           </div>
         </Panel>
       </div>
@@ -1277,11 +1352,11 @@ function ServiceEngineSection({
       <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
         <Panel>
           <div className="flex items-start justify-between gap-4"><div><Eyebrow>Acquisition Control</Eyebrow><h3 className="text-xl font-black text-ink">Service Campaign Manager</h3></div><button className="text-sm font-black text-teal-700 hover:text-ink" onClick={() => setActiveSection("google-ads-deployment")} type="button">Manage campaigns →</button></div>
-          <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[580px] text-left text-sm"><thead className="border-b border-ink/10 text-[10px] font-black uppercase tracking-[.14em] text-graphite/55"><tr><th className="pb-3">Campaign</th><th className="pb-3">Status</th><th className="pb-3">Spend</th><th className="pb-3">Leads</th><th className="pb-3">CPA</th><th className="pb-3">Purpose</th></tr></thead><tbody>{campaigns.map(([name,status,spend,leads,cpa,purpose]) => <tr className="border-b border-ink/5 last:border-0" key={name}><td className="py-3 font-black text-ink">{name}</td><td className={`py-3 font-black ${status === "Live" ? "text-teal-700" : "text-graphite/55"}`}>● {status}</td><td className="py-3 text-graphite/75">{spend}</td><td className="py-3 text-graphite/75">{leads}</td><td className="py-3 text-graphite/75">{cpa}</td><td className="py-3 text-graphite/75">{purpose}</td></tr>)}</tbody></table></div>
+          <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[580px] text-left text-sm"><thead className="border-b border-ink/10 text-[10px] font-black uppercase tracking-[.14em] text-graphite/55"><tr><th className="pb-3">Source</th><th className="pb-3">Status</th><th className="pb-3">Value</th><th className="pb-3">Records</th><th className="pb-3">Value / Record</th><th className="pb-3">Action</th></tr></thead><tbody>{campaigns.map(([name,status,spend,leads,cpa,purpose]) => <tr className="border-b border-ink/5 last:border-0" key={name}><td className="py-3 font-black text-ink">{name}</td><td className={`py-3 font-black ${status === "Active Source" ? "text-teal-700" : "text-graphite/55"}`}>● {status}</td><td className="py-3 text-graphite/75">{spend}</td><td className="py-3 text-graphite/75">{leads}</td><td className="py-3 text-graphite/75">{cpa}</td><td className="py-3 text-graphite/75">{purpose}</td></tr>)}</tbody></table></div>
         </Panel>
         <Panel>
-          <Eyebrow>Last 30 Days</Eyebrow><h3 className="text-xl font-black text-ink">Service-to-referral funnel</h3>
-          <div className="mt-4 space-y-3">{[["Google Ads",296],["Calls",134],["Booked",108],["Technician",103],["Repair",84],["Membership",31],["Replacement opportunity",17],["Review",42],["Referral",9]].map(([label,value]) => <div className="grid grid-cols-[132px_1fr_36px] items-center gap-3 text-xs" key={String(label)}><span className="font-bold text-graphite/75">{label}</span><div className="h-4 rounded bg-teal-50"><div className="h-full rounded bg-gradient-to-r from-teal-600 to-teal-400" style={{width:`${Math.max(8, Number(value) / 296 * 100)}%`}} /></div><span className="text-right font-black text-ink">{value}</span></div>)}</div>
+          <Eyebrow>{highLevelData?.syncRange ? `${highLevelData.syncRange.startDate} to ${highLevelData.syncRange.endDate}` : "HighLevel"}</Eyebrow><h3 className="text-xl font-black text-ink">Service revenue funnel</h3>
+          <div className="mt-4 space-y-3">{funnelSteps.map(([label,value]) => <div className="grid grid-cols-[112px_1fr_72px] items-center gap-3 text-xs" key={String(label)}><span className="font-bold text-graphite/75">{label}</span><div className="h-4 rounded bg-teal-50"><div className="h-full rounded bg-gradient-to-r from-teal-600 to-teal-400" style={{width:`${typeof value === "number" ? Math.max(8, value / maxFunnelValue * 100) : 100}%`}} /></div><span className="text-right font-black text-ink">{typeof value === "number" ? value : value}</span></div>)}</div>
         </Panel>
       </div>
 
@@ -1290,6 +1365,85 @@ function ServiceEngineSection({
       </Panel>
     </section>
   );
+}
+
+function buildServiceEngineRecommendations(funnel?: RevenueFunnelPayload) {
+  if (!funnel) {
+    return [
+      {
+        action: "Refresh HighLevel data",
+        detail: "Service Engine needs current calls, opportunities, and revenue before making source-level recommendations.",
+        result: "Open Connected Apps and refresh HighLevel to load live Service Engine data.",
+      },
+      {
+        action: "Confirm source fields",
+        detail: "HighLevel source labels are needed to separate Google Ads, Meta, GBP, Organic, and Direct leads.",
+        result: "Source field cleanup added to the next action list.",
+      },
+      {
+        action: "Review missed-call process",
+        detail: "Once calls sync, missed calls should trigger a same-day follow-up recommendation.",
+        result: "Missed-call process review prepared for Deploy Center.",
+      },
+    ];
+  }
+
+  const unknown = funnel.sourceIntelligence.find((row) => row.channel === "Unknown");
+  const bestSource = funnel.sourceIntelligence.find((row) => row.channel !== "Unknown") ?? funnel.sourceIntelligence[0];
+  const recommendations = [];
+  if (funnel.missedCalls > 0) {
+    recommendations.push({
+      action: "Fix missed-call follow-up",
+      detail: `${funnel.missedCalls} missed call${funnel.missedCalls === 1 ? "" : "s"} synced from HighLevel. Missed calls are high-intent service opportunities.`,
+      result: "Missed-call follow-up workflow marked for review.",
+    });
+  }
+  if (funnel.phoneCalls > 0 && funnel.totalOpportunities === 0) {
+    recommendations.push({
+      action: "Audit intake process",
+      detail: `${funnel.phoneCalls} calls are synced, but no opportunities are visible. Calls may not be entering the pipeline.`,
+      result: "CRM intake audit added to the implementation list.",
+    });
+  }
+  if (unknown && unknown.count > 0) {
+    recommendations.push({
+      action: "Clean up lead source fields",
+      detail: `${unknown.count} CRM record${unknown.count === 1 ? "" : "s"} have unclear attribution. Cleaner sources improve budget decisions.`,
+      result: "Lead source cleanup prepared for review.",
+    });
+  }
+  if (bestSource && bestSource.channel !== "Unknown") {
+    recommendations.push({
+      action: `Review ${bestSource.channel} performance`,
+      detail: `${bestSource.channel} has ${bestSource.count} attributed CRM record${bestSource.count === 1 ? "" : "s"} and $${Math.round(bestSource.value).toLocaleString()} value.`,
+      result: `${bestSource.channel} performance review prepared.`,
+    });
+  }
+  if (funnel.estimates > 0 && funnel.wonJobs === 0) {
+    recommendations.push({
+      action: "Tighten estimate follow-up",
+      detail: `${funnel.estimates} estimate${funnel.estimates === 1 ? "" : "s"} are visible, but no won jobs are synced for this range.`,
+      result: "Estimate follow-up review prepared.",
+    });
+  }
+
+  return recommendations.slice(0, 3).length ? recommendations.slice(0, 3) : [
+    {
+      action: "Keep monitoring HighLevel",
+      detail: "CRM data is synced. Continue collecting calls, opportunities, won jobs, and source data before changing spend.",
+      result: "Monitoring note added to Service Engine.",
+    },
+    {
+      action: "Request reviews from won jobs",
+      detail: `${funnel.wonJobs} won job${funnel.wonJobs === 1 ? "" : "s"} are synced. Completed work can support review generation.`,
+      result: "Review request action prepared.",
+    },
+    {
+      action: "Review source attribution weekly",
+      detail: "Weekly source reviews help identify which channels are producing qualified opportunities.",
+      result: "Weekly source review added to next steps.",
+    },
+  ];
 }
 
 function ServiceMetric({ detail, label, tone, value }: { detail: string; label: string; tone: "teal" | "amber"; value: string }) {
