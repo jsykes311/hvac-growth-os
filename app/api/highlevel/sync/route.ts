@@ -27,6 +27,12 @@ export async function POST(request: NextRequest) {
         openPipelineValue: data.revenueFunnel.openPipelineValue,
         opportunities: data.opportunities.length,
         revenue: data.revenueFunnel.revenue,
+        sourceIntelligence: data.revenueFunnel.sourceIntelligence.map((row) => ({
+          channel: row.channel,
+          confidence: row.confidence,
+          count: row.count,
+          value: row.value,
+        })),
         syncRange: data.syncRange,
         wonJobs: data.revenueFunnel.wonJobs,
       },

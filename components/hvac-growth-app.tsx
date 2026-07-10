@@ -375,6 +375,14 @@ type RevenueFunnelPayload = {
     leads: number;
     value: number;
   }>;
+  sourceIntelligence: Array<{
+    channel: "Google Ads" | "Meta" | "Google Business Profile" | "Organic Search" | "Direct" | "Referral" | "Email" | "Unknown";
+    confidence: number;
+    count: number;
+    rawSources: string[];
+    recommendation: string;
+    value: number;
+  }>;
 };
 type HighLevelSnapshot = {
   appointments?: number;
@@ -3269,10 +3277,10 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
             <Eyebrow>Connected Apps</Eyebrow>
             <h2 className="flex items-center gap-2 text-xl font-black text-ink">
               <Settings className="size-5" aria-hidden="true" />
-              Optional intelligence upgrades
+              HighLevel-first intelligence hub
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/70">
-              HVAC Growth OS works from the website URL first. Connect platforms only when you want higher confidence, richer attribution, and performance-aware recommendations.
+              HVAC Growth OS works from the website URL first, then uses HighLevel as the primary source for calls, leads, source attribution, opportunities, won jobs, and revenue. Direct Google/Meta/GBP APIs can wait.
             </p>
           </div>
           <Button onClick={refreshConnectedApps} variant="secondary">{isLoading ? "Refreshing..." : "Refresh Status"}</Button>
@@ -3291,7 +3299,7 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
         <ConnectedAppCard
           configured={Boolean(googleAds?.configured)}
           connected={Boolean(googleAds?.connected)}
-          description="Connect Google Ads to improve revenue recommendations and unlock campaign performance insights."
+          description="Optional later. For now, use HighLevel source attribution to understand Google Ads lead and revenue activity."
           gain="+15 intelligence"
           mode={googleAds?.permissionMode ?? "Read Only"}
           primaryAction={!canManageSetup && !googleAds?.connected ? (
@@ -3303,12 +3311,12 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
           )}
           secondaryAction={<Button disabled={!googleAds?.connected || isSyncing} onClick={syncGoogleAds} variant="secondary">{isSyncing ? "Syncing..." : "Refresh Data"}</Button>}
           title="Google Ads"
-          unlocks="Spend, clicks, CPC, CTR, search terms, campaigns, assets, budgets, and conversions."
+          unlocks="Direct spend, clicks, CPC, search terms, campaigns, budgets, and conversions when you are ready."
         />
         <ConnectedAppCard
           configured={Boolean(highLevel?.configured)}
           connected={Boolean(highLevel?.connected)}
-          description="Connect HighLevel to connect calls, leads, estimates, and revenue back to marketing activity."
+          description="Primary connection. HighLevel connects calls, leads, estimates, won jobs, revenue, and source attribution back to marketing activity."
           gain="+25 intelligence"
           mode={highLevel?.permissionMode ?? "Read Only"}
           primaryAction={!canManageSetup && !highLevel?.connected ? (
@@ -3322,12 +3330,12 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
           )}
           secondaryAction={<Button disabled={!highLevel?.connected || isSyncingHighLevel} onClick={syncHighLevel} variant="secondary">{isSyncingHighLevel ? "Syncing..." : "Refresh Data"}</Button>}
           title="HighLevel"
-          unlocks="Calls, forms, contacts, opportunities, appointments, estimates, won jobs, and revenue attribution."
+          unlocks="Calls, forms, contacts, opportunities, appointments, estimates, won jobs, revenue, source intelligence, and campaign attribution."
         />
         <ConnectedAppCard
           configured={Boolean(googleBusinessProfile?.configured)}
           connected={Boolean(googleBusinessProfile?.connected)}
-          description="Connect Google Business Profile to improve local visibility recommendations, review prompts, and post strategy."
+          description="Optional later. HighLevel can already show GBP-style calls/leads when source fields are populated."
           gain="+12 intelligence"
           mode={googleBusinessProfile?.permissionMode ?? "Read Only"}
           primaryAction={!canManageSetup && !googleBusinessProfile?.connected ? (
@@ -3600,7 +3608,10 @@ function ConnectedAppsSection({ currentUser }: { currentUser: AuthSession }) {
           </div>
         ) : null}
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          <HighLevelSourceIntelligencePanel rows={highLevelData?.revenueFunnel.sourceIntelligence ?? []} />
           <MiniAttributionTable rows={(highLevel?.leadSources ?? highLevelData?.revenueFunnel.leadSources ?? []).map((row) => [row.source, String(row.count), `$${Math.round(row.value).toLocaleString()}`])} title="Lead Sources" />
+        </div>
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <MiniSnapshotTable snapshots={highLevelData?.snapshots ?? []} />
         </div>
       </Panel>
@@ -4259,6 +4270,7 @@ function RevenueFunnelPanel({
     pipelineValue: 0,
     revenue: 0,
     roi: 0,
+    sourceIntelligence: [],
     totalConversations: 0,
     totalOpportunities: 0,
     wonJobs: 0,
@@ -4480,6 +4492,39 @@ function FunnelMetric({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border border-ink/10 bg-[#fbfbfa] p-4">
       <p className="text-2xl font-black text-ink">{value}</p>
       <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+    </div>
+  );
+}
+
+function HighLevelSourceIntelligencePanel({ rows }: { rows: RevenueFunnelPayload["sourceIntelligence"] }) {
+  return (
+    <div>
+      <h4 className="text-sm font-black uppercase tracking-[0.12em] text-graphite/65">Source Intelligence</h4>
+      <p className="mt-2 text-sm leading-6 text-graphite/70">
+        HighLevel attribution grouped into marketing channels, no direct Google or Meta API required.
+      </p>
+      <div className="mt-3 grid gap-2">
+        {rows.length ? rows.slice(0, 6).map((row) => (
+          <div className="rounded-xl border border-ink/10 bg-white p-3" key={row.channel}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-ink">{row.channel}</p>
+                <p className="mt-1 text-xs leading-5 text-graphite/60">{row.recommendation}</p>
+              </div>
+              <span className="rounded-full bg-[#fbfbfa] px-3 py-1 text-xs font-black text-copper">{row.confidence}% confidence</span>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs font-bold text-graphite/70 sm:grid-cols-3">
+              <span>{row.count} CRM records</span>
+              <span>${Math.round(row.value).toLocaleString()} value</span>
+              <span>{row.rawSources.slice(0, 2).join(", ") || "No raw source"}</span>
+            </div>
+          </div>
+        )) : (
+          <p className="rounded-xl border border-dashed border-ink/15 bg-[#fbfbfa] p-4 text-sm text-graphite/70">
+            Refresh HighLevel data to group CRM records into Google Ads, Meta, GBP, Organic, Direct, and Unknown sources.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

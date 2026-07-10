@@ -79,6 +79,14 @@ export type RevenueFunnelPayload = {
     leads: number;
     value: number;
   }>;
+  sourceIntelligence: Array<{
+    channel: "Google Ads" | "Meta" | "Google Business Profile" | "Organic Search" | "Direct" | "Referral" | "Email" | "Unknown";
+    confidence: number;
+    count: number;
+    rawSources: string[];
+    recommendation: string;
+    value: number;
+  }>;
 };
 
 export type HighLevelSnapshot = {
@@ -702,6 +710,7 @@ function buildRevenueFunnel(
   const estimatedRevenue = revenue || sum([...won, ...estimates].map((item) => item.value || 0));
   const googleAdsSpend = 0;
   const missedCalls = countMissedCalls(calls);
+  const sourceIntelligence = buildSourceIntelligence([...contacts, ...calls, ...opportunities, ...formSubmissions]);
 
   return {
     appointments: appointments.length,
@@ -722,6 +731,7 @@ function buildRevenueFunnel(
     pipelineValue,
     revenue,
     roi: googleAdsSpend ? Number((revenue / googleAdsSpend).toFixed(2)) : 0,
+    sourceIntelligence,
     totalConversations: conversations.length,
     totalOpportunities: opportunities.length,
     wonJobs: won.length,
@@ -778,6 +788,71 @@ function buildCampaignAttribution(
 
 function sourceMatches(record: HighLevelRecord, source: string) {
   return ((record.source || "Unattributed").trim() || "Unattributed") === source;
+}
+
+function buildSourceIntelligence(records: HighLevelRecord[]): RevenueFunnelPayload["sourceIntelligence"] {
+  const grouped = new Map<RevenueFunnelPayload["sourceIntelligence"][number]["channel"], {
+    count: number;
+    rawSources: Set<string>;
+    value: number;
+  }>();
+
+  for (const record of records) {
+    const rawSource = sourceFingerprint(record);
+    const channel = classifySourceChannel(rawSource);
+    const current = grouped.get(channel) || { count: 0, rawSources: new Set<string>(), value: 0 };
+    current.count += 1;
+    current.value += record.value || 0;
+    if (rawSource) current.rawSources.add(rawSource);
+    grouped.set(channel, current);
+  }
+
+  return Array.from(grouped.entries()).map(([channel, row]) => ({
+    channel,
+    confidence: sourceConfidence(channel, row.rawSources),
+    count: row.count,
+    rawSources: Array.from(row.rawSources).slice(0, 8),
+    recommendation: sourceRecommendation(channel, row.count, row.value),
+    value: row.value,
+  })).sort((a, b) => b.value - a.value || b.count - a.count);
+}
+
+function sourceFingerprint(record: HighLevelRecord) {
+  return [
+    record.source,
+    record.name,
+    record.status,
+    record.stage,
+    record.type,
+  ].filter(Boolean).join(" ").trim();
+}
+
+function classifySourceChannel(value: string): RevenueFunnelPayload["sourceIntelligence"][number]["channel"] {
+  const text = value.toLowerCase();
+  if (/gclid|gbraid|wbraid|google ads|adwords|paid search|ppc|cpc|google paid/.test(text)) return "Google Ads";
+  if (/facebook|fbclid|instagram|meta|ig|paid social/.test(text)) return "Meta";
+  if (/gbp|gmb|google business|google maps|maps|business profile/.test(text)) return "Google Business Profile";
+  if (/organic|seo|google search|bing|search/.test(text)) return "Organic Search";
+  if (/email|newsletter|mailchimp|constant contact/.test(text)) return "Email";
+  if (/referral|partner|yelp|angi|homeadvisor|nextdoor/.test(text)) return "Referral";
+  if (/direct|website|web|manual|phone|call|type_phone/.test(text)) return "Direct";
+  return "Unknown";
+}
+
+function sourceConfidence(channel: RevenueFunnelPayload["sourceIntelligence"][number]["channel"], rawSources: Set<string>) {
+  if (channel === "Unknown") return 35;
+  if (!rawSources.size) return 45;
+  return Math.min(92, 60 + rawSources.size * 6);
+}
+
+function sourceRecommendation(channel: RevenueFunnelPayload["sourceIntelligence"][number]["channel"], count: number, value: number) {
+  if (channel === "Google Ads") return value > 0 ? "Review Google Ads sourced opportunities before shifting budget." : "Confirm Google Ads leads are creating opportunities and values in HighLevel.";
+  if (channel === "Meta") return "Use Meta-sourced CRM activity to guide social offers and retargeting ideas.";
+  if (channel === "Google Business Profile") return "Watch GBP calls and leads before prioritizing review requests or profile posts.";
+  if (channel === "Organic Search") return "Use organic CRM leads to prioritize SEO pages and city/service content.";
+  if (channel === "Direct") return "Improve direct-call attribution with UTM, call source, and intake fields.";
+  if (channel === "Unknown") return count ? "Clean up source fields so HVAC Growth OS can attribute revenue more confidently." : "No source data found yet.";
+  return "Review this source for lead quality and follow-up opportunities.";
 }
 
 function countMissedCalls(calls: HighLevelRecord[]) {
