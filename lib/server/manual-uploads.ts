@@ -84,10 +84,13 @@ function eventMatchesRange(metricDate: string, range: { endDate?: string; startD
 
 function summarizeUpload(source: MarketingUploadSource, rows: Array<Record<string, string>>, metadata: { fileName: string; metricDate: string }): MarketingUploadSummary {
   if (source === "google_ads") {
-    const clicks = sumColumn(rows, ["clicks"]);
-    const impressions = sumColumn(rows, ["impressions", "impr"]);
-    const cost = sumColumn(rows, ["cost", "cost usd", "cost $", "spend"]);
-    const conversions = sumColumn(rows, ["conversions", "conv", "all conv", "all conversions"]);
+    const metricRows = preferredGoogleAdsMetricRows(rows, ["time_series", "campaigns", "devices", "search_keywords", "searches(search"], ["clicks", "impressions", "cost", "spend"]);
+    const conversionRows = preferredGoogleAdsMetricRows(rows, ["campaigns", "time_series", "searches(search", "search_keywords"], ["conversions", "conv", "all conv", "all conversions"]);
+    const detailRows = preferredGoogleAdsMetricRows(rows, ["campaigns", "search_keywords", "searches(search", "time_series"], ["clicks", "cost", "conversions", "conv", "all conversions"]);
+    const clicks = sumColumn(metricRows, ["clicks"]);
+    const impressions = sumColumn(metricRows, ["impressions", "impr"]);
+    const cost = sumColumn(metricRows, ["cost", "cost usd", "cost $", "spend"]);
+    const conversions = sumColumn(conversionRows, ["conversions", "conv", "all conv", "all conversions"]);
     return {
       averageCpc: clicks ? round(cost / clicks, 2) : 0,
       clicks,
@@ -99,7 +102,7 @@ function summarizeUpload(source: MarketingUploadSource, rows: Array<Record<strin
       metricDate: metadata.metricDate,
       rows: rows.length,
       source,
-      topRows: topRows(rows, ["campaign", "campaign name", "search term", "keyword", "ad group"], ["clicks", "cost", "conversions"]),
+      topRows: topRows(detailRows, ["campaign", "campaign name", "search", "search term", "search keyword", "keyword", "ad group"], ["clicks", "cost", "conversions"]),
     };
   }
 
@@ -128,11 +131,43 @@ function mergeParsedCsvFiles(files: Array<{ fileName: string; parsed: ReturnType
   const headers = [...new Set(files.flatMap((file) => file.parsed.headers))];
   return {
     headers,
-    rows: files.flatMap((file) => file.parsed.rows.map((row) => ({
+    rows: dedupeRows(files.flatMap((file) => file.parsed.rows.map((row) => ({
       ...row,
       source_file: file.fileName,
-    }))),
+    })))),
   };
+}
+
+function preferredGoogleAdsMetricRows(rows: Array<Record<string, string>>, filePriorities: string[], requiredColumns: string[]) {
+  const rowsWithSource = rows.filter((row) => row.source_file);
+  if (!rowsWithSource.length) return rows;
+  for (const priority of filePriorities) {
+    const normalizedPriority = normalizeFileName(priority);
+    const selected = rowsWithSource.filter((row) => normalizeFileName(row.source_file).includes(normalizedPriority));
+    if (selected.length && hasAnyColumn(selected, requiredColumns)) {
+      return selected;
+    }
+  }
+  return rowsWithSource.filter((row) => hasAnyColumn([row], requiredColumns));
+}
+
+function normalizeFileName(value = "") {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+}
+
+function hasAnyColumn(rows: Array<Record<string, string>>, candidates: string[]) {
+  const keys = candidates.map(normalizeHeader);
+  return rows.some((row) => keys.some((key) => row[key] !== undefined));
+}
+
+function dedupeRows(rows: Array<Record<string, string>>) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = JSON.stringify(Object.entries(row).sort(([a], [b]) => a.localeCompare(b)));
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function parseZipCsvFiles(buffer: Buffer) {
