@@ -9,7 +9,7 @@ import {
   saveEncryptedCredentialStore,
 } from "@/lib/server/credential-store";
 
-type PermissionMode = "Read Only" | "Draft Mode" | "Agency Mode" | "Owner Mode";
+type PermissionMode = "Read Only" | "Write Enabled" | "Draft Mode" | "Agency Mode" | "Owner Mode";
 
 type HighLevelTokenSet = {
   accessToken: string;
@@ -185,6 +185,7 @@ export function highLevelConfig() {
     clientSecret: process.env.HIGHLEVEL_CLIENT_SECRET || "",
     encryptionKey: process.env.HIGHLEVEL_TOKEN_ENCRYPTION_KEY || process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || process.env.HVAC_GROWTH_OS_AUTH_SECRET || "",
     locationId: process.env.HIGHLEVEL_LOCATION_ID || "",
+    writeEnabled: process.env.HIGHLEVEL_WRITE_ENABLED === "true",
     redirectUri: process.env.HIGHLEVEL_REDIRECT_URI || process.env.HIGHLEVEL_OAUTH_REDIRECT_URI || "",
     scopes: process.env.HIGHLEVEL_OAUTH_SCOPES || DEFAULT_SCOPES,
     tokenStorePath: process.env.HIGHLEVEL_TOKEN_STORE_PATH || path.join(os.tmpdir(), "hvac-growth-os-highlevel-store.json"),
@@ -377,7 +378,7 @@ export async function saveHighLevelPrivateIntegrationConfig({
     ...store,
     activeLocationId: cleanedLocationId,
     connectionSource: "API Key",
-    permissionMode: "Read Only",
+    permissionMode: highLevelConfig().writeEnabled ? "Write Enabled" : "Read Only",
     setupConfig: {
       locationId: cleanedLocationId,
       privateIntegrationToken: cleanedToken,
@@ -1128,7 +1129,7 @@ function defaultStore(): HighLevelStore {
     connectedLocation: "",
     connectionSource: "",
     lastSyncAt: "",
-    permissionMode: "Read Only",
+    permissionMode: highLevelConfig().writeEnabled ? "Write Enabled" : "Read Only",
     snapshots: [],
   };
 }
