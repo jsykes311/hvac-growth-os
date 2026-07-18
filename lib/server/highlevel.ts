@@ -349,7 +349,7 @@ export async function getHighLevelConnectionStatus() {
       missedCalls: data?.revenueFunnel.missedCalls ?? 0,
       openOpportunities: data ? Math.max(data.opportunities.length - data.revenueFunnel.wonOpportunities, 0) : 0,
       openPipelineValue: data?.revenueFunnel.openPipelineValue ?? 0,
-      permissionMode: store.permissionMode,
+      permissionMode: config.writeEnabled ? "Write Enabled" : store.permissionMode,
       pipelineValue: data?.revenueFunnel.pipelineValue ?? 0,
       setup,
       tokenStored: Boolean(store.tokenSet?.refreshToken || hasApiKeyFallback),
