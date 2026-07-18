@@ -185,7 +185,7 @@ export function highLevelConfig() {
     clientSecret: process.env.HIGHLEVEL_CLIENT_SECRET || "",
     encryptionKey: process.env.HIGHLEVEL_TOKEN_ENCRYPTION_KEY || process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || process.env.HVAC_GROWTH_OS_AUTH_SECRET || "",
     locationId: process.env.HIGHLEVEL_LOCATION_ID || "",
-    writeEnabled: process.env.HIGHLEVEL_WRITE_ENABLED === "true",
+    writeEnabled: String(process.env.HIGHLEVEL_WRITE_ENABLED || "").trim().replace(/^"|"$/g, "").toLowerCase() === "true",
     redirectUri: process.env.HIGHLEVEL_REDIRECT_URI || process.env.HIGHLEVEL_OAUTH_REDIRECT_URI || "",
     scopes: process.env.HIGHLEVEL_OAUTH_SCOPES || DEFAULT_SCOPES,
     tokenStorePath: process.env.HIGHLEVEL_TOKEN_STORE_PATH || path.join(os.tmpdir(), "hvac-growth-os-highlevel-store.json"),
