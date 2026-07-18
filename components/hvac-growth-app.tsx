@@ -3924,7 +3924,7 @@ function ConnectedAppsSection({ currentUser, globalDateRange }: { currentUser: A
           ) : (
             <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink/10 px-4 text-sm font-black text-ink" href="#highlevel-setup">Open Setup</a>
           )}
-          secondaryAction={<div className="flex flex-wrap gap-2"><Button disabled={!highLevel?.connected || isSyncingHighLevel} onClick={syncHighLevel} variant="secondary">{isSyncingHighLevel ? "Syncing..." : "Refresh Data"}</Button><Button disabled={!highLevel?.connected || highLevel?.permissionMode !== "Write Enabled" || isDeployingHighLevelTags} onClick={deployComfortGuardiansMetaTags}>{isDeployingHighLevelTags ? "Deploying..." : "Deploy Meta Tags"}</Button></div>}
+          secondaryAction={<div className="flex flex-wrap gap-2"><Button disabled={!highLevel?.connected || isSyncingHighLevel} onClick={syncHighLevel} variant="secondary">{isSyncingHighLevel ? "Syncing..." : "Refresh Data"}</Button><Button disabled={!highLevel?.connected || isDeployingHighLevelTags} onClick={deployComfortGuardiansMetaTags}>{isDeployingHighLevelTags ? "Deploying..." : "Deploy Meta Tags"}</Button></div>}
           title="HighLevel"
           unlocks="Calls, forms, contacts, opportunities, appointments, estimates, won jobs, revenue, source intelligence, and campaign attribution."
         />
