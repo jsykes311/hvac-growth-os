@@ -423,6 +423,39 @@ export async function syncHighLevelData(range: HighLevelDateRange = {}) {
   return data;
 }
 
+/** Creates only the CRM tags needed to attribute Comfort Guardians Meta leads.
+ * Safe to rerun: existing tags are returned instead of duplicated. */
+export async function deployComfortGuardiansMetaTags() {
+  const config = highLevelConfig();
+  if (!config.writeEnabled) throw new HighLevelSyncError("HighLevel writes are disabled. Set HIGHLEVEL_WRITE_ENABLED=true after reviewing the private integration scopes.", 403);
+
+  const store = await loadHighLevelStore();
+  const apiKey = config.apiKey || store.setupConfig?.privateIntegrationToken || "";
+  const locationId = config.locationId || store.setupConfig?.locationId || store.activeLocationId || store.tokenSet?.locationId || "";
+  if (!apiKey && !store.tokenSet?.refreshToken) throw new HighLevelSyncError("HighLevel is not connected.", 409);
+  if (!locationId) throw new HighLevelSyncError("HighLevel location ID is missing.", 409);
+
+  const accessToken = apiKey || await getFreshHighLevelAccessToken(store);
+  const wanted = ["Facebook Lead", "Comfort Guardians", "HVAC Service Request"];
+  const existingPayload = await highLevelGet(accessToken, `/locations/${encodeURIComponent(locationId)}/tags`);
+  if (existingPayload?.__highLevelError) throw new HighLevelSyncError(String(existingPayload.__highLevelError), Number(existingPayload.__highLevelStatus) || 502);
+  const existing = firstArray(existingPayload, ["tags"]).map((tag: any) => String(tag.name || tag.label || "").trim().toLowerCase());
+  const created: string[] = [];
+  const reused: string[] = [];
+  for (const name of wanted) {
+    if (existing.includes(name.toLowerCase())) { reused.push(name); continue; }
+    const response = await fetch(`${HIGHLEVEL_BASE_URL}/locations/${encodeURIComponent(locationId)}/tags`, {
+      method: "POST",
+      headers: { ...highLevelHeaders(accessToken), "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new HighLevelSyncError(humanReadableHighLevelPayload(payload) || `Could not create tag \"${name}\".`, response.status);
+    created.push(name);
+  }
+  return { created, locationId, reused };
+}
+
 async function fetchHighLevelData(
   accessToken: string,
   locationId: string,
