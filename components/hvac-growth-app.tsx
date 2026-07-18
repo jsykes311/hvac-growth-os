@@ -206,7 +206,7 @@ type DeploymentRecord = {
   deployedAt?: string;
   deployedBy?: string;
 };
-type PermissionMode = "Read Only" | "Draft Mode" | "Agency Mode" | "Owner Mode";
+type PermissionMode = "Read Only" | "Write Enabled" | "Draft Mode" | "Agency Mode" | "Owner Mode";
 type ConnectedAppStatus = {
   googleBusinessProfile: {
     activeAccountId: string;
@@ -3683,6 +3683,7 @@ function ConnectedAppsSection({ currentUser, globalDateRange }: { currentUser: A
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSyncingGoogleBusinessProfile, setIsSyncingGoogleBusinessProfile] = useState(false);
   const [isSyncingHighLevel, setIsSyncingHighLevel] = useState(false);
+  const [isDeployingHighLevelTags, setIsDeployingHighLevelTags] = useState(false);
   const [message, setMessage] = useState("");
 
   const loadGoogleAdsData = useCallback(async () => {
@@ -3800,6 +3801,23 @@ function ConnectedAppsSection({ currentUser, globalDateRange }: { currentUser: A
     }
   }
 
+  async function deployComfortGuardiansMetaTags() {
+    setIsDeployingHighLevelTags(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/highlevel/deploy/comfort-guardians", { method: "POST" });
+      const payload = (await response.json()) as { created?: string[]; reused?: string[] } & ApiError;
+      if (!response.ok) throw new Error(payload.error || "HighLevel tag deployment failed.");
+      const items = [...(payload.created ?? []), ...(payload.reused ?? [])];
+      setMessage(`Comfort Guardians Meta lead tags ready: ${items.join(", ") || "no changes needed"}.`);
+      await refreshConnectedApps();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "HighLevel tag deployment failed.");
+    } finally {
+      setIsDeployingHighLevelTags(false);
+    }
+  }
+
   async function selectCustomer(customerId: string) {
     setMessage("");
     try {
@@ -3906,7 +3924,7 @@ function ConnectedAppsSection({ currentUser, globalDateRange }: { currentUser: A
           ) : (
             <a className="inline-flex h-10 items-center justify-center rounded-full bg-ink/10 px-4 text-sm font-black text-ink" href="#highlevel-setup">Open Setup</a>
           )}
-          secondaryAction={<Button disabled={!highLevel?.connected || isSyncingHighLevel} onClick={syncHighLevel} variant="secondary">{isSyncingHighLevel ? "Syncing..." : "Refresh Data"}</Button>}
+          secondaryAction={<div className="flex flex-wrap gap-2"><Button disabled={!highLevel?.connected || isSyncingHighLevel} onClick={syncHighLevel} variant="secondary">{isSyncingHighLevel ? "Syncing..." : "Refresh Data"}</Button><Button disabled={!highLevel?.connected || highLevel?.permissionMode !== "Write Enabled" || isDeployingHighLevelTags} onClick={deployComfortGuardiansMetaTags}>{isDeployingHighLevelTags ? "Deploying..." : "Deploy Meta Tags"}</Button></div>}
           title="HighLevel"
           unlocks="Calls, forms, contacts, opportunities, appointments, estimates, won jobs, revenue, source intelligence, and campaign attribution."
         />
