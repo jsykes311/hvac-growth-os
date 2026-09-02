@@ -39,6 +39,7 @@ import type {
   PpcPlan,
 } from "@/lib/types";
 import { Button, Eyebrow, FieldLabel, Panel } from "@/components/ui";
+import { WeeklyContentEngine } from "@/components/weekly-content-engine";
 
 type View = "home" | "results";
 type GlobalDateRange = {
@@ -58,6 +59,9 @@ type PlatformSection =
   | "ai-cmo"
   | "revenue-engine"
   | "service-engine"
+  | "generate-my-week"
+  | "content-library"
+  | "ai-team"
   | "google-ads-deployment"
   | "marketing-intelligence"
   | "market-intelligence"
@@ -540,6 +544,9 @@ const PLATFORM_NAV: Array<{ id: PlatformSection; label: string }> = [
   { id: "ai-cmo", label: "AI CMO" },
   { id: "revenue-engine", label: "Revenue Engine" },
   { id: "service-engine", label: "Service Engine" },
+  { id: "generate-my-week", label: "Generate My Week" },
+  { id: "content-library", label: "Content Library" },
+  { id: "ai-team", label: "AI Team" },
   { id: "google-ads-deployment", label: "Google Ads Deployment" },
   { id: "marketing-intelligence", label: "Marketing Intelligence" },
   { id: "market-intelligence", label: "Market Intelligence" },
@@ -1139,6 +1146,10 @@ function ResultsView({
           ppcPlan={ppcPlan}
           setOverrides={setPpcOverrides}
         />
+      )}
+
+      {(activeSection === "generate-my-week" || activeSection === "content-library" || activeSection === "ai-team") && (
+        <WeeklyContentEngine analysis={analysis} initialView={activeSection} setActiveSection={setActiveSection} />
       )}
 
       {activeSection === "google-ads-deployment" && (
@@ -10826,6 +10837,18 @@ function buildDecisionRecommendations(
     settings: [
       decision("settings-profile", "Brand", "Complete missing business profile fields before generating more assets", "High", "Prevents unsupported claims and weak campaign copy.", annualMedium, baseConfidence, "Easy", "20 minutes", ["Client input"], "Clean inputs make every downstream decision safer and more specific."),
       decision("settings-access", "CRM", "Complete the access checklist for Ads, Analytics, GBP, Search Console, Website, and HighLevel", "High", "Unlocks deployment and performance learning.", annualHigh, baseConfidence + 2, "Moderate", "45 minutes", ["Client access"], "Decision software needs implementation access to become a marketing operating system."),
+    ],
+    "generate-my-week": [
+      decision("weekly-brief", "Brand", "Generate and review this week's content brief", "High", "Creates a coordinated weekly presence without inventing unverified offers.", annualMedium, baseConfidence + 4, "Easy", "20 minutes", ["Complete business profile", "Human review"], "Weekly output should become a practical review queue, not auto-published noise."),
+      decision("weekly-focus", "Revenue", `Prioritize ${analysis.services[0] || "HVAC service"} homeowner education in ${city}`, "Medium", "Keeps content relevant to the service opportunity the business can actually fulfill.", annualMedium, baseConfidence, "Easy", "10 minutes", ["Service capacity"], "A tight weekly focus performs better than a random handful of posts."),
+    ],
+    "content-library": [
+      decision("content-library-review", "Brand", "Review saved drafts before distribution", "Medium", "Protects brand accuracy and keeps channels consistent.", annualLow, baseConfidence + 1, "Easy", "15 minutes", ["Human review"], "The library is most valuable when strong approved copy becomes reusable operating memory."),
+      decision("content-library-repurpose", "Social Media", "Repurpose one approved blog topic into social and GBP updates", "Medium", "Extends a good idea across local discovery channels.", annualMedium, baseConfidence, "Easy", "20 minutes", ["Approved content"], "Content operations should reduce duplicate work, not create more of it."),
+    ],
+    "ai-team": [
+      decision("ai-team-brief", "Brand", "Use the AI team to create a single focused weekly brief", "High", "Coordinates specialist drafts around one revenue-relevant theme.", annualMedium, baseConfidence + 2, "Easy", "15 minutes", ["Company profile", "Human approval"], "Specialist roles make the output easier to review and improve than one opaque generator."),
+      decision("ai-team-governance", "Brand", "Keep all publishing actions in human approval", "High", "Protects business claims, customer trust, and channel quality.", annualHigh, baseConfidence + 6, "Easy", "5 minutes", ["Owner review"], "The system can draft fast; owners still decide what represents their business."),
     ],
   };
   return map[section].map((item) => ({ ...common, ...item, confidenceScore: item.confidenceScore }));
