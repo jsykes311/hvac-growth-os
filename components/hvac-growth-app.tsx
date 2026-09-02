@@ -1818,11 +1818,11 @@ function PlatformNav({
   onChange: (section: PlatformSection) => void;
 }) {
   return (
-    <nav className="mb-5 overflow-x-auto rounded-[18px] border border-ink/10 bg-white/85 p-2 shadow-soft backdrop-blur-md">
-      <div className="flex min-w-max gap-2">
+    <nav className="mb-5 rounded-[18px] border border-ink/10 bg-white/85 p-2 shadow-soft backdrop-blur-md">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         {PLATFORM_NAV.map((item) => (
           <button
-            className={`h-10 rounded-lg px-3 text-sm font-black transition ${
+            className={`h-10 rounded-lg px-3 text-left text-sm font-black transition ${
               activeSection === item.id ? "bg-gradient-to-br from-ink to-flame text-white shadow-[0_12px_28px_rgba(25,184,181,0.2)]" : "text-graphite hover:bg-white hover:text-ink"
             }`}
             key={item.id}
